@@ -860,6 +860,21 @@ export const createInvoice = async (req: Request, res: Response) => {
         });
       }
 
+      // Square refuses customer phones from countries outside its supported
+      // list (US/CA/UK/AU/IE/FR/ES/JP). Translate that error into something
+      // the admin can act on instead of dumping the raw Square JSON.
+      const isInvalidPhone =
+        Array.isArray(squareErrors) &&
+        squareErrors.some((e: any) => e?.code === "INVALID_PHONE_NUMBER");
+      if (isInvalidPhone) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "Numéro de téléphone non supporté par Square pour ce pays. Utilisez plutôt l'envoi par email.",
+          details: squareErrors,
+        });
+      }
+
       return res.status(error.statusCode || 400).json({
         success: false,
         error: error.message || "Failed to create invoice",

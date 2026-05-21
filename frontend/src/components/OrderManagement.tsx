@@ -394,41 +394,38 @@ export function OrderManagement() {
   };
 
   const getPaymentBadge = (paymentStatus: Order["paymentStatus"], order?: OrderWithPacking) => {
-    // Check if this order has refunds
     const hasRefunds = order && (order as any).refunds?.length > 0;
+    const paidAmount = (order as any)?.amountPaid || 0;
+    const total = order?.total || 0;
+    const fullyPaid = !total || paidAmount + 0.01 >= total;
 
-    // Explicit "Marquer payé" after a refund means the admin is overriding the
-    // refund (mistake undone, client re-paid in cash, etc.). Trust that intent
-    // and show "Payé" — otherwise the badge stays purple forever and confuses
-    // staff into thinking the click did nothing. Refund history stays in the
-    // DB for audit (refunds[] + changeHistory).
-    if (paymentStatus === "paid") {
-      const paidAmount = (order as any)?.amountPaid || 0;
-      const total = order?.total || 0;
-      if (!total || paidAmount + 0.01 >= total) {
+    // ── Cancelled orders ──────────────────────────────────────────────────
+    // Cancellation is a stronger signal than payment status: even if the order
+    // shows paymentStatus=paid (e.g. "Marquer payé" then "Annuler la commande"),
+    // the money owed to the client hasn't actually been returned, so we surface
+    // "À rembourser" until a refund entry exists.
+    //
+    // The one exception is the "refund then re-mark paid" workflow: the admin
+    // explicitly chose to override a recorded refund (refund was a mistake, or
+    // client paid again in cash). hasRefunds + paymentStatus=paid + fullyPaid
+    // means we trust that admin override and go green.
+    if (order && order.status === "cancelled") {
+      if (hasRefunds && paymentStatus === "paid" && fullyPaid) {
         return (
           <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
             Payé
           </span>
         );
       }
-    }
-
-    if (hasRefunds) {
-      return (
-        <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-          Remboursé
-        </span>
-      );
-    }
-
-    // Cancelled order that was paid → staff still owes the client a refund.
-    // Surface this as "À rembourser" (orange) so it stands out from a normal
-    // "Payé" — otherwise the row reads as if the money is settled when it
-    // really isn't, and the client may come back days later to collect cash.
-    if (order && order.status === "cancelled") {
-      const paidAmount = (order as any).amountPaid || 0;
+      if (hasRefunds) {
+        return (
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+            Remboursé
+          </span>
+        );
+      }
       const wasPaid =
+        paymentStatus === "paid" ||
         paymentStatus === "deposit_paid" ||
         order.depositPaid === true ||
         paidAmount > 0.01;
@@ -439,6 +436,26 @@ export function OrderManagement() {
           </span>
         );
       }
+      // Cancelled and never paid — fall through to the default unpaid badge.
+    }
+
+    // ── Active orders ─────────────────────────────────────────────────────
+    // Explicit "Marquer payé" after a refund on a NON-cancelled order also
+    // counts as an admin override → "Payé".
+    if (paymentStatus === "paid" && fullyPaid) {
+      return (
+        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          Payé
+        </span>
+      );
+    }
+
+    if (hasRefunds) {
+      return (
+        <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+          Remboursé
+        </span>
+      );
     }
 
     // If order has partial payment with balance remaining, show "Balance à payer: X$"
@@ -1323,6 +1340,27 @@ export function OrderManagement() {
     }
   };
 
+  // Translate Square's raw error text into something a staff member can act on.
+  // The SDK throws errors whose message embeds the JSON body verbatim — useful
+  // for logs, terrible for an alert popup. We sniff the common cases here so
+  // callers can just do alert(prettifySquareError(e)).
+  const prettifySquareError = (err: any): string => {
+    const raw = String(err?.message || err || "");
+    if (/INVALID_PHONE_NUMBER/i.test(raw)) {
+      return "Numéro de téléphone non supporté par Square pour ce pays. Utilisez plutôt l'envoi par email.";
+    }
+    if (/INVALID_EMAIL_ADDRESS/i.test(raw)) {
+      return "Adresse email invalide pour Square. Vérifie l'email du client.";
+    }
+    if (/UNAUTHORIZED|AUTHENTICATION_ERROR/i.test(raw)) {
+      return "Session Square expirée ou clé invalide — contacter un administrateur.";
+    }
+    // Otherwise, hand back the message stripped of the "Status code: ... Body:"
+    // wrapper so the alert is at least readable.
+    const trimmed = raw.replace(/^Status code:.*?Body:\s*/is, "").trim();
+    return trimmed || "Erreur inconnue";
+  };
+
   const sendPaymentLink = async (
     order: OrderWithPacking,
     balanceOnly?: number,
@@ -1931,7 +1969,7 @@ export function OrderManagement() {
                   setTimeout(() => setEditNotification(null), 5000);
                   alert(`Lien de paiement envoyé par SMS à ${order.client.phone}`);
                 } catch (e: any) {
-                  alert(`Erreur SMS: ${e?.message || "Impossible d'envoyer le SMS"}`);
+                  alert(prettifySquareError(e));
                 } finally {
                   setIsSendingBalanceLink(false);
                 }

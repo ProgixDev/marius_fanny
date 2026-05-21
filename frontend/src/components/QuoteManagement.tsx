@@ -306,7 +306,21 @@ export default function QuoteManagement() {
         credentials: "include",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) throw new Error("Erreur lors de la suppression");
+      if (!res.ok) {
+        // Bubble up the actual HTTP status + server message so we know whether
+        // it's a 404 (backend not redeployed), 401/403 (auth), 500 (server),
+        // etc., instead of swallowing all errors as "Erreur".
+        let serverError = "";
+        try {
+          const body = await res.json();
+          serverError = body?.error || body?.message || "";
+        } catch {
+          /* response wasn't JSON */
+        }
+        throw new Error(
+          `Suppression échouée (HTTP ${res.status})${serverError ? ` : ${serverError}` : ""}`,
+        );
+      }
       await fetchQuotes();
     } catch (e: any) {
       alert(e?.message || "Erreur");
