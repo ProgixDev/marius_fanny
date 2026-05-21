@@ -662,12 +662,14 @@ export default function OrderForm({
   );
 
   const removeItem = (id: string) => {
-    if (formData.items.length > 1) {
-      setFormData((prev) => ({
-        ...prev,
-        items: prev.items.filter((item) => item.id !== id),
-      }));
-    }
+    // Used to require length > 1, which made the last item impossible to
+    // delete — admin had to add a dummy product just to remove the original.
+    // The form validation already catches "no item at submit", so we can
+    // safely let the cart go empty.
+    setFormData((prev) => ({
+      ...prev,
+      items: prev.items.filter((item) => item.id !== id),
+    }));
   };
 
   const handleOptionChange = (itemId: string, optionName: string, value: string) => {
@@ -2066,14 +2068,26 @@ export default function OrderForm({
                           type="number"
                           min={product?.minOrderQuantity || 1}
                           max={product?.maxOrderQuantity}
-                          value={item.quantity}
-                          onChange={(e) =>
+                          // Fall back to "" rather than undefined/NaN, otherwise
+                          // React treats the controlled input as uncontrolled
+                          // and the field renders blank with no way to type.
+                          value={
+                            Number.isFinite(item.quantity) && item.quantity > 0
+                              ? item.quantity
+                              : ""
+                          }
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            // Allow the field to be temporarily empty while the
+                            // staff is editing (e.g. erasing 1 to type 12).
+                            // Parse to int once we have a real number.
+                            const next = raw === "" ? 1 : parseInt(raw, 10);
                             handleItemChange(
                               item.id,
                               "quantity",
-                              parseInt(e.target.value) || 1,
-                            )
-                          }
+                              Number.isFinite(next) && next > 0 ? next : 1,
+                            );
+                          }}
                           disabled={!item.productId && !item.isCustom}
                           className={`h-8 text-sm ${quantityError ? "border-red-500" : ""}`}
                         />
