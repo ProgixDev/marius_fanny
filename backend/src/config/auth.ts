@@ -89,6 +89,21 @@ async function initializeAuth() {
         user: {
           create: {
             /**
+             * Force role="user" on every signup. additionalFields.defaultValue
+             * is supposed to do this but the MongoDB adapter sometimes drops
+             * the field at insertion, leaving role undefined — which then
+             * filters the account OUT of the admin "Clients" list (the query
+             * uses { role: "user" } strict equality).
+             */
+            before: async (user) => {
+              return {
+                data: {
+                  ...user,
+                  role: (user as any).role || "user",
+                },
+              };
+            },
+            /**
              * Hook triggered after a new user is created in better-auth
              * Sends a verification email with a mock code
              */

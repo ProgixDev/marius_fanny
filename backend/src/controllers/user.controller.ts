@@ -445,15 +445,40 @@ export async function getAllClients(req: AuthRequest, res: Response) {
     console.log("📊 Parsed params - page:", page, "limit:", limit, "search:", search);
     const skip = (page - 1) * limit;
 
-    // Always filter by role: "user" to get only clients
-    const query: any = { role: "user", isDeleted: { $ne: true } };
-    
+    // Filter "clients" = anything that's NOT a staff role. We can't strictly
+    // require role:"user" because better-auth's MongoDB adapter occasionally
+    // creates user docs without the field, which would silently hide brand-new
+    // self-signed clients from the admin list. Instead, exclude known staff
+    // roles — that keeps the list accurate even for older/buggy records.
+    const STAFF_ROLES = [
+      "admin",
+      "staff",
+      "customerService",
+      "deliveryDriver",
+      "cuisinier",
+      "patissier",
+      "four",
+      "vendeur",
+    ];
+    const query: any = {
+      role: { $nin: STAFF_ROLES },
+      isDeleted: { $ne: true },
+    };
+
     // If search is provided, filter by name or email (combined with role filter)
     if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
+      query.$and = [
+        { role: { $nin: STAFF_ROLES } },
+        { isDeleted: { $ne: true } },
+        {
+          $or: [
+            { name: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+          ],
+        },
       ];
+      delete query.role;
+      delete query.isDeleted;
     }
 
     const [users, total] = await Promise.all([
@@ -526,9 +551,20 @@ export async function searchClients(req: AuthRequest, res: Response) {
       return res.json({ success: true, data: [] });
     }
 
-    // Only search users with role "user" (clients)
+    // Search clients = anything that's NOT a staff role (same rationale as
+    // getAllClients: better-auth signups sometimes have role undefined).
+    const STAFF_ROLES = [
+      "admin",
+      "staff",
+      "customerService",
+      "deliveryDriver",
+      "cuisinier",
+      "patissier",
+      "four",
+      "vendeur",
+    ];
     const users = await User.find({
-      role: "user",
+      role: { $nin: STAFF_ROLES },
       isDeleted: { $ne: true },
       $or: [
         { email: { $regex: q, $options: "i" } },
