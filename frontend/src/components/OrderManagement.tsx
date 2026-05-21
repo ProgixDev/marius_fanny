@@ -397,6 +397,23 @@ export function OrderManagement() {
     // Check if this order has refunds
     const hasRefunds = order && (order as any).refunds?.length > 0;
 
+    // Explicit "Marquer payé" after a refund means the admin is overriding the
+    // refund (mistake undone, client re-paid in cash, etc.). Trust that intent
+    // and show "Payé" — otherwise the badge stays purple forever and confuses
+    // staff into thinking the click did nothing. Refund history stays in the
+    // DB for audit (refunds[] + changeHistory).
+    if (paymentStatus === "paid") {
+      const paidAmount = (order as any)?.amountPaid || 0;
+      const total = order?.total || 0;
+      if (!total || paidAmount + 0.01 >= total) {
+        return (
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            Payé
+          </span>
+        );
+      }
+    }
+
     if (hasRefunds) {
       return (
         <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
@@ -412,7 +429,6 @@ export function OrderManagement() {
     if (order && order.status === "cancelled") {
       const paidAmount = (order as any).amountPaid || 0;
       const wasPaid =
-        paymentStatus === "paid" ||
         paymentStatus === "deposit_paid" ||
         order.depositPaid === true ||
         paidAmount > 0.01;
