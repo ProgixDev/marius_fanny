@@ -520,8 +520,22 @@ export const createOrder = async (
       }
     }
 
+    // Resolve which user this order belongs to. req.user is whoever is
+    // *posting* the request — often an admin acting on behalf of a client.
+    // If we naively use req.user.id, the admin's id ends up on the order and
+    // the actual client can't see it on their /Mon compte page (the query
+    // there filters by their own user id). Always prefer matching the
+    // order's clientInfo.email to a real user record.
+    let resolvedUserId: string | undefined = req.user?.id;
+    if (orderEmail) {
+      const matched = await User.findOne({ email: orderEmail }).select("_id").lean();
+      if (matched?._id) {
+        resolvedUserId = matched._id.toString();
+      }
+    }
+
     const order = new Order({
-      userId: req.user?.id,
+      userId: resolvedUserId,
       clientInfo: orderData.clientInfo,
       pickupDate,
       pickupLocation: orderData.pickupLocation,
