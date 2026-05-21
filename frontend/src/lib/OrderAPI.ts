@@ -52,8 +52,14 @@ class OrderAPI {
       const errorData = await response
         .json()
         .catch(() => ({ error: "An error occurred" }));
-      // Build a descriptive error message including validation details
+      // Build a descriptive error message including validation details.
+      // We surface BOTH `error` (high-level) and `message` (specific reason,
+      // e.g. Mongoose validation text) so the staff sees the real cause
+      // instead of just "Erreur lors de la sauvegarde de la commande".
       let msg = errorData.error || errorData.message || `HTTP ${response.status}`;
+      if (errorData.message && errorData.message !== errorData.error) {
+        msg = `${msg} — ${errorData.message}`;
+      }
       if (Array.isArray(errorData.details) && errorData.details.length > 0) {
         const fields = errorData.details
           .map((d: any) => `${d.field || "?"}: ${d.message || d.code || ""}`.trim())

@@ -193,8 +193,12 @@ const ClientInfoSchema = new Schema<IClientInfo>(
       lowercase: true,
     },
     phone: {
+      // Optional: many self-signup clients don't provide a phone. We only
+      // strictly need one if/when an SMS payment link is sent, which is
+      // checked at the payment-link controller, not on order creation.
       type: String,
-      required: true,
+      required: false,
+      default: "",
       trim: true,
     },
   },
