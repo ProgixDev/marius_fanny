@@ -849,8 +849,15 @@ export default function OrderForm({
     if (!formData.lastName.trim()) {
       newErrors.lastName = "Le nom de famille est requis";
     }
-    if (!formData.phone.trim()) {
-      newErrors.phone = "Le téléphone est requis";
+    // Phone only required when actually needed: sending the Square payment
+    // link via SMS. Otherwise we let it be empty (self-signup clients on the
+    // public site don't always have one).
+    const phoneNeededForSms =
+      formData.paymentMethod === "payment_link" &&
+      formData.paymentLinkChannel === "sms";
+    if (phoneNeededForSms && !formData.phone.trim()) {
+      newErrors.phone =
+        "Le téléphone est requis pour envoyer le lien de paiement par SMS";
     }
     if (!formData.email.trim()) {
       newErrors.email = "L'email est requis";

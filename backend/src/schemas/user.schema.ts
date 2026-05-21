@@ -53,13 +53,16 @@ export const createUserProfileSchema = z.object({
 });
 
 /**
- * Create client schema (for admin to create clients directly)
+ * Create client schema (for admin to create clients directly).
+ * phone is optional — most self-signup clients won't provide one, and the
+ * staff only really needs it if/when sending a Square payment link by SMS.
+ * That stricter check happens at payment-link time, not here.
  */
 export const createClientSchema = z.object({
   email: z.string().email(),
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
-  phone: z.string().min(1).max(20),
+  phone: z.string().max(20).optional().default(""),
   status: z.enum(["active", "inactive", "placeholder"]).optional().default("active"),
   billing: billingSchema.optional(),
 });

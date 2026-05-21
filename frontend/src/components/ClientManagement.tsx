@@ -100,9 +100,9 @@ function ClientManagement() {
     if (!formData.lastName.trim()) {
       return "Le nom de famille est requis";
     }
-    if (!formData.phone.trim()) {
-      return "Le numéro de téléphone est requis";
-    }
+    // Phone is no longer strictly required at creation — clients who self-sign
+    // up online rarely give one, and we only need it later if/when sending a
+    // Square payment link by SMS. Admin can always come back and add it.
     if (formData.status !== "placeholder" && !formData.email.trim()) {
       return "L'email est requis pour les clients actifs";
     }

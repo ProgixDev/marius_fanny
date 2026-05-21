@@ -26,16 +26,20 @@ export const orderItemSchema = z.object({
   productionStatus: z.enum(["pending", "in_progress", "ready"]).optional(),
 });
 
-// Client info schema
+// Client info schema. Phone is optional: many self-signup clients don't
+// provide one, and the order can still be honored by email confirmation.
+// We only require a valid phone format if a phone is actually given — and
+// SMS payment-link sending has its own stricter check at payment time.
 export const clientInfoSchema = z.object({
   firstName: z.string().min(1, "Le prénom est requis"),
   lastName: z.string().min(1, "Le nom de famille est requis"),
   email: z.string().email("Format d'email invalide"),
   phone: z
     .string()
-    .min(7, "Le numéro de téléphone doit contenir au moins 7 chiffres")
-    .regex(
-      /^[\d\s\-().+]+$/,
+    .optional()
+    .default("")
+    .refine(
+      (val) => !val || /^[\d\s\-().+]+$/.test(val),
       "Le numéro de téléphone contient des caractères invalides",
     ),
 });
