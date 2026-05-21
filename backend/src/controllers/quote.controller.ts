@@ -296,7 +296,7 @@ export async function updateQuote(req: AuthRequest, res: Response) {
 
 /**
  * DELETE /api/quotes/:id
- * Cancel a quote (admin)
+ * Cancel a quote (admin) — soft delete, keeps the record for history.
  */
 export async function cancelQuote(req: AuthRequest, res: Response) {
   try {
@@ -309,6 +309,21 @@ export async function cancelQuote(req: AuthRequest, res: Response) {
     res.json({ success: true, data: quote });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error?.message || "Failed to cancel quote" });
+  }
+}
+
+/**
+ * DELETE /api/quotes/:id/hard
+ * Permanently remove a quote (admin). Used when the soumission was created
+ * by mistake or is no longer relevant — gone from the DB, not just hidden.
+ */
+export async function hardDeleteQuote(req: AuthRequest, res: Response) {
+  try {
+    const quote = await Quote.findByIdAndDelete(req.params.id);
+    if (!quote) return res.status(404).json({ success: false, error: "Soumission introuvable" });
+    res.json({ success: true, data: { _id: quote._id } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || "Failed to delete quote" });
   }
 }
 

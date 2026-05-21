@@ -7,6 +7,7 @@ import {
   getQuote,
   updateQuote,
   cancelQuote,
+  hardDeleteQuote,
   acceptQuote,
   refuseQuote,
 } from "../controllers/quote.controller.js";
@@ -24,5 +25,6 @@ router.post("/", requireAuth, requireAdmin, asyncHandler(createQuote));
 router.get("/:id", requireAuth, requireAdmin, asyncHandler(getQuote));
 router.patch("/:id", requireAuth, requireAdmin, asyncHandler(updateQuote));
 router.delete("/:id", requireAuth, requireAdmin, asyncHandler(cancelQuote));
+router.delete("/:id/hard", requireAuth, requireAdmin, asyncHandler(hardDeleteQuote));
 
 export default router;

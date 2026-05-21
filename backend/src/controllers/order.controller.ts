@@ -811,49 +811,57 @@ export const createOrder = async (
       // Determine receipt mode:
       // - Paid in store / has squarePaymentId → "full" (receipt with summary, payment confirmed)
       // - Deposit-only paid via Square → "deposit" (shows deposit + remaining balance)
-      // - Everything else (government invoice, pending payment-link) → "invoice"
-      //   (order-confirmation style email; the payment link, if any, gets sent
-      //   separately by the Square invoice flow but the customer still needs a
-      //   branded "votre commande est enregistrée" message from us.)
+      // - Government → "invoice" (no Square link, paid later by cheque/transfer)
+      // - Pending payment-link → SKIP. The frontend will call createInvoice
+      //   right after, which sends its own branded "Confirmation de commande"
+      //   email containing the actual Square publicUrl. Sending one here too
+      //   would duplicate the email AND the first copy would have no link
+      //   (the Square invoice hasn't been published yet at this point).
       const isGovernment = billingKind === "gouvernement";
+      const isPaymentLinkFlow =
+        !paidInStore && !orderData.squarePaymentId && !isGovernment;
 
-      let receiptMode: "full" | "deposit" | "invoice";
-      if (paidInStore || (orderData.squarePaymentId && orderData.paymentType === "full")) {
-        receiptMode = "full";
-      } else if (orderData.squarePaymentId && orderData.paymentType === "deposit") {
-        receiptMode = "deposit";
+      if (isPaymentLinkFlow) {
+        console.log(
+          `📧 [ORDER] Skipping confirmation email — payment-link flow; createInvoice will send the branded email with the Square link.`,
+        );
       } else {
-        receiptMode = "invoice";
+        const receiptMode: "full" | "deposit" | "invoice" = paidInStore
+          ? "full"
+          : isGovernment
+            ? "invoice"
+            : orderData.squarePaymentId && orderData.paymentType === "deposit"
+              ? "deposit"
+              : "full";
+
+        await sendOrderReceipt(receiptMode, {
+          email: orderData.clientInfo.email,
+          name: customerName,
+          orderNumber: order.orderNumber,
+          items: orderData.items.map((item) => ({
+            productName: item.productName,
+            quantity: item.quantity,
+            amount: item.amount,
+          })),
+          subtotal,
+          taxAmount,
+          deliveryFee,
+          total,
+          depositAmount: depositPaid ? depositAmount : undefined,
+          paymentId: orderData.squarePaymentId,
+          invoiceUrl: undefined, // Will be updated via webhook or separate call
+          orderDate: order.orderDate,
+          pickupDate: order.pickupDate || (orderData.deliveryDate ? new Date(orderData.deliveryDate) : undefined),
+          pickupTimeSlot: orderData.deliveryTimeSlot || undefined,
+          deliveryType: orderData.deliveryType,
+          clientNote: orderData.notes,
+          orderId: order._id.toString(),
+        });
+
+        console.log(
+          `✅ Order receipt email (mode=${receiptMode}) sent to ${orderData.clientInfo.email}`,
+        );
       }
-      void isGovernment;
-
-      await sendOrderReceipt(receiptMode, {
-        email: orderData.clientInfo.email,
-        name: customerName,
-        orderNumber: order.orderNumber,
-        items: orderData.items.map((item) => ({
-          productName: item.productName,
-          quantity: item.quantity,
-          amount: item.amount,
-        })),
-        subtotal,
-        taxAmount,
-        deliveryFee,
-        total,
-        depositAmount: depositPaid ? depositAmount : undefined,
-        paymentId: orderData.squarePaymentId,
-        invoiceUrl: undefined, // Will be updated via webhook or separate call
-        orderDate: order.orderDate,
-        pickupDate: order.pickupDate || (orderData.deliveryDate ? new Date(orderData.deliveryDate) : undefined),
-        pickupTimeSlot: orderData.deliveryTimeSlot || undefined,
-        deliveryType: orderData.deliveryType,
-        clientNote: orderData.notes,
-        orderId: order._id.toString(),
-      });
-
-      console.log(
-        `✅ Order receipt email (mode=${receiptMode}) sent to ${orderData.clientInfo.email}`,
-      );
     } catch (emailError: any) {
       // Log email error but don't fail the order creation
       console.error(

@@ -292,6 +292,27 @@ export default function QuoteManagement() {
     }
   };
 
+  const handleHardDelete = async (quote: QuoteData) => {
+    if (
+      !window.confirm(
+        `Supprimer définitivement la soumission ${quote.quoteNumber} ?\n\nCette action est irréversible — la soumission disparaîtra de l'historique.`,
+      )
+    )
+      return;
+    try {
+      const token = localStorage.getItem("bearer_token");
+      const res = await fetch(`${normalizedApiUrl}/api/quotes/${quote._id}/hard`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Erreur lors de la suppression");
+      await fetchQuotes();
+    } catch (e: any) {
+      alert(e?.message || "Erreur");
+    }
+  };
+
   const buildInitialFormData = (q: QuoteData) => ({
     date: new Date().toISOString().split("T")[0],
     pickupTime: "",
@@ -456,10 +477,13 @@ export default function QuoteManagement() {
                                   <Edit2 className="w-4 h-4 mr-2" /> Modifier
                                 </DropdownMenuItem>
                                 <DropdownMenuItem className="text-red-600" onClick={() => handleCancel(q)}>
-                                  <Trash2 className="w-4 h-4 mr-2" /> Annuler
+                                  <Ban className="w-4 h-4 mr-2" /> Annuler
                                 </DropdownMenuItem>
                               </>
                             )}
+                            <DropdownMenuItem className="text-red-700 font-medium" onClick={() => handleHardDelete(q)}>
+                              <Trash2 className="w-4 h-4 mr-2" /> Supprimer
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>

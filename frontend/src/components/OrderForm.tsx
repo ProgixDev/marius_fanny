@@ -554,6 +554,68 @@ export default function OrderForm({
     return hoursDiff >= product.preparationTimeHours;
   }
 
+  // Read "now" through the bakery's clock (America/Montreal), like Checkout
+  // and the backend. Without this, an admin in another TZ would compute a
+  // bogus minimum date and disagree with the backend on what's valid.
+  function getMontrealNow() {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Montreal",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date());
+    const get = (t: string) =>
+      parseInt(parts.find((p) => p.type === t)?.value || "0", 10);
+    return {
+      year: get("year"),
+      month: get("month"),
+      day: get("day"),
+      hour: get("hour"),
+      minute: get("minute"),
+    };
+  }
+
+  // Displayed to staff/customers as 14h00, real gate sits at 14h15 (15-min
+  // margin so a customer who hesitated at 14h01 doesn't get bounced). Same
+  // value lives in Checkout.tsx and the backend createOrder validation.
+  const CUTOFF_MINUTES = 14 * 60 + 15;
+
+  /**
+   * Earliest pickup date the admin can pick for the current cart.
+   * - max-prep across items → that many full days of lead time
+   * - past 14h15 Montréal → +1 extra day
+   * Returns "YYYY-MM-DD" (Montréal calendar).
+   */
+  function getMinimumPickupDateStr(): string {
+    const maxPrepHours = formData.items.reduce((max, item) => {
+      if (item.isCustom) return max;
+      const p = products.find((pp) => pp.id === item.productId);
+      const h = p?.preparationTimeHours || 0;
+      return h > max ? h : max;
+    }, 0);
+    const prepDays = Math.ceil(maxPrepHours / 24);
+
+    const m = getMontrealNow();
+    const cutoffPenalty = m.hour * 60 + m.minute >= CUTOFF_MINUTES ? 1 : 0;
+
+    // Build a Date that represents Montréal's today at noon (avoids DST/TZ
+    // wobble), then add the lead-time days.
+    const d = new Date(Date.UTC(m.year, m.month - 1, m.day, 12, 0, 0));
+    d.setUTCDate(d.getUTCDate() + prepDays + cutoffPenalty);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // Edit-mode: don't punish the admin for an order whose date is already in
+  // the past. We only enforce the cutoff for genuinely new orders.
+  const isEditing = !!initialData;
+  const minPickupDateStr = isEditing ? undefined : getMinimumPickupDateStr();
+
   function getPreparationTimeWarning(productId: number) {
     const product = products.find((p) => p.id === productId);
     if (!product || !product.preparationTimeHours) return null;
@@ -795,6 +857,18 @@ export default function OrderForm({
     }
     if (!formData.date) {
       newErrors.date = "La date est requise";
+    } else if (!isEditing && minPickupDateStr && formData.date < minPickupDateStr) {
+      // Same gate the backend enforces: combine prep-time lead + 14h15 Montréal
+      // cutoff. We surface 14h00 in the message so staff don't see two cutoffs.
+      const past14 = getMontrealNow().hour * 60 + getMontrealNow().minute >= CUTOFF_MINUTES;
+      const minLabel = new Date(`${minPickupDateStr}T12:00:00`).toLocaleDateString("fr-CA", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      });
+      newErrors.date = past14
+        ? `Passé 14h00 — la commande doit être pour ${minLabel} au plus tôt.`
+        : `Date trop tôt — minimum ${minLabel}.`;
     }
     if ((formData.deliveryType === "pickup" || formData.deliveryType === "delivery") && !formData.pickupTime) {
       newErrors.pickupTime =
@@ -910,11 +984,20 @@ export default function OrderForm({
               id="date"
               type="date"
               value={formData.date}
+              min={minPickupDateStr}
               onChange={(e) => handleInputChange("date", e.target.value)}
               className={errors.date ? "border-red-500" : ""}
             />
             {errors.date && (
               <p className="text-xs text-red-500 mt-1">{errors.date}</p>
+            )}
+            {!isEditing && minPickupDateStr && (
+              <p className="text-[10px] text-gray-500 mt-1">
+                Minimum : {new Date(`${minPickupDateStr}T12:00:00`).toLocaleDateString("fr-CA", { weekday: "long", day: "numeric", month: "long" })}
+                {getMontrealNow().hour * 60 + getMontrealNow().minute >= CUTOFF_MINUTES
+                  ? " (commandes pour demain à passer avant 14h00)"
+                  : ""}
+              </p>
             )}
           </div>
 
