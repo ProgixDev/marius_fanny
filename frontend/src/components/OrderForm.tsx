@@ -2068,19 +2068,19 @@ export default function OrderForm({
                           type="number"
                           min={product?.minOrderQuantity || 1}
                           max={product?.maxOrderQuantity}
-                          // Fall back to "" rather than undefined/NaN, otherwise
-                          // React treats the controlled input as uncontrolled
-                          // and the field renders blank with no way to type.
+                          // Coerce to Number explicitly — Number.isFinite is
+                          // type-strict so a stringified quantity ("1" coming
+                          // from a JSON/quote conversion path) silently failed
+                          // the previous check and rendered the field blank.
                           value={
-                            Number.isFinite(item.quantity) && item.quantity > 0
-                              ? item.quantity
+                            Number(item.quantity) > 0
+                              ? Number(item.quantity)
                               : ""
                           }
                           onChange={(e) => {
                             const raw = e.target.value;
                             // Allow the field to be temporarily empty while the
                             // staff is editing (e.g. erasing 1 to type 12).
-                            // Parse to int once we have a real number.
                             const next = raw === "" ? 1 : parseInt(raw, 10);
                             handleItemChange(
                               item.id,
