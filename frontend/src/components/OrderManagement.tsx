@@ -405,6 +405,26 @@ export function OrderManagement() {
       );
     }
 
+    // Cancelled order that was paid → staff still owes the client a refund.
+    // Surface this as "À rembourser" (orange) so it stands out from a normal
+    // "Payé" — otherwise the row reads as if the money is settled when it
+    // really isn't, and the client may come back days later to collect cash.
+    if (order && order.status === "cancelled") {
+      const paidAmount = (order as any).amountPaid || 0;
+      const wasPaid =
+        paymentStatus === "paid" ||
+        paymentStatus === "deposit_paid" ||
+        order.depositPaid === true ||
+        paidAmount > 0.01;
+      if (wasPaid) {
+        return (
+          <span className="px-2 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-800">
+            À rembourser
+          </span>
+        );
+      }
+    }
+
     // If order has partial payment with balance remaining, show "Balance à payer: X$"
     if (order) {
       const paidAmount = (order as any).amountPaid || 0;
