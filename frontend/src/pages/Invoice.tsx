@@ -116,6 +116,13 @@ export default function Invoice() {
         @media print {
           .no-print { display: none !important; }
           @page { margin: 1cm; size: A4; }
+          /* Force browsers (Chrome/Edge in particular) to keep our backgrounds
+             and brand colors when generating the PDF, otherwise the gold border
+             and the bg-[#F9F7F2] header strip get dropped. */
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          /* Make sure the logo image isn't shrunk by the browser's default
+             "shrink to fit" — keep it crisp at its declared size. */
+          img { max-width: 100% !important; }
         }
       `}</style>
 
@@ -130,17 +137,27 @@ export default function Invoice() {
           </button>
         </div>
 
-        {/* Header */}
+        {/* Header — same f_jpg URL used in all transactional emails so the
+            facture, l'email et l'impression partagent la même image (AVIF est
+            rejeté par plusieurs lecteurs PDF/aperçus d'impression). */}
         <div className="flex items-start justify-between border-b-2 border-[#C5A065] pb-6 mb-6">
-          <div>
-            <h1
-              style={{ fontFamily: '"Great Vibes", cursive' }}
-              className="text-5xl text-[#C5A065] mb-2"
-            >
-              Marius & Fanny
-            </h1>
-            <p className="text-xs text-gray-600">Pâtisserie Provençale</p>
-            <p className="text-xs text-gray-600">239 Boulevard Samson, Laval, QC</p>
+          <div className="flex items-center gap-4">
+            <img
+              src="https://res.cloudinary.com/deyjooxbi/image/upload/f_jpg/v1773330080/branding/marius_fanny_logo.jpg"
+              alt="Marius & Fanny"
+              className="h-20 w-auto print:h-24"
+              crossOrigin="anonymous"
+            />
+            <div>
+              <h1
+                style={{ fontFamily: '"Great Vibes", cursive' }}
+                className="text-4xl text-[#C5A065] mb-1"
+              >
+                Marius & Fanny
+              </h1>
+              <p className="text-xs text-gray-600">Pâtisserie Provençale</p>
+              <p className="text-xs text-gray-600">239 Boulevard Samson, Laval, QC</p>
+            </div>
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-gray-800">FACTURE</p>

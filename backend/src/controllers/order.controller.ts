@@ -724,12 +724,12 @@ export const createOrder = async (
       console.log(`📦 [INVENTORY] Processing order for inventory date: ${inventoryDate}`);
       console.log(`📦 [INVENTORY] Order items:`, orderData.items.map(i => `${i.productName}: ${i.quantity}`).join(', '));
 
-      // Known products list — must cover BOTH the "Journalier" (viennoiseries,
-      // quiches, soupes…) and "Frais" / Four (éclairs, millefeuilles,
-      // tartelettes…) views, otherwise products from one feuille never get
-      // auto-added when a client orders them.
-      const KNOWN_INVENTORY_PRODUCTS = [
-        // Journalier
+      // The app stores TWO inventory docs per day:
+      //   - Journalier   →  date "YYYY-MM-DD"
+      //   - Frais / Four →  date "YYYY-MM-DD__four"
+      // Each product belongs to exactly one of those feuilles; routing them
+      // to the wrong doc means the Frais page never sees éclairs etc.
+      const JOURNALIER_PRODUCTS = [
         "Croissant", "Chocolatine", "Danoise framboise", "Brioche raisin",
         "Chausson pomme", "Abricotine", "Palmier", "Bande frangipane",
         "Croissant amandes", "Choco amandes", "Crois Pistache", "Brioche sucre",
@@ -741,32 +741,12 @@ export const createOrder = async (
         "Pâté poulet grand", "Pâté saumon petit", "Pâté saumon grand",
         "Tourtière petit", "Tourtière grand", "Croque monsieur", "Croque végé",
         "Plat cuisiné", "Soupe 1Litre", "Soupe", "SUPPLÉMENT :",
-        // Frais / Four — keep in sync with frontend InventaireFour.PRODUITS_FOUR_DEFAUT
+      ];
+      const FOUR_PRODUCTS = [
         "Éclair chantilly", "Éclair chocolat", "Éclair pistache", "Millefeuille",
         "Tartelette fraise", "Tartelette fruits", "Crème brulée", "Tarte fraise",
         "Tarte fruits", "Tropézienne", "Trop. fraise", "Mini pâtisserie",
       ];
-
-      // Aggregate quantities by product name from order items
-      const productQuantities: Record<string, number> = {};
-      for (const item of orderData.items) {
-        const productName = item.productName;
-        if (productName) {
-          productQuantities[productName] = (productQuantities[productName] || 0) + (item.quantity || 0);
-        }
-      }
-
-      console.log(`📦 [INVENTORY] Aggregated quantities:`, productQuantities);
-
-      // Get the inventory document
-      let inventory = await DailyInventory.findOne({ date: inventoryDate });
-      
-      console.log(`📦 [INVENTORY] Existing inventory entries:`, inventory?.entries?.length || 0);
-
-      if (!inventory) {
-        // Create new inventory if it doesn't exist
-        inventory = new DailyInventory({ date: inventoryDate, entries: [] });
-      }
 
       // Normalize for fuzzy matching. The basic version (lowercase + remove
       // accents + collapse spaces) missed real-world variations like:
@@ -794,56 +774,96 @@ export const createOrder = async (
           .join(" ")
           .trim();
 
-      // Update client quantities and recalculate totals
-      let updatedCount = 0;
-      let createdCount = 0;
-      for (const [productName, quantity] of Object.entries(productQuantities)) {
-        const normalizedName = normalize(productName);
-        // Try exact match first, then fuzzy (normalized) match, then "includes" match
-        let entryIndex = inventory.entries.findIndex(e => e.productName === productName);
-        if (entryIndex < 0) {
-          entryIndex = inventory.entries.findIndex(e => normalize(e.productName) === normalizedName);
-        }
-        if (entryIndex < 0) {
-          entryIndex = inventory.entries.findIndex(e =>
-            normalize(e.productName).includes(normalizedName) || normalizedName.includes(normalize(e.productName))
-          );
-        }
+      const matchesList = (productName: string, list: string[]) => {
+        const n = normalize(productName);
+        return list.some(
+          (known) =>
+            normalize(known) === n ||
+            normalize(known).includes(n) ||
+            n.includes(normalize(known)),
+        );
+      };
 
-        console.log(`📦 [INVENTORY] Looking for "${productName}" - found at index: ${entryIndex}`);
-
-        if (entryIndex >= 0) {
-          // Product exists - add to client quantity and recalculate total
-          const oldClient = inventory.entries[entryIndex].client;
-          const currentClient = typeof oldClient === "number" ? oldClient : 0;
-          const currentStdo = typeof inventory.entries[entryIndex].stdo === "number"
-            ? (inventory.entries[entryIndex].stdo as number)
-            : 0;
-          inventory.entries[entryIndex].client = currentClient + quantity;
-          inventory.entries[entryIndex].total = currentStdo + currentClient + quantity;
-          console.log(`📦 [INVENTORY] Updated "${productName}": client ${oldClient} -> ${inventory.entries[entryIndex].client}, total: ${inventory.entries[entryIndex].total}`);
-          updatedCount++;
-        } else if (KNOWN_INVENTORY_PRODUCTS.some(k => normalize(k) === normalizedName || normalize(k).includes(normalizedName) || normalizedName.includes(normalize(k)))) {
-          // Product is in known list but not in inventory - create new entry
-          inventory.entries.push({
-            productId: productName,
-            productName: productName,
-            stock_stdo: 0,
-            stdo: 0,
-            berri: 0,
-            comm_berri: 0,
-            client: quantity,
-            total: quantity // stdo (0) + client (quantity)
-          });
-          console.log(`📦 [INVENTORY] Created new entry for "${productName}" with client: ${quantity}`);
-          createdCount++;
+      // Bucket order items by which feuille (Journalier vs Frais) they
+      // belong to. Frais wins on ambiguous matches (e.g. "Tropézienne" with
+      // accent is in Frais while "Tropezienne" without accent is in
+      // Journalier — we prefer Frais for fresh-pastry context).
+      const journalierQty: Record<string, number> = {};
+      const fourQty: Record<string, number> = {};
+      for (const item of orderData.items) {
+        const productName = item.productName;
+        if (!productName) continue;
+        const qty = item.quantity || 0;
+        if (matchesList(productName, FOUR_PRODUCTS)) {
+          fourQty[productName] = (fourQty[productName] || 0) + qty;
+        } else if (matchesList(productName, JOURNALIER_PRODUCTS)) {
+          journalierQty[productName] = (journalierQty[productName] || 0) + qty;
         } else {
-          console.log(`📦 [INVENTORY] Product "${productName}" NOT FOUND in inventory - skipping`);
+          console.log(`📦 [INVENTORY] "${productName}" matches neither feuille — skipping (custom/untracked product)`);
         }
       }
 
-      await inventory.save();
-      console.log(`✅ Daily inventory updated for ${inventoryDate} - ${updatedCount} products updated, ${createdCount} created`);
+      // Apply a bucket of {productName: qty} to the inventory doc at dateKey,
+      // either updating an existing entry's client column or creating one.
+      const applyToInventory = async (
+        dateKey: string,
+        quantities: Record<string, number>,
+        label: string,
+      ) => {
+        if (Object.keys(quantities).length === 0) {
+          console.log(`📦 [INVENTORY:${label}] Nothing to apply to ${dateKey}`);
+          return;
+        }
+        let inventory = await DailyInventory.findOne({ date: dateKey });
+        if (!inventory) {
+          inventory = new DailyInventory({ date: dateKey, entries: [] });
+        }
+        let updated = 0;
+        let created = 0;
+        for (const [productName, quantity] of Object.entries(quantities)) {
+          const normalizedName = normalize(productName);
+          let entryIndex = inventory.entries.findIndex(e => e.productName === productName);
+          if (entryIndex < 0) {
+            entryIndex = inventory.entries.findIndex(e => normalize(e.productName) === normalizedName);
+          }
+          if (entryIndex < 0) {
+            entryIndex = inventory.entries.findIndex(e =>
+              normalize(e.productName).includes(normalizedName) ||
+              normalizedName.includes(normalize(e.productName)),
+            );
+          }
+          if (entryIndex >= 0) {
+            const currentClient =
+              typeof inventory.entries[entryIndex].client === "number"
+                ? (inventory.entries[entryIndex].client as number)
+                : 0;
+            const currentStdo =
+              typeof inventory.entries[entryIndex].stdo === "number"
+                ? (inventory.entries[entryIndex].stdo as number)
+                : 0;
+            inventory.entries[entryIndex].client = currentClient + quantity;
+            inventory.entries[entryIndex].total = currentStdo + currentClient + quantity;
+            updated++;
+          } else {
+            inventory.entries.push({
+              productId: productName,
+              productName: productName,
+              stock_stdo: 0,
+              stdo: 0,
+              berri: 0,
+              comm_berri: 0,
+              client: quantity,
+              total: quantity,
+            });
+            created++;
+          }
+        }
+        await inventory.save();
+        console.log(`✅ [INVENTORY:${label}] ${dateKey} — ${updated} updated, ${created} created`);
+      };
+
+      await applyToInventory(inventoryDate, journalierQty, "Journalier");
+      await applyToInventory(`${inventoryDate}__four`, fourQty, "Frais");
     } catch (inventoryError: any) {
       console.error(`⚠️ Failed to update daily inventory:`, inventoryError.message);
     }
