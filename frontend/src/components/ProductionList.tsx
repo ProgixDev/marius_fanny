@@ -477,7 +477,7 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
             </div>
 
             {/* Produits */}
-            <div className="space-y-1 mb-2">
+            <div className="space-y-1.5 mb-2">
               {group.items.map(item => {
                 const itemAllergies = extractAllergies(item);
                 return (
@@ -485,9 +485,19 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
                     key={item.id}
                     className={`text-sm ${group.done ? 'line-through text-stone-400' : 'text-[#2D2A26] font-medium'}`}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span>
-                        {item.productName} <span className="text-stone-400 font-normal">× {item.quantity}</span>
+                    {/* Product name + qty + allergy on ONE inline row so the
+                        kitchen sees at a glance which product an allergy
+                        belongs to. The old layout put the allergy on the far
+                        right via justify-between, which on wide cards put it
+                        well away from its product name. */}
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span>{item.productName}</span>
+                      <span
+                        className={`shrink-0 text-base font-bold tabular-nums ${
+                          group.done ? "text-stone-400" : "text-[#337957]"
+                        }`}
+                      >
+                        × {item.quantity}
                       </span>
                       {itemAllergies && (
                         <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 rounded text-[11px] text-red-700 border border-red-200 font-bold">
@@ -496,7 +506,7 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
                       )}
                     </div>
                     {Object.keys(item.selectedOptions || {}).some((k) => !isAllergyOptionName(k) && String(item.selectedOptions?.[k] || "").trim()) && (
-                      <div className={`mt-0.5 text-[12px] ${group.done ? "text-stone-400" : "text-stone-600"} font-normal`}>
+                      <div className={`mt-0.5 ml-3 text-[12px] ${group.done ? "text-stone-400" : "text-stone-600"} font-normal`}>
                         {Object.entries(item.selectedOptions || {})
                           .filter(([k, v]) => !isAllergyOptionName(k) && String(v || "").trim())
                           .map(([k, v]) => `${k}: ${String(v).trim()}`)

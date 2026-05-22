@@ -724,8 +724,12 @@ export const createOrder = async (
       console.log(`📦 [INVENTORY] Processing order for inventory date: ${inventoryDate}`);
       console.log(`📦 [INVENTORY] Order items:`, orderData.items.map(i => `${i.productName}: ${i.quantity}`).join(', '));
 
-      // Known products list (should match frontend InventaireJournalier PRODUITS_PAR_DEFAUT)
+      // Known products list — must cover BOTH the "Journalier" (viennoiseries,
+      // quiches, soupes…) and "Frais" / Four (éclairs, millefeuilles,
+      // tartelettes…) views, otherwise products from one feuille never get
+      // auto-added when a client orders them.
       const KNOWN_INVENTORY_PRODUCTS = [
+        // Journalier
         "Croissant", "Chocolatine", "Danoise framboise", "Brioche raisin",
         "Chausson pomme", "Abricotine", "Palmier", "Bande frangipane",
         "Croissant amandes", "Choco amandes", "Crois Pistache", "Brioche sucre",
@@ -736,7 +740,11 @@ export const createOrder = async (
         "Pizza", "Quiche saumon gr", "Quiche saum petit", "Pâté poulet petit",
         "Pâté poulet grand", "Pâté saumon petit", "Pâté saumon grand",
         "Tourtière petit", "Tourtière grand", "Croque monsieur", "Croque végé",
-        "Plat cuisiné", "Soupe 1Litre", "Soupe", "SUPPLÉMENT :"
+        "Plat cuisiné", "Soupe 1Litre", "Soupe", "SUPPLÉMENT :",
+        // Frais / Four — keep in sync with frontend InventaireFour.PRODUITS_FOUR_DEFAUT
+        "Éclair chantilly", "Éclair chocolat", "Éclair pistache", "Millefeuille",
+        "Tartelette fraise", "Tartelette fruits", "Crème brulée", "Tarte fraise",
+        "Tarte fruits", "Tropézienne", "Trop. fraise", "Mini pâtisserie",
       ];
 
       // Aggregate quantities by product name from order items
@@ -760,9 +768,31 @@ export const createOrder = async (
         inventory = new DailyInventory({ date: inventoryDate, entries: [] });
       }
 
-      // Normalize for fuzzy matching: lowercase, remove accents, extra spaces
+      // Normalize for fuzzy matching. The basic version (lowercase + remove
+      // accents + collapse spaces) missed real-world variations like:
+      //   "Mille-feuilles" vs "Millefeuille"            (hyphen + plural)
+      //   "Tartelette aux fraise" vs "Tartelette fraise" (article)
+      //   "\u00c9clairs chocolat" vs "\u00c9clair chocolat"        (plural)
+      // So we additionally strip hyphens/apostrophes, drop common French
+      // articles ("aux", "au", "de"\u2026), and strip trailing 's' from each
+      // significant word before comparing.
+      const STOPWORDS = new Set([
+        "aux", "au", "a", "de", "du", "des", "le", "la", "les", "et", "l",
+      ]);
+      const stripPlural = (w: string) =>
+        w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w;
       const normalize = (s: string) =>
-        s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+        s
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[-''`]/g, " ")
+          .replace(/[^a-z0-9\s.]/g, " ")
+          .split(/\s+/)
+          .filter((w) => w && !STOPWORDS.has(w))
+          .map(stripPlural)
+          .join(" ")
+          .trim();
 
       // Update client quantities and recalculate totals
       let updatedCount = 0;
