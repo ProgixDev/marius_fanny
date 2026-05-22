@@ -137,27 +137,19 @@ export default function Invoice() {
           </button>
         </div>
 
-        {/* Header — same f_jpg URL used in all transactional emails so the
-            facture, l'email et l'impression partagent la même image (AVIF est
-            rejeté par plusieurs lecteurs PDF/aperçus d'impression). */}
+        {/* Header — logo only (no "Marius & Fanny" wordmark since the logo
+            already contains it). Same f_jpg URL as all transactional emails so
+            the facture, l'email et l'impression partagent la même image. */}
         <div className="flex items-start justify-between border-b-2 border-[#C5A065] pb-6 mb-6">
-          <div className="flex items-center gap-4">
+          <div>
             <img
               src="https://res.cloudinary.com/deyjooxbi/image/upload/f_jpg/v1773330080/branding/marius_fanny_logo.jpg"
               alt="Marius & Fanny"
-              className="h-20 w-auto print:h-24"
+              className="h-28 w-auto print:h-32 mb-2"
               crossOrigin="anonymous"
             />
-            <div>
-              <h1
-                style={{ fontFamily: '"Great Vibes", cursive' }}
-                className="text-4xl text-[#C5A065] mb-1"
-              >
-                Marius & Fanny
-              </h1>
-              <p className="text-xs text-gray-600">Pâtisserie Provençale</p>
-              <p className="text-xs text-gray-600">239 Boulevard Samson, Laval, QC</p>
-            </div>
+            <p className="text-xs text-gray-600">Pâtisserie Provençale</p>
+            <p className="text-xs text-gray-600">239 Boulevard Samson, Laval, QC</p>
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-gray-800">FACTURE</p>
