@@ -159,11 +159,16 @@ const AuthPage: React.FC = () => {
         await handleRoleBasedRedirect(signInData);
 
       } else if (view === "signup") {
+        // Note: do NOT send role here. better-auth's MongoDB adapter persists
+        // whatever string we pass, and "client" isn't in the Mongoose User
+        // enum (user/pro/staff/admin/cuisinier/patissier/four/vendeur/
+        // customerService/deliveryDriver). Mongoose blows up on the next
+        // password-reset / hook that touches the user. The backend `before`
+        // hook coerces missing role to "user" automatically.
         const { error: signUpError } = await authClient.signUp.email({
           email,
           password,
           name,
-         role: "client"
         } as any);
 
         if (signUpError)

@@ -64,7 +64,23 @@ async function initializeAuth() {
           async sendVerificationOTP({ email, otp, type }) {
             try {
               console.log(`📧 [EMAIL-OTP] Sending ${type} OTP to ${email}: ${otp}`);
-              await sendVerificationCodeEmail(email, "User", undefined, otp);
+              // better-auth's emailOTP callback only gives us {email, otp,
+              // type} — no user object — so the recipient name doesn't come
+              // in for free. We look it up in the user collection so the
+              // email says "Bonjour {first name}" instead of "Bonjour User".
+              // First-name extraction = first token of the saved `name`.
+              let displayName = "";
+              try {
+                const userDoc = await db.collection("user").findOne(
+                  { email },
+                  { projection: { name: 1 } },
+                );
+                const fullName = (userDoc?.name || "").trim();
+                displayName = fullName.split(/\s+/)[0] || "";
+              } catch (lookupErr) {
+                console.warn(`⚠️ Could not look up name for ${email}:`, lookupErr);
+              }
+              await sendVerificationCodeEmail(email, displayName || "", undefined, otp);
             } catch (error) {
               console.error(`Failed to send ${type} OTP to ${email}:`, error);
               // Don't throw - user creation should not be blocked by email failures
@@ -86,17 +102,30 @@ async function initializeAuth() {
         user: {
           create: {
             /**
-             * Force role="user" on every signup. additionalFields.defaultValue
-             * is supposed to do this but the MongoDB adapter sometimes drops
-             * the field at insertion, leaving role undefined — which then
-             * filters the account OUT of the admin "Clients" list (the query
-             * uses { role: "user" } strict equality).
+             * Normalize role on every signup. Two reasons we touch this:
+             *   1. additionalFields.defaultValue is supposed to set role
+             *      automatically but the MongoDB adapter occasionally drops
+             *      the field on insertion — leaving role undefined and the
+             *      account invisible to the admin "Clients" list (which
+             *      queries by role).
+             *   2. The signup form historically posted role: "client", which
+             *      isn't in the Mongoose User enum (user/pro/staff/admin/
+             *      cuisinier/patissier/four/vendeur/customerService/
+             *      deliveryDriver). Any later Mongoose save() — including the
+             *      password reset flow — then crashes with a validation
+             *      error. We coerce any non-staff string back to "user".
              */
             before: async (user) => {
+              const ALLOWED_ROLES = new Set([
+                "user", "pro", "staff", "admin", "customerService",
+                "deliveryDriver", "cuisinier", "patissier", "four", "vendeur",
+              ]);
+              const submitted = (user as any).role;
+              const safeRole = ALLOWED_ROLES.has(submitted) ? submitted : "user";
               return {
                 data: {
                   ...user,
-                  role: (user as any).role || "user",
+                  role: safeRole,
                 },
               };
             },
