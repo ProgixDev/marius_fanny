@@ -735,35 +735,77 @@ export const createInvoice = async (req: Request, res: Response) => {
             throw new Error("Email impossible: lien facture manquant");
           }
 
-          // Fetch order to get pickup/delivery date and slot
+          // Fetch order to get pickup/delivery date AND its real line items.
           const orderDoc = await Order.findById(orderId).lean().catch(() => null);
           const pickupDate = (orderDoc as any)?.pickupDate ? new Date((orderDoc as any).pickupDate) : undefined;
           const pickupTimeSlot = (orderDoc as any)?.pickupTimeSlot || (orderDoc as any)?.deliveryTimeSlot;
           const orderDeliveryType = (orderDoc as any)?.deliveryType || deliveryType;
           const orderClientNote = (orderDoc as any)?.notes;
 
+          // Detect "balance-only" invoice: the caller built a synthetic single
+          // line "Solde commande …" so Square charges exactly the balance.
+          // For the EMAIL though, we want the customer to see their actual
+          // products + a balance recap — otherwise the message just says
+          // "Solde commande MF-…" which is useless for them. We rebuild the
+          // item list from the order doc whenever we detect this pattern.
+          const isBalanceInvoice =
+            Array.isArray(items) &&
+            items.length === 1 &&
+            typeof items[0]?.name === "string" &&
+            /^solde commande/i.test(items[0].name);
+
+          const orderItems = ((orderDoc as any)?.items || []) as Array<any>;
+          const emailItems = isBalanceInvoice && orderItems.length > 0
+            ? orderItems.map((it: any) => ({
+                productName:
+                  it.productName ||
+                  it.name ||
+                  (it.productId ? `Produit #${it.productId}` : "Article"),
+                quantity: it.quantity || 1,
+                amount: it.amount || (it.unitPrice || 0) * (it.quantity || 1),
+              }))
+            : items.map((item: any) => ({
+                productName: item.name,
+                quantity: item.quantity,
+                amount: item.unitPrice * item.quantity,
+              }));
+
+          // For balance emails, also show what's already paid and what's
+          // still due so the recipient understands why the link is for less
+          // than the order total.
+          const orderTotal = isBalanceInvoice
+            ? (orderDoc as any)?.total || total
+            : total;
+          const orderTaxes = isBalanceInvoice
+            ? (orderDoc as any)?.taxAmount || taxAmount
+            : taxAmount;
+          const orderDelivery = isBalanceInvoice
+            ? (orderDoc as any)?.deliveryFee || deliveryFee
+            : deliveryFee;
+          const orderSubtotal = orderTotal - orderTaxes - orderDelivery;
+
+          const balanceNote = isBalanceInvoice
+            ? `Solde restant à payer : ${total.toFixed(2)} $ (déjà payé : ${(orderTotal - total).toFixed(2)} $)`
+            : (orderClientNote || "");
+
           await sendInvoiceOrderConfirmation(
             customerEmail,
             customerName,
             orderNumber || orderId,
-            items.map((item: any) => ({
-              productName: item.name,
-              quantity: item.quantity,
-              amount: item.unitPrice * item.quantity,
-            })),
-            total - taxAmount - deliveryFee,
-            taxAmount,
-            deliveryFee,
-            total,
+            emailItems,
+            orderSubtotal,
+            orderTaxes,
+            orderDelivery,
+            orderTotal,
             publicUrl,
             new Date(),
             pickupDate,
             pickupTimeSlot,
             orderDeliveryType,
-            orderClientNote,
+            balanceNote || orderClientNote,
             orderId,
           );
-          console.log(`✅ [INVOICE] Invoice published and branded email sent`);
+          console.log(`✅ [INVOICE] Invoice published and branded email sent${isBalanceInvoice ? " (balance-only)" : ""}`);
         }
       } catch (publishError: any) {
         console.error(`⚠️ [INVOICE] Failed to publish invoice:`, publishError.message);

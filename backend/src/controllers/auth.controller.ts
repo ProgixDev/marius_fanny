@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import { User } from "../models/User.js";
 import { AppError } from "../middleware/errorHandler.js";
 import crypto from "crypto";
@@ -53,11 +54,24 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
 };
 
 // 2. VALIDATION DU NOUVEAU MOT DE PASSE
+//
+// Important: better-auth stores credentials in a SEPARATE `account` collection
+// (one row per provider, e.g. "credential" for email/password). Writing the
+// hash to `user.password` on the User model does nothing for sign-in — the
+// next login attempt still checks the old hash on `account` and fails, which
+// is exactly what was reported as "il fallait écrire l'ancien mot de passe".
+//
+// We therefore update the bcrypt hash directly in the `account` collection
+// for providerId="credential" + userId=<user._id>. Mongoose's native
+// collection access bypasses the schema (account isn't a Mongoose model).
 export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { token, newPassword } = req.body;
-    
+
     if (!token || !newPassword) return next(new AppError("Données manquantes", 400));
+    if (typeof newPassword !== "string" || newPassword.length < 5) {
+      return next(new AppError("Le mot de passe doit contenir au moins 5 caractères", 400));
+    }
 
     const user = await User.findOne({
       resetPasswordToken: token,
@@ -66,14 +80,52 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
 
     if (!user) return next(new AppError("Lien invalide ou expiré", 400));
 
-    // Hachage du mot de passe pour Better Auth
     const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
+    const newHash = await bcrypt.hash(newPassword, salt);
 
-    // Nettoyage
+    // 1) Update better-auth's credential row in the `account` collection.
+    const db = mongoose.connection.db;
+    if (!db) {
+      return next(new AppError("Connexion BDD indisponible", 500));
+    }
+    const accounts = db.collection("account");
+    const userIdStr = user._id.toString();
+    // better-auth's adapter stores userId as a string; some versions store it
+    // as ObjectId. Match either form so the update lands.
+    const accountResult = await accounts.updateOne(
+      {
+        providerId: "credential",
+        $or: [
+          { userId: userIdStr },
+          { userId: user._id },
+        ],
+      },
+      { $set: { password: newHash, updatedAt: new Date() } },
+    );
+
+    if (accountResult.matchedCount === 0) {
+      // No credential row found — this typically means the account was
+      // created via social login or never had a password. We create one so
+      // the customer can now sign in by email + password.
+      await accounts.insertOne({
+        userId: userIdStr,
+        providerId: "credential",
+        accountId: userIdStr,
+        password: newHash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      console.log(`🔑 [RESET] Created new credential account for ${user.email}`);
+    } else {
+      console.log(`🔑 [RESET] Updated credential password for ${user.email}`);
+    }
+
+    // 2) Clear the reset token on the User document.
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
-    
+    // We also keep the hash on the User model for any legacy code paths
+    // that read it; it's a no-op for better-auth itself.
+    user.password = newHash;
     await user.save();
 
     return res.status(200).json({ success: true, message: "Mot de passe modifié avec succès" });
