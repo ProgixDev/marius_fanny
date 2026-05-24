@@ -3,10 +3,7 @@ import { emailOTP, bearer } from "better-auth/plugins";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import bcrypt from "bcryptjs";
 import { connectMongoDB } from "./db.js";
-import {
-  sendVerificationCodeEmail,
-  generateMockVerificationCode,
-} from "../utils/emailService.js";
+import { sendVerificationCodeEmail } from "../utils/emailService.js";
 
 // Initialize MongoDB connection for better-auth with error handling
 let authInstance: ReturnType<typeof betterAuth> | null = null;
@@ -103,24 +100,13 @@ async function initializeAuth() {
                 },
               };
             },
-            /**
-             * Hook triggered after a new user is created in better-auth
-             * Sends a verification email with a mock code
-             */
-            after: async (user) => {
-              try {
-                await sendVerificationCodeEmail(
-                  user.email,
-                  user.name || "User",
-                );
-              } catch (error) {
-                console.error(
-                  `Failed to send verification email for user ${user.email}:`,
-                  error,
-                );
-                // Don't throw - user creation should not be blocked by email failures
-              }
-            },
+            // NOTE: do NOT add an `after` hook that sends a verification
+            // email here. The `emailOTP` plugin above already fires
+            // `sendVerificationOTP` on signup with the real OTP that
+            // better-auth will accept. A second email triggered from
+            // `after` would generate its own (mock) random code, so the
+            // client gets two emails with two different codes and tries
+            // the wrong one. Keep the OTP flow as the single source.
           },
         },
       },
