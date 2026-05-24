@@ -104,6 +104,74 @@ function maskEmail(s: string): string {
   return `${local.slice(0, 2)}***@${domain}`;
 }
 
+/**
+ * Diagnostic — inspect what better-auth has stored for a given email so we
+ * can see exactly which fields/IDs the `account` collection uses. Used to
+ * debug the password-reset flow.
+ *
+ *   GET /api/health/auth-account?email=foo@bar.com
+ */
+router.get("/health/auth-account", async (req, res) => {
+  const email = String(req.query.email || "").trim().toLowerCase();
+  if (!email) {
+    return res.status(400).json({
+      success: false,
+      error: "Provide ?email=foo@bar.com",
+    });
+  }
+  try {
+    const mongoose = await import("mongoose");
+    const db = mongoose.default.connection.db;
+    if (!db) {
+      return res.status(500).json({ success: false, error: "DB not connected" });
+    }
+    const userDoc = await db
+      .collection("user")
+      .findOne({ email }, { projection: { email: 1, name: 1, role: 1, emailVerified: 1 } });
+    if (!userDoc) {
+      return res.json({ success: true, found: false, hint: "No user with this email" });
+    }
+    // Look up accounts by both possible userId conventions.
+    const accountsAsStr = await db
+      .collection("account")
+      .find({ userId: userDoc._id.toString() })
+      .project({ providerId: 1, accountId: 1, userId: 1, password: 1 })
+      .toArray();
+    const accountsAsObj = await db
+      .collection("account")
+      .find({ userId: userDoc._id })
+      .project({ providerId: 1, accountId: 1, userId: 1, password: 1 })
+      .toArray();
+    const mask = (s: any) =>
+      typeof s === "string" && s.length > 12 ? `${s.slice(0, 8)}…${s.slice(-4)} (${s.length} chars)` : s;
+    return res.json({
+      success: true,
+      found: true,
+      user: {
+        _id: userDoc._id.toString(),
+        email: maskEmail(userDoc.email),
+        name: userDoc.name,
+        role: userDoc.role,
+        emailVerified: userDoc.emailVerified,
+      },
+      accountsMatchedByStringUserId: accountsAsStr.map((a: any) => ({
+        ...a,
+        userId: mask(typeof a.userId === "string" ? a.userId : a.userId?.toString()),
+        accountId: mask(a.accountId),
+        password: a.password ? mask(a.password) : "(none)",
+      })),
+      accountsMatchedByObjectIdUserId: accountsAsObj.map((a: any) => ({
+        ...a,
+        userId: mask(typeof a.userId === "string" ? a.userId : a.userId?.toString()),
+        accountId: mask(a.accountId),
+        password: a.password ? mask(a.password) : "(none)",
+      })),
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e.message || String(e) });
+  }
+});
+
 router.get("/public/google-review", (req, res) => {
   const placeId = String(process.env.GOOGLE_REVIEW_PLACE_ID_LAVAL || "").trim();
   const url =

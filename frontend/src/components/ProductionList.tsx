@@ -327,34 +327,44 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
 
   // Grouper les produits pour la vue liste
   const groupedProducts: GroupedProduct[] = React.useMemo(() => {
-    const groups = new Map<number, GroupedProduct>();
-    
-    productionItems.forEach(item => {
-      if (!groups.has(item.productId)) {
-        groups.set(item.productId, {
+    // Custom items (admin's "Ajouter article personnalisé") all share
+    // productId = 0, so the old `Map<number, ...>` keyed on productId
+    // merged every custom item into one row — qty got summed across
+    // different products (COOKIES + BISCUIS appeared as a single
+    // "COOKIES x 2" line). Key custom items by their name instead so
+    // each personalized product gets its own group.
+    const groups = new Map<string, GroupedProduct>();
+
+    productionItems.forEach((item) => {
+      const isCustom = !item.productId || item.productId === 0;
+      const key = isCustom
+        ? `custom:${(item.productName || "").trim().toLowerCase()}`
+        : `id:${item.productId}`;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
           productId: item.productId,
           productName: item.productName,
           totalQuantity: 0,
           items: [],
-          allergies: []
+          allergies: [],
         });
       }
-      
-      const group = groups.get(item.productId)!;
+
+      const group = groups.get(key)!;
       group.totalQuantity += item.quantity;
       group.items.push(item);
-      
-      // Collecter les allergies uniques
+
       if (item.allergies) {
-        const allergies = item.allergies.split(',').map(a => a.trim());
-        allergies.forEach(allergy => {
+        const allergies = item.allergies.split(",").map((a) => a.trim());
+        allergies.forEach((allergy) => {
           if (!group.allergies.includes(allergy)) {
             group.allergies.push(allergy);
           }
         });
       }
     });
-    
+
     return Array.from(groups.values());
   }, [productionItems]);
 

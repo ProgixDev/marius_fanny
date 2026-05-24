@@ -83,41 +83,69 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     const salt = await bcrypt.genSalt(10);
     const newHash = await bcrypt.hash(newPassword, salt);
 
-    // 1) Update better-auth's credential row in the `account` collection.
+    // Update better-auth's credential row in the `account` collection.
+    // better-auth's MongoDB adapter is annoyingly inconsistent about how it
+    // links accounts to users: depending on the version it stores
+    // `account.userId` as either (a) Mongo's _id as a string, (b) the same
+    // _id as an ObjectId, or (c) a separate better-auth-generated `id`
+    // string field on the user. We try ALL of them.
     const db = mongoose.connection.db;
     if (!db) {
       return next(new AppError("Connexion BDD indisponible", 500));
     }
     const accounts = db.collection("account");
     const userIdStr = user._id.toString();
-    // better-auth's adapter stores userId as a string; some versions store it
-    // as ObjectId. Match either form so the update lands.
-    const accountResult = await accounts.updateOne(
-      {
-        providerId: "credential",
-        $or: [
-          { userId: userIdStr },
-          { userId: user._id },
-        ],
-      },
+    const userBetterAuthId = (user as any).id; // sometimes set by better-auth
+
+    const userIdCandidates: any[] = [userIdStr, user._id];
+    if (userBetterAuthId && userBetterAuthId !== userIdStr) {
+      userIdCandidates.push(userBetterAuthId);
+    }
+
+    const matchFilter = {
+      providerId: "credential",
+      userId: { $in: userIdCandidates },
+    };
+
+    // Updateall matching credential accounts (there should be exactly one
+    // but if for some reason there are multiple — e.g. duplicate sync —
+    // we want them all in sync).
+    const accountResult = await accounts.updateMany(
+      matchFilter,
       { $set: { password: newHash, updatedAt: new Date() } },
     );
 
+    console.log(
+      `🔑 [RESET] account.updateMany for ${user.email}: matched=${accountResult.matchedCount}, modified=${accountResult.modifiedCount}`,
+    );
+
     if (accountResult.matchedCount === 0) {
-      // No credential row found — this typically means the account was
-      // created via social login or never had a password. We create one so
-      // the customer can now sign in by email + password.
-      await accounts.insertOne({
-        userId: userIdStr,
-        providerId: "credential",
-        accountId: userIdStr,
-        password: newHash,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      console.log(`🔑 [RESET] Created new credential account for ${user.email}`);
-    } else {
-      console.log(`🔑 [RESET] Updated credential password for ${user.email}`);
+      // No credential row found. Last-ditch fallback: search by accountId
+      // (which better-auth sometimes uses to mirror userId).
+      const byAccountId = await accounts.updateMany(
+        {
+          providerId: "credential",
+          accountId: { $in: userIdCandidates },
+        },
+        { $set: { password: newHash, updatedAt: new Date() } },
+      );
+      console.log(
+        `🔑 [RESET] Fallback updateMany by accountId: matched=${byAccountId.matchedCount}`,
+      );
+
+      if (byAccountId.matchedCount === 0) {
+        // Truly no credential account — create one so the customer can sign in.
+        await accounts.insertOne({
+          id: crypto.randomBytes(12).toString("hex"),
+          userId: userIdStr,
+          providerId: "credential",
+          accountId: userIdStr,
+          password: newHash,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        console.log(`🔑 [RESET] Created new credential account for ${user.email}`);
+      }
     }
 
     // 2) Clear the reset token on the User document.
