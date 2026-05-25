@@ -158,12 +158,17 @@ export default function Quote() {
     <div className="min-h-screen bg-[#F9F7F2] py-8 px-4">
       <div className="max-w-3xl mx-auto bg-white shadow-lg rounded-2xl p-6 md:p-10">
         {/* Header */}
-        <div className="flex items-center justify-between border-b-2 border-[#C5A065] pb-6 mb-6">
+        <div className="flex items-start justify-between border-b-2 border-[#C5A065] pb-6 mb-6">
           <div>
-            <h1 style={{ fontFamily: '"Great Vibes", cursive' }} className="text-4xl md:text-5xl text-[#C5A065]">
-              Marius & Fanny
-            </h1>
+            <img
+              src="https://res.cloudinary.com/deyjooxbi/image/upload/f_jpg/v1773330080/branding/marius_fanny_logo.jpg"
+              alt="Marius & Fanny"
+              className="h-24 w-auto print:h-28 mb-2"
+              crossOrigin="anonymous"
+            />
             <p className="text-xs text-gray-600">Pâtisserie Provençale</p>
+            <p className="text-xs text-gray-600">239-E boulevard Samson</p>
+            <p className="text-xs text-gray-600">Laval, H7X 3E4, Québec, Canada</p>
           </div>
           <div className="text-right">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#C5A065]/10 text-[#C5A065] text-xs font-bold uppercase">
@@ -304,10 +309,27 @@ export default function Quote() {
               <span className="text-gray-600">Sous-total :</span>
               <span className="font-medium">{fmt(quote.subtotal)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Taxes (TPS + TVQ) :</span>
-              <span className="font-medium">{fmt(quote.taxAmount)}</span>
-            </div>
+            {(() => {
+              // Same split as the Invoice page so accounting software sees
+              // each tax line separately.
+              const TPS_RATE = 0.05;
+              const TVQ_RATE = 0.09975;
+              const TOTAL_RATE = TPS_RATE + TVQ_RATE;
+              const tps = quote.taxAmount * (TPS_RATE / TOTAL_RATE);
+              const tvq = quote.taxAmount * (TVQ_RATE / TOTAL_RATE);
+              return (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">TPS (5 %) :</span>
+                    <span className="font-medium">{fmt(tps)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">TVQ (9,975 %) :</span>
+                    <span className="font-medium">{fmt(tvq)}</span>
+                  </div>
+                </>
+              );
+            })()}
             <div className="text-[10px] text-gray-500 pl-4">
               TPS: 144652641RT001 &nbsp; TVQ: 1201862732TQ0001
             </div>

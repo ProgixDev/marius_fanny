@@ -1190,41 +1190,73 @@ export function OrderManagement() {
       ? `<div style="margin-top:10px;padding:8px;border:3px solid #000;font-size:16px;font-weight:900;text-align:center;">ALLERGIE: ${allergies.join(", ")}</div>`
       : "";
 
+    // Header is `position: sticky` so the order number, name and date repeat
+    // at the top of EVERY physical 4×6 sticker when one logical order
+    // overflows to a second label (long carts). Items now flow naturally —
+    // no more absolute bottom-positioned order number disappearing under
+    // overflowed content, no more stacking onto the next order's sticker.
     return `
       <div class="label">
-        <div style="text-align:center;margin-bottom:8px;">
-          <img src="${imgSrc}" alt="Marius & Fanny" style="max-width:100px;" />
+        <div class="label-header">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">
+            <img src="${imgSrc}" alt="Marius & Fanny" style="height:36px;" />
+            <div style="font-size:34px;font-weight:900;letter-spacing:2px;">#${shortNumber}</div>
+          </div>
+          <div style="font-size:14px;font-weight:bold;">${date} — ${time}</div>
+          <div style="font-size:18px;font-weight:900;">${clientName}</div>
+          ${order.deliveryType === "delivery" && order.deliveryAddress ? `
+            <div style="font-size:12px;">
+              ${order.deliveryAddress.street}, ${order.deliveryAddress.city} ${order.deliveryAddress.postalCode}
+            </div>
+          ` : `
+            <div style="font-size:12px;">Ramassage: ${order.pickupLocation || ""}</div>
+          `}
         </div>
-        <div style="font-size:20px;font-weight:bold;margin-bottom:4px;">${date} — ${time}</div>
-        <div style="font-size:22px;font-weight:900;margin-bottom:6px;">${clientName}</div>
-        ${order.deliveryType === "delivery" && order.deliveryAddress ? `
-          <div style="font-size:14px;margin-bottom:8px;">
-            ${order.deliveryAddress.street}, ${order.deliveryAddress.city} ${order.deliveryAddress.postalCode}
-          </div>
-        ` : `
-          <div style="font-size:14px;margin-bottom:8px;">
-            Ramassage: ${order.pickupLocation || ""}
-          </div>
-        `}
-        <table style="width:100%;">${items}</table>
+        <table style="width:100%;border-collapse:collapse;">${items}</table>
         ${allergyHtml}
-        <div style="position:absolute;bottom:8px;left:0;right:0;text-align:center;">
-          <div style="font-size:42px;font-weight:900;letter-spacing:3px;">${shortNumber}</div>
-        </div>
       </div>`;
   };
+
+  // Common print styles. Key points:
+  //  - `.label` is the per-order container, separated from the next order
+  //    with `page-break-after: always`.
+  //  - `.label-header` is sticky so on a long order that overflows past one
+  //    4×6 sticker, the second physical page still shows order # + name
+  //    at the top.
+  //  - rows use `page-break-inside: avoid` so a single product line is
+  //    never split across two stickers.
+  const LABEL_STYLES = `
+    @page { size: 4in 6in; margin: 0; }
+    body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    .label {
+      width: 4in;
+      padding: 10px 12px;
+      box-sizing: border-box;
+      page-break-after: always;
+    }
+    .label:last-child { page-break-after: auto; }
+    .label-header {
+      position: sticky;
+      top: 0;
+      background: white;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #000;
+      margin-bottom: 6px;
+    }
+    .label tr {
+      page-break-inside: avoid;
+    }
+    @media print {
+      .label { padding: 8px 10px; }
+    }
+  `;
 
   const printLabel = (order: OrderWithPacking) => {
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(`
       <html><head><title>Étiquette ${formatOrderNumber(order.orderNumber)}</title>
-      <style>
-        @page { size: 4in 6in; margin: 0; }
-        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
-        .label { width: 4in; height: 6in; padding: 12px; box-sizing: border-box; position: relative; }
-        @media print { .label { padding: 8px; } }
-      </style></head><body>${buildLabelHtml(order)}</body></html>
+      <style>${LABEL_STYLES}</style></head><body>${buildLabelHtml(order)}</body></html>
     `);
     win.document.close();
     win.print();
@@ -1237,13 +1269,7 @@ export function OrderManagement() {
     if (!win) return;
     win.document.write(`
       <html><head><title>Étiquettes — ${filteredOrders.length} commandes</title>
-      <style>
-        @page { size: 4in 6in; margin: 0; }
-        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
-        .label { width: 4in; height: 6in; padding: 12px; box-sizing: border-box; position: relative; page-break-after: always; }
-        .label:last-child { page-break-after: auto; }
-        @media print { .label { padding: 8px; } }
-      </style></head><body>${allLabels}</body></html>
+      <style>${LABEL_STYLES}</style></head><body>${allLabels}</body></html>
     `);
     win.document.close();
     win.print();

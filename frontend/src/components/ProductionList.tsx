@@ -673,6 +673,36 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
                 })
                 .filter(Boolean) as string[];
               const optionPreview = optionLines.slice(0, 3);
+              // Aggregate option choices ACROSS the whole product group so the
+              // kitchen sees at a glance "Pains: Baguette × 4, Pita × 2"
+              // instead of having to mentally tally each order's option line.
+              // Map<optionName, Map<optionValue, totalQty>>.
+              const optionBreakdown = new Map<string, Map<string, number>>();
+              uniqueOrders.forEach((item) => {
+                const opts = item.selectedOptions || {};
+                Object.entries(opts).forEach(([optName, optValue]) => {
+                  if (isAllergyOptionName(optName)) return;
+                  const value = String(optValue || "").trim();
+                  if (!value) return;
+                  if (!optionBreakdown.has(optName)) {
+                    optionBreakdown.set(optName, new Map());
+                  }
+                  const valueMap = optionBreakdown.get(optName)!;
+                  valueMap.set(value, (valueMap.get(value) || 0) + (item.quantity || 1));
+                });
+              });
+              // Per-order allergy lines so each warning is tied to its order
+              // number, not floating somewhere on the right of the row.
+              const allergyLines = uniqueOrders
+                .map((item) => {
+                  const a = extractAllergies(item);
+                  if (!a) return null;
+                  return {
+                    order: formatOrderNumber(item.orderNumber),
+                    text: a,
+                  };
+                })
+                .filter(Boolean) as { order: string; text: string }[];
               const timeLines = uniqueOrders.map((item, idx) => ({
                 key: `${item.orderId || item.orderNumber}-${idx}`,
                 order: formatOrderNumber(item.orderNumber),
@@ -726,10 +756,39 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
                         )}
                       </div>
                     )}
-                    {optionLines.length > 0 && (
-                      <div className="mt-2 text-[12px] text-stone-600">
+                    {/* Aggregate breakdown per option ("Pains: Baguette × 4,
+                        Pita × 2") so the kitchen knows how many of each
+                        variant to make without having to sum order-by-order. */}
+                    {optionBreakdown.size > 0 && (
+                      <div className="mt-2 text-[12px] text-stone-700">
                         <div className="font-bold text-[11px] uppercase tracking-wider text-stone-400 mb-1">
-                          Options
+                          Répartition
+                        </div>
+                        {Array.from(optionBreakdown.entries()).map(([optName, valueMap]) => (
+                          <div key={optName} className="mb-0.5">
+                            <span className="font-semibold">{optName}:</span>{" "}
+                            {Array.from(valueMap.entries())
+                              .sort(([, a], [, b]) => b - a)
+                              .map(([val, qty]) => (
+                                <span
+                                  key={val}
+                                  className="inline-block mr-2 px-1.5 py-0.5 rounded bg-stone-100 text-stone-700"
+                                >
+                                  {val}{" "}
+                                  <span className="font-bold text-[#337957]">× {qty}</span>
+                                </span>
+                              ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Per-order option detail (so staff can still trace
+                        which order chose which option). Kept compact since
+                        the répartition above answers the production question. */}
+                    {optionLines.length > 0 && (
+                      <div className="mt-2 text-[12px] text-stone-500">
+                        <div className="font-bold text-[10px] uppercase tracking-wider text-stone-400 mb-1">
+                          Par commande
                         </div>
                         <div className="space-y-0.5">
                           {optionPreview.map((line) => (
@@ -742,6 +801,28 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
                               +{optionLines.length - optionPreview.length} autre(s)
                             </div>
                           )}
+                        </div>
+                      </div>
+                    )}
+                    {/* Per-order allergies pinned next to their order # so
+                        staff can't accidentally read "noix" as belonging to
+                        the wrong row. */}
+                    {allergyLines.length > 0 && (
+                      <div className="mt-2 text-[12px]">
+                        <div className="font-bold text-[10px] uppercase tracking-wider text-red-500 mb-1">
+                          Allergies par commande
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {allergyLines.map((a, i) => (
+                            <span
+                              key={`${a.order}-${i}`}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 rounded text-red-700 border border-red-200 font-bold text-[11px]"
+                              title={`#${a.order}: ${a.text}`}
+                            >
+                              <span className="text-red-500">#{a.order}</span>
+                              <span>⚠️ {a.text}</span>
+                            </span>
+                          ))}
                         </div>
                       </div>
                     )}

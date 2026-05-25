@@ -2077,6 +2077,14 @@ export default function OrderForm({
                               ? Number(item.quantity)
                               : ""
                           }
+                          // Auto-select the current content when the field is
+                          // tapped (mobile/tablet) or focused (desktop).
+                          // Without this, the existing "1" stays selected at
+                          // the caret position so tapping "3" gives "13"
+                          // instead of "3" — that's how an order for 7 items
+                          // turned into 71 in Fanny's tablet workflow.
+                          onFocus={(e) => e.currentTarget.select()}
+                          onClick={(e) => (e.currentTarget as HTMLInputElement).select()}
                           onChange={(e) => {
                             const raw = e.target.value;
                             // Allow the field to be temporarily empty while the

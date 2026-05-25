@@ -451,6 +451,43 @@ export async function acceptQuote(req: Request, res: Response) {
           },
         );
       }
+    } else {
+      // No payment-link flow → still send a branded "Commande confirmée"
+      // email so the customer (and especially government clients who pay
+      // later by cheque/transfer) has a written confirmation with the full
+      // breakdown. Without this, government quote acceptances landed in
+      // production silently and the client got nothing.
+      try {
+        const { sendOrderReceipt } = await import("../utils/emailService.js");
+        await sendOrderReceipt("invoice", {
+          email: quote.clientInfo.email,
+          name: `${quote.clientInfo.firstName} ${quote.clientInfo.lastName || ""}`.trim(),
+          orderNumber: order.orderNumber,
+          items: quote.items.map((i) => ({
+            productName: i.productName,
+            quantity: i.quantity,
+            amount: i.amount,
+          })),
+          subtotal: quote.subtotal,
+          taxAmount: quote.taxAmount,
+          deliveryFee: quote.deliveryFee,
+          total: quote.total,
+          orderDate: order.orderDate,
+          pickupDate: (order as any).pickupDate || undefined,
+          pickupTimeSlot: (order as any).deliveryTimeSlot || undefined,
+          deliveryType: order.deliveryType,
+          clientNote: quote.notes,
+          orderId: order._id.toString(),
+        });
+        console.log(
+          `✅ [QUOTE-ACCEPT] Branded confirmation email sent to ${quote.clientInfo.email} (gov=${quote.billingKind === "gouvernement"})`,
+        );
+      } catch (emailErr: any) {
+        console.error(
+          `⚠️ [QUOTE-ACCEPT] Failed to send confirmation email for ${order.orderNumber}:`,
+          emailErr?.message || emailErr,
+        );
+      }
     }
 
     res.json({

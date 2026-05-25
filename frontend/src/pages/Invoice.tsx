@@ -110,6 +110,17 @@ export default function Invoice() {
   const shortNum = order.orderNumber.split("-").pop() || order.orderNumber;
   const balance = (order.total || 0) - (order.amountPaid || 0);
 
+  // Split the combined "TPS + TVQ" tax amount into the two Quebec taxes so
+  // the bill matches what the client's accountant expects. The combined
+  // rate is 14.975 % (TPS 5 % + TVQ 9.975 %), so we split proportionally
+  // from the actual taxAmount stored on the order — that way rounding
+  // matches the total exactly even on weird subtotals.
+  const TPS_RATE = 0.05;
+  const TVQ_RATE = 0.09975;
+  const TOTAL_RATE = TPS_RATE + TVQ_RATE; // 0.14975
+  const tps = order.taxAmount * (TPS_RATE / TOTAL_RATE);
+  const tvq = order.taxAmount * (TVQ_RATE / TOTAL_RATE);
+
   return (
     <div className="min-h-screen bg-gray-100 py-8 print:bg-white print:py-0">
       <style>{`
@@ -149,7 +160,8 @@ export default function Invoice() {
               crossOrigin="anonymous"
             />
             <p className="text-xs text-gray-600">Pâtisserie Provençale</p>
-            <p className="text-xs text-gray-600">239 Boulevard Samson, Laval, QC</p>
+            <p className="text-xs text-gray-600">239-E boulevard Samson</p>
+            <p className="text-xs text-gray-600">Laval, H7X 3E4, Québec, Canada</p>
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-gray-800">FACTURE</p>
@@ -250,8 +262,12 @@ export default function Invoice() {
               <span className="font-medium">{fmt(order.subtotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Taxes (TPS + TVQ) :</span>
-              <span className="font-medium">{fmt(order.taxAmount)}</span>
+              <span className="text-gray-600">TPS (5 %) :</span>
+              <span className="font-medium">{fmt(tps)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">TVQ (9,975 %) :</span>
+              <span className="font-medium">{fmt(tvq)}</span>
             </div>
             <div className="text-[10px] text-gray-500 pl-4">
               TPS: 144652641RT001 &nbsp; TVQ: 1201862732TQ0001

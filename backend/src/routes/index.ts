@@ -172,6 +172,84 @@ router.get("/health/auth-account", async (req, res) => {
   }
 });
 
+/**
+ * Diagnostic — tests whether a given email/password combination would
+ * actually verify against the bcrypt hash stored in better-auth's `account`
+ * collection. Use this to confirm the reset-password flow actually updated
+ * the right field.
+ *
+ *   GET /api/health/auth-test?email=foo@bar.com&password=newpass
+ *
+ * Returns { matches: true } if the password is valid for this account.
+ */
+router.get("/health/auth-test", async (req, res) => {
+  const email = String(req.query.email || "").trim().toLowerCase();
+  const password = String(req.query.password || "");
+  if (!email || !password) {
+    return res.status(400).json({
+      success: false,
+      error: "Provide ?email=foo@bar.com&password=...",
+    });
+  }
+  try {
+    const [{ default: mongoose }, bcrypt] = await Promise.all([
+      import("mongoose"),
+      import("bcrypt"),
+    ]);
+    const db = mongoose.connection.db;
+    if (!db) return res.status(500).json({ success: false, error: "DB not connected" });
+
+    const userDoc = await db.collection("user").findOne({ email });
+    if (!userDoc) return res.json({ success: true, found: false, hint: "No user" });
+
+    const userIdStr = userDoc._id.toString();
+    const accounts = await db
+      .collection("account")
+      .find({
+        providerId: "credential",
+        $or: [{ userId: userIdStr }, { userId: userDoc._id }, { accountId: userIdStr }],
+      })
+      .toArray();
+
+    if (accounts.length === 0) {
+      return res.json({
+        success: true,
+        found: true,
+        accountFound: false,
+        hint: "User exists but no credential account",
+      });
+    }
+
+    const results = await Promise.all(
+      accounts.map(async (a: any) => {
+        let matches = false;
+        let verifyError: string | null = null;
+        try {
+          matches = await bcrypt.default.compare(password, a.password);
+        } catch (e: any) {
+          verifyError = e?.message || String(e);
+        }
+        return {
+          accountId: a.accountId,
+          providerId: a.providerId,
+          hashPrefix: typeof a.password === "string" ? a.password.slice(0, 7) : null,
+          hashLength: typeof a.password === "string" ? a.password.length : 0,
+          matches,
+          verifyError,
+        };
+      }),
+    );
+    return res.json({
+      success: true,
+      found: true,
+      accountFound: true,
+      results,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e.message || String(e) });
+  }
+});
+
 router.get("/public/google-review", (req, res) => {
   const placeId = String(process.env.GOOGLE_REVIEW_PLACE_ID_LAVAL || "").trim();
   const url =

@@ -807,8 +807,12 @@ export async function sendFullPaymentReceipt(
                 <strong>${subtotal.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">Taxes (TPS+TVQ):</span>
-                <strong>${taxAmount.toFixed(2)}$</strong>
+                <span style="display: inline-block; width: 150px;">TPS (5 %):</span>
+                <strong>${(taxAmount * (0.05 / 0.14975)).toFixed(2)}$</strong>
+              </p>
+              <p style="color: #555; margin: 5px 0;">
+                <span style="display: inline-block; width: 150px;">TVQ (9,975 %):</span>
+                <strong>${(taxAmount * (0.09975 / 0.14975)).toFixed(2)}$</strong>
               </p>
               <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;">
                 <span style="display: inline-block; width: 150px;">&nbsp;</span>
@@ -985,8 +989,12 @@ export async function sendDepositReceipt(
                 <strong>${subtotal.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 180px;">Taxes (TPS+TVQ):</span>
-                <strong>${taxAmount.toFixed(2)}$</strong>
+                <span style="display: inline-block; width: 180px;">TPS (5 %):</span>
+                <strong>${(taxAmount * (0.05 / 0.14975)).toFixed(2)}$</strong>
+              </p>
+              <p style="color: #555; margin: 5px 0;">
+                <span style="display: inline-block; width: 180px;">TVQ (9,975 %):</span>
+                <strong>${(taxAmount * (0.09975 / 0.14975)).toFixed(2)}$</strong>
               </p>
               <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;">
                 <span style="display: inline-block; width: 180px;">&nbsp;</span>
@@ -1169,8 +1177,12 @@ export async function sendInvoiceOrderConfirmation(
                 <strong>${subtotal.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">Taxes (TPS+TVQ):</span>
-                <strong>${taxAmount.toFixed(2)}$</strong>
+                <span style="display: inline-block; width: 150px;">TPS (5 %):</span>
+                <strong>${(taxAmount * (0.05 / 0.14975)).toFixed(2)}$</strong>
+              </p>
+              <p style="color: #555; margin: 5px 0;">
+                <span style="display: inline-block; width: 150px;">TVQ (9,975 %):</span>
+                <strong>${(taxAmount * (0.09975 / 0.14975)).toFixed(2)}$</strong>
               </p>
               <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;">
                 <span style="display: inline-block; width: 150px;">&nbsp;</span>
@@ -1711,7 +1723,8 @@ export async function sendQuoteEmail(data: {
 
           <div style="text-align: right; margin-top: 20px;">
             <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">Sous-total:</span> <strong>${data.subtotal.toFixed(2)}$</strong></p>
-            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">Taxes (TPS+TVQ):</span> <strong>${data.taxAmount.toFixed(2)}$</strong></p>
+            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">TPS (5 %):</span> <strong>${(data.taxAmount * (0.05 / 0.14975)).toFixed(2)}$</strong></p>
+            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">TVQ (9,975 %):</span> <strong>${(data.taxAmount * (0.09975 / 0.14975)).toFixed(2)}$</strong></p>
             <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;"><span style="display:inline-block;width:150px;">&nbsp;</span>TPS: 144652641RT001 &nbsp; TVQ: 1201862732TQ0001</p>
             ${data.deliveryFee > 0 ? `<p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">Livraison:</span> <strong>${data.deliveryFee.toFixed(2)}$</strong></p>` : ""}
             <p style="color: #C5A065; font-size: 20px; margin: 15px 0 0 0; padding-top: 10px; border-top: 2px solid #C5A065;">
