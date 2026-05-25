@@ -710,69 +710,42 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
                 type: item.deliveryType === "delivery" ? "Livraison" : "Ramassage",
               }));
               
+              // Per Fanny's request, the "Vue par produit" stays minimal:
+              // product title + total qty + per-option breakdown. Order
+              // numbers, pickup times, and per-order allergy/option detail
+              // all live in "Vue par commande" instead — too much info here
+              // made the row noisy and the kitchen had trouble reading the
+              // total quantity at a glance.
+              // (timeLines, optionLines, optionPreview, allergyLines and
+              // fulfillmentCounts above are still computed but intentionally
+              // not rendered in this cell — the data is shown in the
+              // companion order-view component.)
+              void timeLines;
+              void optionLines;
+              void optionPreview;
+              void allergyLines;
+              void fulfillmentCounts;
+              void totalCount;
+
               return (
                 <tr key={group.productId} className="hover:bg-stone-50/50 transition-colors">
-                  <td className="py-3 px-4">
-                    <div className="font-medium text-[#2D2A26]">{group.productName}</div>
-                    <div className="text-xs text-stone-400 mt-1 flex items-center gap-2">
-                      <span>{totalCount} commande{totalCount > 1 ? 's' : ''}</span>
-                      <span className="inline-flex items-center gap-1">
-                        {fulfillmentCounts.montrealPickup > 0 && (
-                          <span
-                            className="w-2 h-2 rounded-full bg-blue-400"
-                            title="Cueillette Montréal"
-                          />
-                        )}
-                        {fulfillmentCounts.lavalPickup > 0 && (
-                          <span
-                            className="w-2 h-2 rounded-full bg-white border border-stone-300"
-                            title="Cueillette Laval"
-                          />
-                        )}
-                        {fulfillmentCounts.delivery > 0 && (
-                          <span
-                            className="w-2 h-2 rounded-full bg-yellow-400"
-                            title="Livraison"
-                          />
-                        )}
-                      </span>
-                    </div>
-                    {(fulfillmentCounts.montrealPickup > 0 || fulfillmentCounts.lavalPickup > 0 || fulfillmentCounts.delivery > 0) && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {fulfillmentCounts.montrealPickup > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border bg-blue-100 text-blue-900 border-blue-200">
-                            Montréal: {fulfillmentCounts.montrealPickup}
-                          </span>
-                        )}
-                        {fulfillmentCounts.lavalPickup > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border bg-white text-stone-700 border-stone-200">
-                            Laval: {fulfillmentCounts.lavalPickup}
-                          </span>
-                        )}
-                        {fulfillmentCounts.delivery > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border bg-yellow-100 text-yellow-900 border-yellow-200">
-                            Livraison: {fulfillmentCounts.delivery}
-                          </span>
-                        )}
-                      </div>
-                    )}
+                  <td className="py-4 px-4">
+                    <div className="text-xl font-bold text-[#2D2A26]">{group.productName}</div>
                     {/* Aggregate breakdown per option ("Pains: Baguette × 4,
-                        Pita × 2") so the kitchen knows how many of each
-                        variant to make without having to sum order-by-order. */}
+                        Pita × 2") — the only secondary info Fanny wants in
+                        this view, so the kitchen knows how many of each
+                        variant to bake. */}
                     {optionBreakdown.size > 0 && (
-                      <div className="mt-2 text-[12px] text-stone-700">
-                        <div className="font-bold text-[11px] uppercase tracking-wider text-stone-400 mb-1">
-                          Répartition
-                        </div>
+                      <div className="mt-2 text-sm text-stone-700">
                         {Array.from(optionBreakdown.entries()).map(([optName, valueMap]) => (
-                          <div key={optName} className="mb-0.5">
-                            <span className="font-semibold">{optName}:</span>{" "}
+                          <div key={optName} className="mb-1">
+                            <span className="font-semibold">{optName} :</span>{" "}
                             {Array.from(valueMap.entries())
                               .sort(([, a], [, b]) => b - a)
                               .map(([val, qty]) => (
                                 <span
                                   key={val}
-                                  className="inline-block mr-2 px-1.5 py-0.5 rounded bg-stone-100 text-stone-700"
+                                  className="inline-block mr-2 px-2 py-0.5 rounded bg-stone-100 text-stone-800"
                                 >
                                   {val}{" "}
                                   <span className="font-bold text-[#337957]">× {qty}</span>
@@ -782,80 +755,12 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
                         ))}
                       </div>
                     )}
-                    {/* Per-order option detail (so staff can still trace
-                        which order chose which option). Kept compact since
-                        the répartition above answers the production question. */}
-                    {optionLines.length > 0 && (
-                      <div className="mt-2 text-[12px] text-stone-500">
-                        <div className="font-bold text-[10px] uppercase tracking-wider text-stone-400 mb-1">
-                          Par commande
-                        </div>
-                        <div className="space-y-0.5">
-                          {optionPreview.map((line) => (
-                            <div key={line} className="truncate" title={line}>
-                              {line}
-                            </div>
-                          ))}
-                          {optionLines.length > optionPreview.length && (
-                            <div className="text-stone-400">
-                              +{optionLines.length - optionPreview.length} autre(s)
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    {/* Per-order allergies pinned next to their order # so
-                        staff can't accidentally read "noix" as belonging to
-                        the wrong row. */}
-                    {allergyLines.length > 0 && (
-                      <div className="mt-2 text-[12px]">
-                        <div className="font-bold text-[10px] uppercase tracking-wider text-red-500 mb-1">
-                          Allergies par commande
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {allergyLines.map((a, i) => (
-                            <span
-                              key={`${a.order}-${i}`}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 rounded text-red-700 border border-red-200 font-bold text-[11px]"
-                              title={`#${a.order}: ${a.text}`}
-                            >
-                              <span className="text-red-500">#{a.order}</span>
-                              <span>⚠️ {a.text}</span>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {timeLines.length > 0 && (
-                      <div className="mt-2 text-[12px] text-stone-700">
-                        <div className="font-bold text-[11px] uppercase tracking-wider text-stone-400 mb-1">
-                          Heures
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {timeLines.map((t) => (
-                            <span
-                              key={t.key}
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] ${
-                                t.type === "Livraison"
-                                  ? "bg-yellow-50 text-yellow-900 border-yellow-200"
-                                  : "bg-blue-50 text-blue-900 border-blue-200"
-                              }`}
-                              title={`${t.type} #${t.order}`}
-                            >
-                              <Clock size={11} />
-                              <span className="font-semibold">#{t.order}</span>
-                              <span>{t.time}</span>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </td>
-                  <td className="py-3 px-4">
-                    <span className="text-lg font-bold text-[#C5A065]">
+                  <td className="py-4 px-4">
+                    <span className="text-3xl font-black text-[#C5A065]">
                       {group.totalQuantity}
                     </span>
-                    <span className="text-xs text-stone-400 ml-1">unités</span>
+                    <span className="text-sm text-stone-500 ml-1">unités</span>
                   </td>
                   <td className="py-3 px-4">
                     {group.allergies.length > 0 ? (

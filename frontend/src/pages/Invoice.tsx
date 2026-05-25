@@ -71,13 +71,13 @@ export default function Invoice() {
     fetchOrder();
   }, [orderId]);
 
-  // Auto-trigger print dialog once the invoice is loaded and rendered
-  useEffect(() => {
-    if (!loading && order && !error) {
-      const timer = setTimeout(() => window.print(), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [loading, order, error]);
+  // We used to auto-trigger window.print() here on every load. That works on
+  // desktop and on most tablets, but iOS Safari and some Android Chrome
+  // builds block window.print() calls that aren't tied to a user gesture
+  // → the page throws (the error appears as "window.local…" or similar in
+  // the user's console) and the customer never sees the facture. We now
+  // require an explicit tap on the "Télécharger la facture" button below,
+  // which works reliably on every platform.
 
   if (loading) {
     return (
