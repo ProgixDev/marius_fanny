@@ -2065,35 +2065,49 @@ export default function OrderForm({
                       </TableCell>
                       <TableCell className="align-top pt-3">
                         <Input
-                          type="number"
-                          min={product?.minOrderQuantity || 1}
-                          max={product?.maxOrderQuantity}
-                          // Coerce to Number explicitly — Number.isFinite is
-                          // type-strict so a stringified quantity ("1" coming
-                          // from a JSON/quote conversion path) silently failed
-                          // the previous check and rendered the field blank.
+                          // type="text" + inputMode="numeric" instead of
+                          // type="number": the latter ignores select() on
+                          // mobile Safari/Chrome and breaks the tablet flow
+                          // where Fanny taps "3" expecting to replace the "1"
+                          // but ends up with "13".
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           value={
                             Number(item.quantity) > 0
-                              ? Number(item.quantity)
+                              ? String(Number(item.quantity))
                               : ""
                           }
-                          // Auto-select the current content when the field is
-                          // tapped (mobile/tablet) or focused (desktop).
-                          // Without this, the existing "1" stays selected at
-                          // the caret position so tapping "3" gives "13"
-                          // instead of "3" — that's how an order for 7 items
-                          // turned into 71 in Fanny's tablet workflow.
-                          onFocus={(e) => e.currentTarget.select()}
-                          onClick={(e) => (e.currentTarget as HTMLInputElement).select()}
+                          // Wipe the field on focus so the very next digit
+                          // typed becomes the whole quantity. No backspace,
+                          // no "13" when she meant "3". If she taps away
+                          // without typing anything, onBlur restores 1.
+                          onFocus={(e) => {
+                            const t = e.currentTarget;
+                            // setTimeout(0) lets the mobile keyboard's tap
+                            // handler finish positioning the caret first,
+                            // then we wipe.
+                            setTimeout(() => {
+                              t.value = "";
+                              handleItemChange(item.id, "quantity", 0);
+                            }, 0);
+                          }}
+                          onBlur={() => {
+                            // If she leaves an empty/zero qty, snap back to 1
+                            // so the cart never has a 0-qty line silently.
+                            if (!Number(item.quantity)) {
+                              handleItemChange(item.id, "quantity", 1);
+                            }
+                          }}
                           onChange={(e) => {
-                            const raw = e.target.value;
-                            // Allow the field to be temporarily empty while the
-                            // staff is editing (e.g. erasing 1 to type 12).
-                            const next = raw === "" ? 1 : parseInt(raw, 10);
+                            // Strip everything except digits so a stray space
+                            // or letter doesn't crash parseInt.
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            const next = raw === "" ? 0 : parseInt(raw, 10);
                             handleItemChange(
                               item.id,
                               "quantity",
-                              Number.isFinite(next) && next > 0 ? next : 1,
+                              Number.isFinite(next) && next >= 0 ? next : 0,
                             );
                           }}
                           disabled={!item.productId && !item.isCustom}
