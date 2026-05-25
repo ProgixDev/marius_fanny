@@ -675,11 +675,17 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
               const optionPreview = optionLines.slice(0, 3);
               // Aggregate option choices ACROSS the whole product group so the
               // kitchen sees at a glance "Pains: Baguette × 4, Pita × 2"
-              // instead of having to mentally tally each order's option line.
-              // Map<optionName, Map<optionValue, totalQty>>.
-              const optionBreakdown = new Map<string, Map<string, number>>();
+              // — AND, crucially, which allergy/note belongs to which option
+              // variant. Without per-variant attribution, Fanny was asking
+              // "the 'pesto' allergy, is that on the Croissant or the Pita?".
+              // Map<optionName, Map<optionValue, { qty, allergies: Set }>>.
+              const optionBreakdown = new Map<
+                string,
+                Map<string, { qty: number; allergies: Set<string> }>
+              >();
               uniqueOrders.forEach((item) => {
                 const opts = item.selectedOptions || {};
+                const itemAllergies = extractAllergies(item);
                 Object.entries(opts).forEach(([optName, optValue]) => {
                   if (isAllergyOptionName(optName)) return;
                   const value = String(optValue || "").trim();
@@ -688,7 +694,19 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
                     optionBreakdown.set(optName, new Map());
                   }
                   const valueMap = optionBreakdown.get(optName)!;
-                  valueMap.set(value, (valueMap.get(value) || 0) + (item.quantity || 1));
+                  const existing = valueMap.get(value) || {
+                    qty: 0,
+                    allergies: new Set<string>(),
+                  };
+                  existing.qty += item.quantity || 1;
+                  if (itemAllergies) {
+                    itemAllergies
+                      .split(",")
+                      .map((a) => a.trim())
+                      .filter(Boolean)
+                      .forEach((a) => existing.allergies.add(a));
+                  }
+                  valueMap.set(value, existing);
                 });
               });
               // Per-order allergy lines so each warning is tied to its order
@@ -731,24 +749,31 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
                 <tr key={group.productId} className="hover:bg-stone-50/50 transition-colors">
                   <td className="py-4 px-4">
                     <div className="text-xl font-bold text-[#2D2A26]">{group.productName}</div>
-                    {/* Aggregate breakdown per option ("Pains: Baguette × 4,
-                        Pita × 2") — the only secondary info Fanny wants in
-                        this view, so the kitchen knows how many of each
-                        variant to bake. */}
+                    {/* Aggregate breakdown per option, with the allergy/note
+                        pinned to its specific variant (e.g. "Pita × 2 ⚠️ pesto"
+                        rather than a generic "⚠️ pesto" hovering somewhere
+                        next to the row). */}
                     {optionBreakdown.size > 0 && (
                       <div className="mt-2 text-sm text-stone-700">
                         {Array.from(optionBreakdown.entries()).map(([optName, valueMap]) => (
                           <div key={optName} className="mb-1">
                             <span className="font-semibold">{optName} :</span>{" "}
                             {Array.from(valueMap.entries())
-                              .sort(([, a], [, b]) => b - a)
-                              .map(([val, qty]) => (
+                              .sort(([, a], [, b]) => b.qty - a.qty)
+                              .map(([val, info]) => (
                                 <span
                                   key={val}
-                                  className="inline-block mr-2 px-2 py-0.5 rounded bg-stone-100 text-stone-800"
+                                  className="inline-flex items-center gap-1 mr-2 mb-1 px-2 py-0.5 rounded bg-stone-100 text-stone-800"
                                 >
-                                  {val}{" "}
-                                  <span className="font-bold text-[#337957]">× {qty}</span>
+                                  <span>
+                                    {val}{" "}
+                                    <span className="font-bold text-[#337957]">× {info.qty}</span>
+                                  </span>
+                                  {info.allergies.size > 0 && (
+                                    <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 border border-red-200 rounded text-red-700 font-bold text-[11px]">
+                                      ⚠️ {Array.from(info.allergies).join(", ")}
+                                    </span>
+                                  )}
                                 </span>
                               ))}
                           </div>

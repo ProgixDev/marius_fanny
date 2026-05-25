@@ -6,9 +6,35 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 // Ensure API_URL has protocol
 export const normalizedApiUrl = API_URL.startsWith('http') ? API_URL : `https://${API_URL}`;
 
+// localStorage throws SecurityError in some environments — iOS Safari private
+// browsing, in-app webviews (Gmail/Outlook), strict cookie policies, etc.
+// Wrapping every access keeps the auth client from taking the whole page
+// down when the email facture link is opened on a phone.
+const safeGetItem = (key: string): string | null => {
+  try {
+    return typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
+  } catch {
+    return null;
+  }
+};
+const safeSetItem = (key: string, value: string): void => {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(key, value);
+  } catch {
+    /* storage blocked — ignore */
+  }
+};
+const safeRemoveItem = (key: string): void => {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.removeItem(key);
+  } catch {
+    /* storage blocked — ignore */
+  }
+};
+
 // Custom fetch implementation that ALWAYS injects bearer token
 const authFetch: typeof fetch = (input, init) => {
-  const token = localStorage.getItem("bearer_token");
+  const token = safeGetItem("bearer_token");
   const headers = new Headers(init?.headers);
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`);
@@ -22,7 +48,7 @@ export const authClient = createAuthClient({
     credentials: 'include',
     customFetchImpl: authFetch as any,
     onRequest(context) {
-      const token = localStorage.getItem("bearer_token");
+      const token = safeGetItem("bearer_token");
       if (token) {
         context.headers.set("Authorization", `Bearer ${token}`);
       }
@@ -30,10 +56,10 @@ export const authClient = createAuthClient({
     onSuccess(context) {
       const token = context.response.headers.get("set-auth-token");
       if (token) {
-        localStorage.setItem("bearer_token", token);
+        safeSetItem("bearer_token", token);
       }
       if (context.response.url?.includes("/sign-out")) {
-        localStorage.removeItem("bearer_token");
+        safeRemoveItem("bearer_token");
       }
     },
   },

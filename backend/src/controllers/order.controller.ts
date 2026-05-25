@@ -1444,6 +1444,50 @@ export const updateOrder = async (
       });
     }
 
+    // Track and update pickup/delivery time slot. This was previously not
+    // handled at all, so modifying the hour through the admin form looked
+    // like it worked (the local React state showed the new value) but the
+    // backend silently dropped it — and on refresh the table read the old
+    // deliveryTimeSlot back, making it look like the change reverted.
+    if (
+      typeof updateData.deliveryTimeSlot === "string" &&
+      updateData.deliveryTimeSlot.trim() &&
+      updateData.deliveryTimeSlot !== order.deliveryTimeSlot
+    ) {
+      const oldSlot = order.deliveryTimeSlot;
+      order.deliveryTimeSlot = updateData.deliveryTimeSlot.trim();
+      changes.push({
+        changedAt: new Date(),
+        changedBy: userId,
+        field: "deliveryTimeSlot",
+        oldValue: oldSlot,
+        newValue: order.deliveryTimeSlot,
+        changeType: "updated",
+        notes: "Pickup/delivery time changed",
+      });
+    }
+
+    // Track and update delivery date (string field used by delivery orders;
+    // pickup orders use pickupDate above). Same silent-drop bug as the time
+    // slot — fields the frontend sends but the backend never persisted.
+    if (
+      typeof updateData.deliveryDate === "string" &&
+      updateData.deliveryDate.trim() &&
+      updateData.deliveryDate !== order.deliveryDate
+    ) {
+      const oldDeliveryDate = order.deliveryDate;
+      order.deliveryDate = updateData.deliveryDate.trim();
+      changes.push({
+        changedAt: new Date(),
+        changedBy: userId,
+        field: "deliveryDate",
+        oldValue: oldDeliveryDate,
+        newValue: order.deliveryDate,
+        changeType: "updated",
+        notes: "Delivery date changed",
+      });
+    }
+
     // Track and update pickup location
     if (updateData.pickupLocation) {
       const oldLocation = order.pickupLocation;

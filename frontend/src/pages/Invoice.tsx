@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Download } from "lucide-react";
-import { normalizedApiUrl } from "../lib/AuthClient";
+
+// We compute the API URL inline instead of importing from ../lib/AuthClient
+// because that module instantiates better-auth at load time, which touches
+// localStorage. In an in-app browser (Gmail/Outlook iOS especially), the
+// localStorage access throws SecurityError → "Access is denied for this
+// document" → the whole Invoice page fails to render. The /public order
+// endpoint doesn't require auth, so this page doesn't actually need the
+// auth client at all.
+const RAW_API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const normalizedApiUrl = RAW_API_URL.startsWith("http") ? RAW_API_URL : `https://${RAW_API_URL}`;
 
 interface OrderData {
   _id: string;
