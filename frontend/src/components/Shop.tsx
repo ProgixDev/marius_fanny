@@ -155,8 +155,9 @@ const Shop: React.FC<CategoryShowcaseProps> = ({ onCategoryClick, onAddToCart })
                   {/* Background media */}
                   {banner.image ? (
                     <img
-                      src={getImageUrl(banner.image)}
+                      src={getImageUrl(banner.image, '', 1200)}
                       alt={banner.name}
+                      decoding="async"
                       className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                     />
                   ) : (
@@ -213,8 +214,10 @@ const Shop: React.FC<CategoryShowcaseProps> = ({ onCategoryClick, onAddToCart })
                     ${isSelected ? 'ring-4 ring-[#337957] shadow-inner' : 'hover:shadow-md'}`}
                 >
                   <img
-                    src={getImageUrl(cat.image)}
+                    src={getImageUrl(cat.image, '', 400)}
                     alt={cat.title}
+                    loading="lazy"
+                    decoding="async"
                     className={`absolute inset-0 w-full h-full object-cover transition-all duration-500
                       ${isSelected ? 'scale-100' : 'group-hover:scale-105'}`}
                   />

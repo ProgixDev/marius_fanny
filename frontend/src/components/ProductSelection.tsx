@@ -444,7 +444,7 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
                       : "border border-stone-100 hover:shadow-md"
                   }`}
                 >
-                  <img src={getImageUrl(child.image)} className="w-full h-full object-cover group-hover:scale-110 transition-transform" alt=""/>
+                  <img src={getImageUrl(child.image, '', 200)} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-110 transition-transform" alt=""/>
                   <div className={`absolute inset-0 flex items-center justify-center ${isActive ? "bg-[#337957]/60" : "bg-black/40"}`}>
                     <span className="text-white text-xs font-bold uppercase">{child.name}</span>
                   </div>
@@ -474,7 +474,9 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
                 style={{ aspectRatio: '3/4' }}
               >
                 <img
-                  src={getImageUrl(product.image)}
+                  src={getImageUrl(product.image, '', 500)}
+                  loading="lazy"
+                  decoding="async"
                   className="absolute inset-0 w-full h-full object-cover brightness-105 contrast-[1.03]"
                   alt={product.name}
                 />
@@ -539,8 +541,9 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
             <div className="w-full md:w-1/2 shrink-0 flex flex-col">
               <div className="relative flex-1 h-56 md:h-auto min-h-0">
                 <img
-                  src={getImageUrl(modalMainImage || selectedProduct.image)}
+                  src={getImageUrl(modalMainImage || selectedProduct.image, '', 800)}
                   alt={selectedProduct.name}
+                  decoding="async"
                   className="w-full h-full object-cover"
                 />
                 
@@ -567,7 +570,7 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
                         : 'border-gray-200'
                     }`}
                   >
-                    <img src={getImageUrl(selectedProduct.image)} alt="" className="w-full h-full object-cover" />
+                    <img src={getImageUrl(selectedProduct.image, '', 120)} loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" />
                   </button>
                   {/* Miniatures des photos supplémentaires */}
                   {selectedProduct.images.map((img, idx) => (
@@ -579,7 +582,7 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
                         modalMainImage === img ? 'border-[#337957]' : 'border-gray-200'
                       }`}
                     >
-                      <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
+                      <img src={getImageUrl(img, '', 120)} loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" />
                     </button>
                   ))}
                 </div>
