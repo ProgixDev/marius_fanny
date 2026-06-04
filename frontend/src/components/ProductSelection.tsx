@@ -438,13 +438,13 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
                 <div
                   key={child.id}
                   onClick={() => setSubCategory({id: child.id, title: child.name})}
-                  className={`cursor-pointer group relative h-24 rounded-lg overflow-hidden transition-all ${
+                  className={`cursor-pointer group relative h-40 md:h-48 rounded-lg overflow-hidden transition-all ${
                     isActive
                       ? "ring-4 ring-[#337957] shadow-lg scale-[1.02]"
                       : "border border-stone-100 hover:shadow-md"
                   }`}
                 >
-                  <img src={getImageUrl(child.image, '', 200)} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-110 transition-transform" alt=""/>
+                  <img src={getImageUrl(child.image, '', 400)} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-110 transition-transform" alt=""/>
                   <div className={`absolute inset-0 flex items-center justify-center ${isActive ? "bg-[#337957]/60" : "bg-black/40"}`}>
                     <span className="text-white text-xs font-bold uppercase">{child.name}</span>
                   </div>
