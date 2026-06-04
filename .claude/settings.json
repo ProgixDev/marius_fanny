@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Hp\\\\marius_fanny\" -Force)",
-      "Bash(Select-Object Name, FullName)"
+      "Bash(Select-Object Name, FullName)",
+      "Bash(SANDBOX_TOKEN=\"EAAAlxVuPkBo70WxZHGRO0m7VO3t8lsBi4CFqaK05u5M8Qc4utMiCaYIvyFmcaZM\" SANDBOX_LOCATION=\"LN14X26MA5S7W\" node scripts/test-refund-sandbox.mjs)",
+      "Bash(git submodule *)"
     ]
   }
 }

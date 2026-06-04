@@ -4,7 +4,7 @@
  */
 
 import { Request, Response } from "express";
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import { SquareError } from "square";
 import squareClient, { squareConfig } from "../config/square.js";
 import Order from "../models/Order.js";
@@ -990,22 +990,39 @@ export const refundOrderPayment = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: "Commande non trouvee" });
     }
 
-    const alreadyRefunded =
-      Array.isArray((order as any).refunds) && (order as any).refunds.length > 0
-        ? true
-        : typeof order.notes === "string" && order.notes.includes("Square Refund ID:");
-    if (alreadyRefunded) {
-      return res.status(400).json({
-        success: false,
-        error: "Cette commande semble deja remboursee",
-      });
-    }
-
     const paymentId = await findSquarePaymentIdForOrder(order);
     if (!paymentId) {
       return res.status(400).json({
         success: false,
         error: "Aucun paiement Square remboursable trouve pour cette commande",
+      });
+    }
+
+    // If we resolved the paymentId via the (slow) invoice fallback, persist it
+    // on the order so future refunds/lookups are instant and reliable instead
+    // of re-scanning every Square payment each time.
+    if (!order.squarePaymentId) {
+      order.squarePaymentId = paymentId;
+    }
+
+    // Block only if THIS specific Square payment was already refunded — NOT if
+    // the order merely has an older refund. Supported flow (Fanny's case):
+    //   pay → refund → modify order → re-pay (NEW Square payment) → refund again
+    // must still work, because the re-payment is a different paymentId.
+    // A double-click on the SAME payment is caught here; the idempotency key
+    // below is the authoritative second line of defense. A previously FAILED
+    // refund (status not COMPLETED/PENDING) stays retryable.
+    const thisPaymentAlreadyRefunded =
+      Array.isArray((order as any).refunds) &&
+      (order as any).refunds.some(
+        (r: any) =>
+          r.paymentId === paymentId &&
+          (!r.refundStatus || ["COMPLETED", "PENDING"].includes(r.refundStatus)),
+      );
+    if (thisPaymentAlreadyRefunded) {
+      return res.status(400).json({
+        success: false,
+        error: "Ce paiement a deja ete rembourse",
       });
     }
 
@@ -1024,8 +1041,19 @@ export const refundOrderPayment = async (req: Request, res: Response) => {
         ? refundableAmountInCents
         : requestedAmountInCents;
 
+    // Deterministic idempotency key tied to the SPECIFIC payment + amount:
+    //  - retry / double-click on the SAME payment → same key → Square returns
+    //    the original refund (no double refund).
+    //  - a DIFFERENT payment (order modified then re-paid) → different key →
+    //    the new refund goes through normally.
+    // Hashed so it always fits Square's 45-char limit regardless of id length.
+    const idempotencyKey = createHash("sha256")
+      .update(`refund-${paymentId}-${refundAmountInCents.toString()}`)
+      .digest("hex")
+      .slice(0, 40);
+
     const refundResponse = await squareClient.refunds.refundPayment({
-      idempotencyKey: randomUUID(),
+      idempotencyKey,
       paymentId,
       amountMoney: {
         amount: refundAmountInCents,

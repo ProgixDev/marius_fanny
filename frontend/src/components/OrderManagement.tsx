@@ -3562,7 +3562,9 @@ export function OrderManagement() {
         icon={<XCircle className="h-6 w-6 text-amber-600" />}
         actions={{
           primary: {
-            label: "Rembourser via Square",
+            label: isSubmitting
+              ? "Remboursement en cours… (ne pas recliquer)"
+              : "Rembourser via Square",
             onClick: handleRefund,
             variant: "destructive",
             disabled: isSubmitting || !refundEmployeeName.trim(),

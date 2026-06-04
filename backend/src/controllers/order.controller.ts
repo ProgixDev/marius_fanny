@@ -822,15 +822,15 @@ export const createOrder = async (
         let created = 0;
         for (const [productName, quantity] of Object.entries(quantities)) {
           const normalizedName = normalize(productName);
+          // Match an existing inventory row ONLY by exact name or exact
+          // normalized name. We deliberately DO NOT use substring/.includes()
+          // matching here: it collapsed distinct products into one row
+          // ("croissant pistache" contains "croissant", so all croissant
+          // variants summed into a single "Croissant" entry = 8 instead of
+          // 3 separate rows). Each distinct product keeps its own row.
           let entryIndex = inventory.entries.findIndex(e => e.productName === productName);
           if (entryIndex < 0) {
             entryIndex = inventory.entries.findIndex(e => normalize(e.productName) === normalizedName);
-          }
-          if (entryIndex < 0) {
-            entryIndex = inventory.entries.findIndex(e =>
-              normalize(e.productName).includes(normalizedName) ||
-              normalizedName.includes(normalize(e.productName)),
-            );
           }
           if (entryIndex >= 0) {
             const currentClient =
