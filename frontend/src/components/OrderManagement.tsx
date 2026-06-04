@@ -1771,7 +1771,7 @@ export function OrderManagement() {
                     Rembourser via magasin
                   </DropdownMenuItem>
                 )}
-                {((order as any).refunds?.length > 0) && (
+                {order.status === "cancelled" && (
                   <DropdownMenuItem onClick={() => handleReconcileRefund(order)}>
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Synchroniser le remboursement
