@@ -210,7 +210,7 @@ const Shop: React.FC<CategoryShowcaseProps> = ({ onCategoryClick, onAddToCart })
                 <div
                   key={cat.id}
                   onClick={() => handleCategoryClick(cat.id, cat.title)}
-                  className={`group relative h-32 md:h-40 overflow-hidden rounded-xl cursor-pointer transition-all duration-300
+                  className={`group relative h-32 md:h-40 overflow-hidden rounded-xl cursor-pointer transition-all duration-300 bg-stone-100
                     ${isSelected ? 'ring-4 ring-[#337957] shadow-inner' : 'hover:shadow-md'}`}
                 >
                   <img
@@ -218,7 +218,7 @@ const Shop: React.FC<CategoryShowcaseProps> = ({ onCategoryClick, onAddToCart })
                     alt={cat.title}
                     loading="lazy"
                     decoding="async"
-                    className={`absolute inset-0 w-full h-full object-cover transition-all duration-500
+                    className={`absolute inset-0 w-full h-full object-contain transition-all duration-500
                       ${isSelected ? 'scale-100' : 'group-hover:scale-105'}`}
                   />
                   <div className={`absolute inset-0 flex items-center justify-center p-2 transition-all duration-300 ${isSelected ? 'bg-[#337957]/60' : 'bg-black/30 group-hover:bg-black/20'}`}>
@@ -234,7 +234,9 @@ const Shop: React.FC<CategoryShowcaseProps> = ({ onCategoryClick, onAddToCart })
       </section>
 
       {/* ZONE D'AFFICHAGE DES PRODUITS */}
-      <div ref={productsRef}>
+      {/* scroll-mt: laisse la hauteur de la navbar fixe (h-20 = 80px) au-dessus
+          pour que le titre et le bouton Retour ne soient pas cachés au scroll */}
+      <div ref={productsRef} className="scroll-mt-24">
         {selectedCat ? (
           typeof selectedCat.id === 'number' ? (
             <ProductSelection 
