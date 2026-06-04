@@ -1771,12 +1771,6 @@ export function OrderManagement() {
                     Rembourser via magasin
                   </DropdownMenuItem>
                 )}
-                {order.status === "cancelled" && (
-                  <DropdownMenuItem onClick={() => handleReconcileRefund(order)}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Synchroniser le remboursement
-                  </DropdownMenuItem>
-                )}
                 <DropdownMenuItem
                   className="text-red-600"
                   onClick={() => {
@@ -1807,6 +1801,12 @@ export function OrderManagement() {
               >
                 <Store className="h-4 w-4 mr-2" />
                 Rembourser via magasin
+              </DropdownMenuItem>
+            )}
+            {order.status === "cancelled" && (
+              <DropdownMenuItem onClick={() => handleReconcileRefund(order)}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Synchroniser le remboursement
               </DropdownMenuItem>
             )}
             {order.status === "completed" && (
