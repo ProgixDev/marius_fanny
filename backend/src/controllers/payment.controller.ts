@@ -1484,16 +1484,23 @@ export const squareWebhook = async (req: Request, res: Response) => {
         const order = await Order.findOne({ squareInvoiceId: invoiceId });
 
         if (order) {
-          const total = order.total || 0;
-          order.paymentStatus = "paid";
-          order.depositPaid = true;
-          order.balancePaid = true;
-          order.amountPaid = total;
-          order.depositPaidAt = order.depositPaidAt || new Date();
-          order.balancePaidAt = new Date();
+          // Guard: a late/duplicate payment webhook must NOT resurrect an order
+          // that was already refunded or cancelled (otherwise a refund issued
+          // moments after payment gets overwritten back to "paid").
+          if (order.status === "cancelled" || ((order as any).refunds?.length > 0)) {
+            console.log(`⏭️ [WEBHOOK] Order ${order.orderNumber} already refunded/cancelled — NOT re-marking paid (invoice: ${invoiceId})`);
+          } else {
+            const total = order.total || 0;
+            order.paymentStatus = "paid";
+            order.depositPaid = true;
+            order.balancePaid = true;
+            order.amountPaid = total;
+            order.depositPaidAt = order.depositPaidAt || new Date();
+            order.balancePaidAt = new Date();
 
-          await order.save();
-          console.log(`✅ [WEBHOOK] Order ${order.orderNumber} marked as PAID (invoice: ${invoiceId})`);
+            await order.save();
+            console.log(`✅ [WEBHOOK] Order ${order.orderNumber} marked as PAID (invoice: ${invoiceId})`);
+          }
         } else {
           console.warn(`⚠️ [WEBHOOK] No order found for invoice ${invoiceId}`);
         }
@@ -1511,16 +1518,22 @@ export const squareWebhook = async (req: Request, res: Response) => {
         const order = await Order.findOne({ squarePaymentId: paymentId });
 
         if (order) {
-          const total = order.total || 0;
-          order.paymentStatus = "paid";
-          order.depositPaid = true;
-          order.balancePaid = true;
-          order.amountPaid = total;
-          order.depositPaidAt = order.depositPaidAt || new Date();
-          order.balancePaidAt = new Date();
+          // Guard: see invoice block above — never resurrect a refunded/cancelled
+          // order from a late or duplicate payment webhook.
+          if (order.status === "cancelled" || ((order as any).refunds?.length > 0)) {
+            console.log(`⏭️ [WEBHOOK] Order ${order.orderNumber} already refunded/cancelled — NOT re-marking paid (payment: ${paymentId})`);
+          } else {
+            const total = order.total || 0;
+            order.paymentStatus = "paid";
+            order.depositPaid = true;
+            order.balancePaid = true;
+            order.amountPaid = total;
+            order.depositPaidAt = order.depositPaidAt || new Date();
+            order.balancePaidAt = new Date();
 
-          await order.save();
-          console.log(`✅ [WEBHOOK] Order ${order.orderNumber} marked as PAID (payment: ${paymentId})`);
+            await order.save();
+            console.log(`✅ [WEBHOOK] Order ${order.orderNumber} marked as PAID (payment: ${paymentId})`);
+          }
         }
       }
     }
@@ -1540,38 +1553,50 @@ export const squareWebhook = async (req: Request, res: Response) => {
         const order = await Order.findOne({ squarePaymentId: paymentId });
 
         if (order) {
-          const existingRefunds = (order as any).refunds || [];
-          const alreadyRecorded = existingRefunds.some((r: any) => r.refundId === refundId);
+          const existingRefunds = ((order as any).refunds || []) as any[];
+          const existing = existingRefunds.find((r) => r.refundId === refundId);
 
-          if (!alreadyRecorded) {
-            (order as any).refunds = [
-              ...existingRefunds,
-              {
-                refundedAt: new Date(),
-                employeeName: "Square Dashboard",
-                paymentId,
-                refundId,
-                refundStatus: "completed",
-                amountCents: refundAmountCents,
-                reason: "Remboursement via Square Dashboard",
-              },
-            ];
+          // Upsert the refund entry and mark it completed. If our own refund
+          // endpoint already recorded it (likely still PENDING), DON'T skip —
+          // finalize it so the order reflects a completed refund.
+          const updatedRefunds = existing
+            ? existingRefunds.map((r) =>
+                r.refundId === refundId ? { ...r, refundStatus: "completed" } : r,
+              )
+            : [
+                ...existingRefunds,
+                {
+                  refundedAt: new Date(),
+                  employeeName: "Square Dashboard",
+                  paymentId,
+                  refundId,
+                  refundStatus: "completed",
+                  amountCents: refundAmountCents,
+                  reason: "Remboursement via Square Dashboard",
+                },
+              ];
+          (order as any).refunds = updatedRefunds;
+          order.markModified("refunds");
 
-            // Reduce amountPaid by the refund amount
-            const refundDollars = refundAmountCents / 100;
-            order.amountPaid = Math.max(0, (order.amountPaid || 0) - refundDollars);
+          // Recompute amountPaid from total MINUS all completed refunds. Using an
+          // absolute recomputation (not subtraction) keeps this idempotent across
+          // repeated/duplicate webhooks — no double-counting.
+          const total = order.total || 0;
+          const totalRefundedDollars = updatedRefunds
+            .filter((r) => String(r.refundStatus || "").toLowerCase() === "completed")
+            .reduce((s, r) => s + (Number(r.amountCents) || 0) / 100, 0);
+          order.amountPaid = Math.max(0, total - totalRefundedDollars);
 
-            // If fully refunded, mark order as cancelled
-            if (order.amountPaid < 0.01) {
-              order.status = "cancelled";
-              order.paymentStatus = "unpaid";
-              order.depositPaid = false;
-              order.balancePaid = false;
-            }
-
-            await order.save();
-            console.log(`✅ [WEBHOOK] Refund recorded for order ${order.orderNumber}`);
+          // If fully refunded, mark order as cancelled + unpaid.
+          if (order.amountPaid < 0.01) {
+            order.status = "cancelled";
+            order.paymentStatus = "unpaid";
+            order.depositPaid = false;
+            order.balancePaid = false;
           }
+
+          await order.save();
+          console.log(`✅ [WEBHOOK] Refund ${refundId} finalized for order ${order.orderNumber} (amountPaid=${order.amountPaid})`);
         }
       }
     }

@@ -210,7 +210,7 @@ const Shop: React.FC<CategoryShowcaseProps> = ({ onCategoryClick, onAddToCart })
                 <div
                   key={cat.id}
                   onClick={() => handleCategoryClick(cat.id, cat.title)}
-                  className={`group relative h-32 md:h-40 overflow-hidden rounded-xl cursor-pointer transition-all duration-300
+                  className={`group relative h-44 md:h-56 overflow-hidden rounded-xl cursor-pointer transition-all duration-300
                     ${isSelected ? 'ring-4 ring-[#337957] shadow-inner' : 'hover:shadow-md'}`}
                 >
                   <img
