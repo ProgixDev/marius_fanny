@@ -771,7 +771,13 @@ export const createOrder = async (
           .split(/\s+/)
           .filter((w) => w && !STOPWORDS.has(w))
           .map(stripPlural)
-          .join(" ")
+          // Join WITHOUT spaces: spelling variants that differ only by a
+          // space/hyphen collapse to the SAME token, so "Mille-feuilles" and
+          // "Millefeuille" both become "millefeuille" and match correctly.
+          // Genuinely different products stay distinct because they have
+          // different WORDS: "croissant" vs "croissantfromage" vs
+          // "croissantpistache" — so they never merge into one inventory row.
+          .join("")
           .trim();
 
       const matchesList = (productName: string, list: string[]) => {
