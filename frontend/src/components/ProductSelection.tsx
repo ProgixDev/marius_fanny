@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { productAPI } from '../lib/ProductAPI';
 import { categoryAPI } from '../lib/CategoryAPI';
@@ -39,6 +39,15 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [categoryTree, setCategoryTree] = useState<ApiCategoryNode[]>([]);
   const [subCategory, setSubCategory] = useState<{id: number; title: string;} | null>(null);
+  // Ref + handler to scroll down to the products when a sub-category is picked,
+  // mirroring the category-click behavior on the shop page.
+  const productsRef = useRef<HTMLDivElement>(null);
+  const handleSubCategoryClick = (id: number, title: string) => {
+    setSubCategory({ id, title });
+    setTimeout(() => {
+      productsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
   const [childCategories, setChildCategories] = useState<ApiCategoryNode[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -437,7 +446,7 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
               return (
                 <div
                   key={child.id}
-                  onClick={() => setSubCategory({id: child.id, title: child.name})}
+                  onClick={() => handleSubCategoryClick(child.id, child.name)}
                   className={`cursor-pointer group relative h-40 md:h-48 rounded-lg overflow-hidden transition-all ${
                     isActive
                       ? "ring-4 ring-[#337957] shadow-lg scale-[1.02]"
@@ -457,7 +466,7 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
    
 
         {/* Liste des produits */}
-        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        <div ref={productsRef} className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 scroll-mt-24">
           {filteredProducts.map(product => {
             const prepBadge = product.preparationTimeHours ? getPreparationBadge(product.preparationTimeHours) : null;
             const hasDiscount = Number(product.discountPercentage) > 0;
