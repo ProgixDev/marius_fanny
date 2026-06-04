@@ -790,10 +790,22 @@ export const createOrder = async (
         );
       };
 
+      // Resolve a product to the EXACT name used on the inventory sheet so the
+      // order writes into the SAME row the Frais/Journalier page displays
+      // (instead of creating an orphan row under the raw order name).
+      // Uses exact normalized equality (NOT substring): "Mille-feuilles" maps to
+      // the sheet's "Millefeuille", but "Croissant aux fromage" does NOT collapse
+      // into "Croissant" (different words) — so those stay as separate rows.
+      const canonicalName = (productName: string, list: string[]) => {
+        const n = normalize(productName);
+        return list.find((known) => normalize(known) === n);
+      };
+
       // Bucket order items by which feuille (Journalier vs Frais) they
       // belong to. Frais wins on ambiguous matches (e.g. "Tropézienne" with
       // accent is in Frais while "Tropezienne" without accent is in
-      // Journalier — we prefer Frais for fresh-pastry context).
+      // Journalier — we prefer Frais for fresh-pastry context). The bucket key
+      // is the canonical sheet name so quantities land on the right existing row.
       const journalierQty: Record<string, number> = {};
       const fourQty: Record<string, number> = {};
       for (const item of orderData.items) {
@@ -801,9 +813,11 @@ export const createOrder = async (
         if (!productName) continue;
         const qty = item.quantity || 0;
         if (matchesList(productName, FOUR_PRODUCTS)) {
-          fourQty[productName] = (fourQty[productName] || 0) + qty;
+          const name = canonicalName(productName, FOUR_PRODUCTS) || productName;
+          fourQty[name] = (fourQty[name] || 0) + qty;
         } else if (matchesList(productName, JOURNALIER_PRODUCTS)) {
-          journalierQty[productName] = (journalierQty[productName] || 0) + qty;
+          const name = canonicalName(productName, JOURNALIER_PRODUCTS) || productName;
+          journalierQty[name] = (journalierQty[name] || 0) + qty;
         } else {
           console.log(`📦 [INVENTORY] "${productName}" matches neither feuille — skipping (custom/untracked product)`);
         }
