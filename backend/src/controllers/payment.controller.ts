@@ -1138,6 +1138,105 @@ export const refundOrderPayment = async (req: Request, res: Response) => {
 };
 
 /**
+ * Reconcile an order's payment/refund status against Square's source of truth.
+ * Fixes orders that were refunded on Square but still show "Payé" in the app —
+ * e.g. a refund that completed before the webhook fix, or a missed webhook.
+ * Reads Square's refundedMoney for the payment and updates the order to match.
+ * POST /api/payments/reconcile-refund
+ */
+export const reconcileOrderRefund = async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.body as { orderId: string };
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, error: "Commande non trouvee" });
+    }
+
+    const paymentId = await findSquarePaymentIdForOrder(order);
+    if (!paymentId) {
+      return res.status(400).json({
+        success: false,
+        error: "Aucun paiement Square trouve pour cette commande",
+      });
+    }
+    if (!order.squarePaymentId) order.squarePaymentId = paymentId;
+
+    // Ask Square how much of this payment has actually been refunded.
+    const paymentResponse = await squareClient.payments.get({ paymentId });
+    const payment = (paymentResponse as any)?.payment;
+    const refundedCents = Number(payment?.refundedMoney?.amount || 0);
+    const refundedDollars = refundedCents / 100;
+    const total = order.total || 0;
+
+    if (refundedCents <= 0) {
+      return res.json({
+        success: true,
+        changed: false,
+        message: "Aucun remboursement trouve sur Square pour ce paiement.",
+        data: { orderId: String(order._id), paymentStatus: order.paymentStatus },
+      });
+    }
+
+    // A refund exists on Square — make the order reflect it.
+    const refunds = (((order as any).refunds as any[]) || []).slice();
+    if (refunds.length === 0) {
+      refunds.push({
+        refundedAt: new Date(),
+        employeeName: "Synchronisation Square",
+        paymentId,
+        refundStatus: "completed",
+        amountCents: refundedCents,
+        reason: "Remboursement synchronise depuis Square",
+      });
+    } else {
+      // Finalize any entries still marked pending.
+      for (const r of refunds) {
+        if (!r.refundStatus || String(r.refundStatus).toLowerCase() !== "completed") {
+          r.refundStatus = "completed";
+        }
+      }
+    }
+    (order as any).refunds = refunds;
+    order.markModified("refunds");
+
+    order.amountPaid = Math.max(0, total - refundedDollars);
+    if (order.amountPaid < 0.01) {
+      order.status = "cancelled";
+      order.paymentStatus = "unpaid";
+      order.depositPaid = false;
+      order.balancePaid = false;
+    }
+    await order.save();
+
+    return res.json({
+      success: true,
+      changed: true,
+      message: "Statut de remboursement synchronise depuis Square.",
+      data: {
+        orderId: String(order._id),
+        orderNumber: order.orderNumber,
+        refundedDollars,
+        paymentStatus: order.paymentStatus,
+        status: order.status,
+      },
+    });
+  } catch (error: any) {
+    console.error("❌ [RECONCILE] Error reconciling refund:", error);
+    if (error instanceof SquareError) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        error: error.message || "Erreur Square lors de la synchronisation",
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Erreur lors de la synchronisation du remboursement",
+    });
+  }
+};
+
+/**
  * Record an in-store refund (cash / debit returned at the counter).
  * No Square call — this is purely bookkeeping.
  * POST /api/payments/refund-order-in-store

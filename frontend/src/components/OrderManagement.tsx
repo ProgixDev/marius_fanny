@@ -1013,6 +1013,51 @@ export function OrderManagement() {
     }
   };
 
+  // Re-sync an order's payment status with Square's actual refund state.
+  // Fixes orders that were refunded on Square but still show "Payé" in the app.
+  const handleReconcileRefund = async (order: OrderWithPacking) => {
+    try {
+      const response = await fetch(`${normalizedApiUrl}/api/payments/reconcile-refund`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Échec de la synchronisation");
+      }
+
+      if (!result.data?.changed && result.changed !== true) {
+        alert(result.message || "Aucun remboursement trouvé sur Square pour cette commande.");
+        return;
+      }
+
+      const updatedOrders = orders.map((o) =>
+        o.id === order.id
+          ? {
+              ...o,
+              status: (result.data?.status as OrderWithPacking["status"]) || "cancelled",
+              paymentStatus: (result.data?.paymentStatus as OrderWithPacking["paymentStatus"]) || "unpaid",
+              refunds: (o as any).refunds && (o as any).refunds.length > 0
+                ? (o as any).refunds
+                : [{ refundedAt: new Date().toISOString(), employeeName: "Synchronisation Square", refundStatus: "completed", amountCents: Math.round((result.data?.refundedDollars || 0) * 100) }],
+            }
+          : o,
+      );
+      setOrders(updatedOrders);
+      setFilteredOrders(applyOrderFilters(updatedOrders));
+      if (selectedOrder?.id === order.id) {
+        const next = updatedOrders.find((o) => o.id === order.id);
+        if (next) setSelectedOrder(next);
+      }
+      alert("✅ Statut synchronisé : la commande est maintenant marquée remboursée.");
+    } catch (err: any) {
+      console.error("❌ Failed to reconcile refund:", err);
+      alert(`Erreur lors de la synchronisation: ${err.message || err}`);
+    }
+  };
+
   const handleUpdateStatus = async (orderId: string, newStatus: OrderWithPacking["status"]) => {
     // If cancelling and there's a pending Square invoice, cancel it too
     if (newStatus === "cancelled") {
@@ -1724,6 +1769,12 @@ export function OrderManagement() {
                   >
                     <Store className="h-4 w-4 mr-2" />
                     Rembourser via magasin
+                  </DropdownMenuItem>
+                )}
+                {((order as any).refunds?.length > 0) && (
+                  <DropdownMenuItem onClick={() => handleReconcileRefund(order)}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Synchroniser le remboursement
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem

@@ -10,6 +10,7 @@ import {
   listPayments,
   refundPayment,
   refundOrderPayment,
+  reconcileOrderRefund,
   refundOrderInStore,
   refundBalance,
   getSquareConfig,
@@ -61,6 +62,14 @@ router.post(
   requireAdmin,
   validateBody(refundOrderSchema),
   refundOrderPayment,
+);
+
+// Reconcile an order's refund status from Square (fixes "Payé" stuck after refund)
+router.post(
+  "/reconcile-refund",
+  requireAuth,
+  requireAdmin,
+  reconcileOrderRefund,
 );
 
 // Partial refund for balance difference
