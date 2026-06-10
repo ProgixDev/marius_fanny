@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { auth } from "../config/auth.js";
+import { getAuth } from "../config/auth.js";
 import { hasRolePermission, UserRole, USER_ROLES } from "../utils/roles.js";
 import { User } from "../models/User.js";
 
@@ -26,6 +26,13 @@ export interface AuthRequest extends Request {
  * so for custom API routes we manually convert the token.
  */
 async function resolveSession(req: Request) {
+  // Ensure Better Auth is initialized before use. The exported `auth` is a
+  // Proxy that throws "Auth not initialized" if accessed before init — which
+  // happens on Vercel cold starts when a request reaches this middleware
+  // before the startup getAuth() in index.ts has resolved. getAuth() lazily
+  // initializes and caches, so this is cheap (a no-op) after the first call.
+  const auth = await getAuth();
+
   const authHeader = req.headers.authorization;
   const hasBearer = authHeader?.startsWith("Bearer ");
 

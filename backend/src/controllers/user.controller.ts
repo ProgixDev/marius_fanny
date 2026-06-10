@@ -4,7 +4,7 @@ import { User } from "../models/User.js";
 import Order from "../models/Order.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { canManageUser } from "../utils/roles.js";
-import { auth } from "../config/auth.js";
+import { getAuth } from "../config/auth.js";
 
 async function backfillMissingClientsFromOrders() {
   const orderClientRecords = await Order.find({
@@ -638,6 +638,10 @@ export async function createStaff(req: AuthRequest, res: Response) {
 
     // Step 1: create user via better-auth (creates user + account record with hashed password)
     try {
+      // getAuth() guarantees Better Auth is initialized (the exported `auth`
+      // Proxy throws on cold starts before init — same issue as the auth
+      // middleware).
+      const auth = await getAuth();
       await auth.api.signUpEmail({
         body: { email, password, name },
       });
