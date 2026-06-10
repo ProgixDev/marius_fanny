@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { categoryAPI } from '../lib/CategoryAPI';
 import type { Category as CategoryType } from '../types';
 import { getImageUrl } from '../utils/api';
+import { getErrorMessage } from '../utils/errorMessage';
 import ProductSelection from './ProductSelection';
 
 const styles = {
@@ -106,7 +107,7 @@ const Shop: React.FC<CategoryShowcaseProps> = ({ onCategoryClick, onAddToCart })
       }));
       setCategories(displayCategories);
     } catch (error: any) {
-      setError(error?.message || 'Erreur de chargement');
+      setError(getErrorMessage(error, "Impossible de charger la boutique. Réessayez."));
     } finally {
       setLoading(false);
     }

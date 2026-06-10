@@ -16,10 +16,25 @@ import { dailyInventoryAPI } from "../lib/DailyInventoryAPI";
 
 // ─── LISTE DES PRODUITS DE LA FEUILLE FOUR ──────────────────────────────────
 const PRODUITS_FOUR_DEFAUT = [
-  "Éclair chantilly", "Éclair chocolat", "Éclair pistache", "Millefeuille",
-  "Tartelette fraise", "Tartelette fruits", "Crème brulée", "Tarte fraise",
-  "Tarte fruits", "Tropézienne", "Trop. fraise", "Mini pâtisserie",
+  "Éclair chantilly", "Éclair chocolat", "Éclair pistache", "Mille-feuilles",
+  "Tartelette aux fraise", "Tartelette fruits", "Crème brulée", "Tarte aux fraises",
+  "Tarte aux fruits", "Tropézienne", "Trop. fraise", "Mini pâtisserie",
 ];
+
+// Upgrades an existing saved list (localStorage / MongoDB sentinel) to the
+// exact catalog names automatically on load — no manual re-typing, custom
+// additions preserved. Keep in sync with FOUR_PRODUCTS in the backend
+// inventoryBuckets.ts.
+const RENAME_MAP: Record<string, string> = {
+  "Millefeuille": "Mille-feuilles",
+  "Tartelette fraise": "Tartelette aux fraise",
+  "Tarte fraise": "Tarte aux fraises",
+  "Tarte fruits": "Tarte aux fruits",
+};
+
+function migrateNames(list: string[]): string[] {
+  return list.map((n) => RENAME_MAP[n] || n);
+}
 
 function todayISO(): string {
   return new Date().toISOString().split("T")[0];
@@ -47,7 +62,7 @@ export default function InventaireFour() {
   // Gestion de la liste locale pour le Four
   const [products, setProducts] = useState<string[]>(() => {
     const saved = localStorage.getItem("produits_inventaire_four");
-    return saved ? JSON.parse(saved) : PRODUITS_FOUR_DEFAUT;
+    return migrateNames(saved ? JSON.parse(saved) : PRODUITS_FOUR_DEFAUT);
   });
   const [newProd, setNewProd] = useState("");
 
@@ -60,9 +75,14 @@ export default function InventaireFour() {
       try {
         const res = await dailyInventoryAPI.getByDate(PRODUCTS_SENTINEL_KEY);
         if (res.data.entries && res.data.entries.length > 0) {
-          const names = res.data.entries.map((e: any) => e.productName);
+          const rawNames = res.data.entries.map((e: any) => e.productName);
+          const names = migrateNames(rawNames);
           setProducts(names);
           localStorage.setItem("produits_inventaire_four", JSON.stringify(names));
+          // Persist the rename back so the upgrade sticks server-side.
+          if (JSON.stringify(names) !== JSON.stringify(rawNames)) {
+            saveProductsToBackend(names);
+          }
         }
       } catch {
         // Pas encore sauvegardé côté backend — utiliser localStorage/défauts
@@ -94,6 +114,20 @@ export default function InventaireFour() {
     try {
       // On utilise un préfixe "four_" pour différencier les données en base de données
       const res = await dailyInventoryAPI.getByDate(`${date}__four`);
+
+      // Live "Comm CLIENT" quantities recomputed from current orders (frais
+      // bucket), so deleted/cancelled orders leave no phantom numbers. Falls
+      // back to the stored value if the recompute is unavailable.
+      let computedClient: Record<string, number> | null = null;
+      try {
+        const computed = await dailyInventoryAPI.getComputedClient(date);
+        computedClient = computed?.data?.four ?? null;
+      } catch {
+        computedClient = null;
+      }
+      const clientFor = (name: string, stored: number) =>
+        computedClient ? (computedClient[name] ?? 0) : stored;
+
       const map = new Map(res.data.entries.map((e: any) => [e.productId, e]));
 
       const built = products.map(name => {
@@ -105,7 +139,7 @@ export default function InventaireFour() {
           stdo: s?.stdo ?? 0,
           berri: s?.berri ?? 0,
           comm_berri: s?.comm_berri ?? 0,
-          client: s?.client ?? 0
+          client: clientFor(name, s?.client ?? 0)
         };
       });
 
@@ -118,7 +152,7 @@ export default function InventaireFour() {
           stdo: entry.stdo ?? 0,
           berri: entry.berri ?? 0,
           comm_berri: entry.comm_berri ?? 0,
-          client: entry.client ?? 0,
+          client: clientFor(entry.productName, entry.client ?? 0),
         }));
 
       setRows([...built, ...historicalRows]);

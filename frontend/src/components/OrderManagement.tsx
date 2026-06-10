@@ -48,6 +48,7 @@ import OrderChangeHistory from "./OrderChangeHistory";
 import { orderAPI } from "../lib/OrderAPI";
 import { normalizedApiUrl } from "../lib/AuthClient";
 import { clientAPI } from "../lib/ClientAPI";
+import { getErrorMessage } from "../utils/errorMessage";
 import type { Order } from "../types";
 
 interface OrderItemWithPacking {
@@ -817,7 +818,7 @@ export function OrderManagement() {
       console.log("✅ Emballage sauvegardé:", result);
     } catch (err: any) {
       console.error("❌ Failed to persist packed item:", err);
-      alert(`Erreur lors de la sauvegarde de l'emballage: ${err.message || err}`);
+      alert(`Erreur lors de la sauvegarde de l'emballage: ${getErrorMessage(err)}`);
     }
   };
 
@@ -857,7 +858,7 @@ export function OrderManagement() {
       console.log("✅ Désemballage sauvegardé:", result);
     } catch (err: any) {
       console.error("❌ Failed to persist unpacked item:", err);
-      alert(`Erreur lors de la sauvegarde de l'emballage: ${err.message || err}`);
+      alert(`Erreur lors de la sauvegarde de l'emballage: ${getErrorMessage(err)}`);
     }
   };
 
@@ -902,7 +903,7 @@ export function OrderManagement() {
       setOrderToDelete(null);
     } catch (err: any) {
       console.error("❌ Failed to delete order:", err);
-      alert(`Erreur lors de la suppression: ${err.message || err}`);
+      alert(`Erreur lors de la suppression: ${getErrorMessage(err)}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -930,7 +931,7 @@ export function OrderManagement() {
       console.error("❌ Failed to process reminders:", err);
       setReminderResult({
         success: false,
-        message: `Erreur: ${err.message || err}`,
+        message: `Erreur: ${getErrorMessage(err)}`,
       });
     } finally {
       setIsProcessingReminders(false);
@@ -1007,7 +1008,7 @@ export function OrderManagement() {
     } catch (err: any) {
       console.error("❌ Failed to refund order:", err);
         setRefundEmployeeName("");
-      alert(`Erreur lors du remboursement: ${err.message || err}`);
+      alert(`Erreur lors du remboursement: ${getErrorMessage(err)}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -1054,7 +1055,7 @@ export function OrderManagement() {
       alert("✅ Statut synchronisé : la commande est maintenant marquée remboursée.");
     } catch (err: any) {
       console.error("❌ Failed to reconcile refund:", err);
-      alert(`Erreur lors de la synchronisation: ${err.message || err}`);
+      alert(`Erreur lors de la synchronisation: ${getErrorMessage(err)}`);
     }
   };
 
@@ -1087,7 +1088,7 @@ export function OrderManagement() {
       await orderAPI.updateOrder(orderId, { status: newStatus });
     } catch (err: any) {
       console.error("❌ Failed to persist order status:", err);
-      alert(`Erreur lors de la sauvegarde du statut: ${err.message || err}`);
+      alert(`Erreur lors de la sauvegarde du statut: ${getErrorMessage(err)}`);
     }
   };
 
@@ -1119,7 +1120,7 @@ export function OrderManagement() {
       await orderAPI.updateOrder(order.id, payload);
     } catch (err: any) {
       console.error("❌ Failed to mark order as paid:", err);
-      alert(`Erreur lors du marquage comme payé: ${err.message || err}`);
+      alert(`Erreur lors du marquage comme payé: ${getErrorMessage(err)}`);
     }
   };
 
@@ -1405,7 +1406,7 @@ export function OrderManagement() {
       setStoreRefundEmployee("");
       setStoreRefundReason("");
     } catch (err: any) {
-      alert(`Erreur remboursement: ${err?.message || err}`);
+      alert(`Erreur remboursement: ${getErrorMessage(err)}`);
     } finally {
       setIsProcessingStoreRefund(false);
     }
@@ -1426,10 +1427,11 @@ export function OrderManagement() {
     if (/UNAUTHORIZED|AUTHENTICATION_ERROR/i.test(raw)) {
       return "Session Square expirée ou clé invalide — contacter un administrateur.";
     }
-    // Otherwise, hand back the message stripped of the "Status code: ... Body:"
-    // wrapper so the alert is at least readable.
+    // Otherwise, strip the "Status code: ... Body:" wrapper and route through the
+    // central translator (handles network / permission / session / server cases
+    // and passes specific French messages through).
     const trimmed = raw.replace(/^Status code:.*?Body:\s*/is, "").trim();
-    return trimmed || "Erreur inconnue";
+    return getErrorMessage(trimmed || err, "Erreur inconnue. Veuillez réessayer.");
   };
 
   const sendPaymentLink = async (
@@ -2005,7 +2007,7 @@ export function OrderManagement() {
                   setTimeout(() => setEditNotification(null), 5000);
                   alert(`Lien de paiement envoyé par email à ${order.client.email}`);
                 } catch (e: any) {
-                  alert(`Erreur: ${e?.message || "Impossible d'envoyer l'email"}`);
+                  alert(getErrorMessage(e, "Impossible d'envoyer l'email."));
                 } finally {
                   setIsSendingBalanceLink(false);
                 }
@@ -3231,7 +3233,7 @@ export function OrderManagement() {
               setIsCreateModalOpen(false);
             } catch (err: any) {
               console.error("Failed to create order:", err);
-              alert(err.message || "Erreur lors de la creation de la commande");
+              alert(getErrorMessage(err, "Erreur lors de la création de la commande."));
             } finally {
               setIsSubmitting(false);
             }
@@ -3475,7 +3477,7 @@ export function OrderManagement() {
                 } catch (err: any) {
                   console.error("Failed to resend payment link:", err);
                   alert(
-                    `Commande modifiée, mais l'envoi du nouveau lien a échoué: ${err?.message || err}`,
+                    `Commande modifiée, mais l'envoi du nouveau lien a échoué: ${getErrorMessage(err)}`,
                   );
                 }
               }
@@ -3484,7 +3486,7 @@ export function OrderManagement() {
               setSelectedOrder(null);
             } catch (err: any) {
               console.error(err);
-              alert(err?.message || "Erreur lors de la modification de la commande");
+              alert(getErrorMessage(err, "Erreur lors de la modification de la commande."));
             } finally {
               setIsSubmitting(false);
             }
@@ -3759,7 +3761,7 @@ export function OrderManagement() {
               setIsBalanceRefundModalOpen(false);
               setBalanceRefundOrder(null);
             } catch (err: any) {
-              alert(err?.message || "Erreur lors du remboursement");
+              alert(getErrorMessage(err, "Erreur lors du remboursement."));
             } finally {
               setIsSubmitting(false);
             }

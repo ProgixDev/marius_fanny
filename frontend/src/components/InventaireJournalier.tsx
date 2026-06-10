@@ -22,18 +22,46 @@ import {
 // ─── LISTE DES PRODUITS PAR DÉFAUT ──────────────────────────────────────────
 
 const PRODUITS_PAR_DEFAUT = [
-  "Croissant", "Chocolatine", "Danoise framboise", "Brioche raisin",
-  "Chausson pomme", "Abricotine", "Palmier", "Bande frangipane",
-  "Croissant amandes", "Choco amandes", "Crois Pistache", "Brioche sucre",
-  "Brioche cannelle", "Biscuit choco", "Crois fromage", "Suisse",
-  "Qui. jambon petit", "Qui. jambon grand", "Qui. épinard petit",
-  "Qui. épinard grand", "Qui. poireaux petit", "Qui. poireaux grand",
+  "Croissant", "Chocolatine", "Danoise framboises", "Danoise aux raisins",
+  "Chausson aux pommes", "Abricotine", "Palmier", "Frangipane",
+  "Croissant amandes", "Chocolatine aux amandes", "Croissant pistache", "Brioche aux sucres",
+  "Danoise cannelle", "Biscuit choco", "Croissant aux fromages", "Brioche suisse",
+  "Quiche jambon et fromage", "Qui. jambon grand", "Quiche épinard et fromage",
+  "Qui. épinard grand", "Quiche poireaux fromage de chèvre", "Qui. poireaux grand",
   "Tropezienne", "Tropezienne fraise", "Tourte provençal", "Tourte gibier",
-  "Pizza", "Quiche saumon gr", "Quiche saum petit", "Pâté poulet petit",
-  "Pâté poulet grand", "Pâté saumon petit", "Pâté saumon grand",
-  "Tourtière petit", "Tourtière grand", "Croque monsieur", "Croque végé",
+  "Pizza", "Quiche saumon gr", "Quiche aux deux saumons", "Pâté au poulet",
+  "Pâté poulet grand", "Pâté au saumon", "Pâté saumon grand",
+  "Tourtière", "Tourtière grand", "Croque monsieur", "Croque végé",
   "Plat cuisiné", "Soupe 1Litre", "Soupe", "SUPPLÉMENT :"
 ];
+
+// Maps the OLD inventory row names to their exact catalog names, so an
+// existing saved list (in localStorage or the MongoDB sentinel) is upgraded
+// automatically on load — no manual re-typing, and custom additions / "grand"
+// rows are preserved untouched.
+const RENAME_MAP: Record<string, string> = {
+  "Danoise framboise": "Danoise framboises",
+  "Brioche raisin": "Danoise aux raisins",
+  "Chausson pomme": "Chausson aux pommes",
+  "Bande frangipane": "Frangipane",
+  "Choco amandes": "Chocolatine aux amandes",
+  "Crois Pistache": "Croissant pistache",
+  "Brioche sucre": "Brioche aux sucres",
+  "Brioche cannelle": "Danoise cannelle",
+  "Crois fromage": "Croissant aux fromages",
+  "Suisse": "Brioche suisse",
+  "Qui. jambon petit": "Quiche jambon et fromage",
+  "Qui. épinard petit": "Quiche épinard et fromage",
+  "Qui. poireaux petit": "Quiche poireaux fromage de chèvre",
+  "Quiche saum petit": "Quiche aux deux saumons",
+  "Pâté poulet petit": "Pâté au poulet",
+  "Pâté saumon petit": "Pâté au saumon",
+  "Tourtière petit": "Tourtière",
+};
+
+function migrateNames(list: string[]): string[] {
+  return list.map((n) => RENAME_MAP[n] || n);
+}
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -109,7 +137,7 @@ export default function InventaireJournalier() {
   // Gestion de la liste personnalisée de produits
   const [customProducts, setCustomProducts] = useState<string[]>(() => {
     const saved = localStorage.getItem("inventaire_produits_personnalises");
-    return saved ? JSON.parse(saved) : PRODUITS_PAR_DEFAUT;
+    return migrateNames(saved ? JSON.parse(saved) : PRODUITS_PAR_DEFAUT);
   });
   const [newProductName, setNewProductName] = useState("");
 
@@ -122,9 +150,15 @@ export default function InventaireJournalier() {
       try {
         const res = await dailyInventoryAPI.getByDate(PRODUCTS_SENTINEL_KEY);
         if (res.data.entries && res.data.entries.length > 0) {
-          const names = res.data.entries.map((e) => e.productName);
+          const rawNames = res.data.entries.map((e) => e.productName);
+          const names = migrateNames(rawNames);
           setCustomProducts(names);
           localStorage.setItem("inventaire_produits_personnalises", JSON.stringify(names));
+          // If a rename actually happened, persist it back so the upgrade sticks
+          // server-side (and across devices) instead of re-migrating every load.
+          if (JSON.stringify(names) !== JSON.stringify(rawNames)) {
+            saveProductsToBackend(names);
+          }
         }
       } catch {
         // Pas encore de liste sauvegardée côté backend — utiliser localStorage/défauts
@@ -201,6 +235,20 @@ export default function InventaireJournalier() {
     setLoading(true);
     try {
       const res = await dailyInventoryAPI.getByDate(date);
+
+      // Live "Comm CLIENT" quantities recomputed from current orders, so
+      // deleted/cancelled orders leave no phantom numbers. If the recompute is
+      // unavailable (offline / 401), fall back to the stored client value.
+      let computedClient: Record<string, number> | null = null;
+      try {
+        const computed = await dailyInventoryAPI.getComputedClient(date);
+        computedClient = computed?.data?.journalier ?? null;
+      } catch {
+        computedClient = null;
+      }
+      const clientFor = (name: string, stored: number) =>
+        computedClient ? (computedClient[name] ?? 0) : stored;
+
       const existingMap = new Map<string, DailyInventoryEntry>(
         res.data.entries.map((e) => [e.productId, e]),
       );
@@ -215,7 +263,7 @@ export default function InventaireJournalier() {
           stdo:       saved?.stdo       ?? 0,
           berri:      saved?.berri      ?? 0,
           comm_berri: saved?.comm_berri ?? 0,
-          client:     saved?.client     ?? 0,
+          client:     clientFor(name, saved?.client ?? 0),
         };
       });
 
@@ -228,7 +276,7 @@ export default function InventaireJournalier() {
           stdo: entry.stdo ?? 0,
           berri: entry.berri ?? 0,
           comm_berri: entry.comm_berri ?? 0,
-          client: entry.client ?? 0,
+          client: clientFor(entry.productName, entry.client ?? 0),
         }));
 
       const mergedRows = [...built, ...historicalRows];

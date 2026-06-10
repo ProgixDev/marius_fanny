@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import type { ApiResponse } from "../types/api.js";
 import { DailyInventory } from "../models/DailyInventory.js";
+import Order from "../models/Order.js";
+import { computeInventoryBuckets } from "../utils/inventoryBuckets.js";
 import type { SaveDailyInventoryInput } from "../schemas/dailyInventory.schema.js";
 
 /**
@@ -23,6 +25,67 @@ export const getDailyInventory = async (
       savedBy: record?.savedBy ?? null,
       updatedAt: record?.updatedAt ?? null,
     },
+  });
+};
+
+/**
+ * GET /daily-inventory/computed-client?date=YYYY-MM-DD
+ * Recomputes the "Comm CLIENT" column LIVE from the real (non-cancelled) orders
+ * for that date, using the shared bucketing logic. Returns {journalier, four}
+ * maps of { productName: quantity }. The frontend overlays these onto the rows
+ * so the CLIENT column always reflects current orders — deleted/cancelled
+ * orders simply no longer count, so there are no phantom numbers.
+ */
+export const getInventoryComputedClient = async (
+  req: Request,
+  res: Response<ApiResponse>,
+) => {
+  const { date } = req.query as { date: string };
+
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res
+      .status(400)
+      .json({ success: false, error: "Date invalide (format YYYY-MM-DD requis)" });
+  }
+
+  // Mirror createOrder's inventory-date rule: pickupDate, else deliveryDate,
+  // else the order's creation date.
+  const inventoryDateOf = (o: any): string | null => {
+    const d = o.pickupDate || o.deliveryDate || o.orderDate || o.createdAt;
+    return d ? new Date(d).toISOString().split("T")[0] : null;
+  };
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const start = new Date(`${date}T00:00:00.000Z`).getTime();
+  const lo = new Date(start - dayMs);
+  const hi = new Date(start + 2 * dayMs);
+
+  // Cancelled orders are excluded (won't be produced). Deleted orders are gone
+  // from the DB entirely, so they naturally don't count.
+  const candidates = await Order.find({
+    status: { $ne: "cancelled" },
+    $or: [
+      { pickupDate: { $gte: lo, $lt: hi } },
+      { deliveryDate: date },
+      { createdAt: { $gte: lo, $lt: hi } },
+    ],
+  })
+    .select("items pickupDate deliveryDate orderDate createdAt")
+    .lean();
+
+  const items: { productName?: string; quantity?: number }[] = [];
+  for (const o of candidates as any[]) {
+    if (inventoryDateOf(o) !== date) continue;
+    for (const it of (o.items as any[]) || []) {
+      items.push({ productName: it?.productName, quantity: it?.quantity });
+    }
+  }
+
+  const { journalierQty, fourQty } = computeInventoryBuckets(items);
+
+  res.json({
+    success: true,
+    data: { date, journalier: journalierQty, four: fourQty },
   });
 };
 

@@ -72,6 +72,21 @@ class DailyInventoryAPI {
     return this.request(`?date=${date}`);
   }
 
+  /**
+   * GET /api/daily-inventory/computed-client?date=YYYY-MM-DD
+   * Live CLIENT-column quantities recomputed from current orders, so deleted/
+   * cancelled orders no longer leave phantom numbers. Returns per-product maps
+   * for the journalier and four (frais) sheets.
+   */
+  async getComputedClient(
+    date: string,
+  ): Promise<{
+    success: boolean;
+    data: { date: string; journalier: Record<string, number>; four: Record<string, number> };
+  }> {
+    return this.request(`/computed-client?date=${date}`);
+  }
+
   /** POST /api/daily-inventory */
   async save(payload: {
     date: string;

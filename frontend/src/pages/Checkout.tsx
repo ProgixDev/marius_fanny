@@ -9,6 +9,7 @@ import { authClient, normalizedApiUrl } from "../lib/AuthClient";
 import { productAPI } from "../lib/ProductAPI";
 import { promoAPI } from "../lib/PromoAPI";
 import { clearCart } from "../utils/cartPersistence";
+import { getErrorMessage } from "../utils/errorMessage";
 import { useSettings } from "../lib/SettingsContext";
 
 interface CartItem {
@@ -507,7 +508,7 @@ const Checkout: React.FC = () => {
         console.log("✅ [CHECKOUT] Promo code validated successfully");
       } catch (promoError: any) {
         console.error("❌ [CHECKOUT] Promo validation failed:", promoError);
-        alert(promoError?.message || "Code promo invalide ou expiré");
+        alert(getErrorMessage(promoError, "Code promo invalide ou expiré."));
         return;
       }
     }
@@ -811,7 +812,7 @@ const Checkout: React.FC = () => {
         errorMessage =
           "💸 Fonds insuffisants. Vérifiez votre solde ou utilisez une autre carte.";
       } else {
-        errorMessage = `❌ Erreur de paiement: ${error.message}`;
+        errorMessage = `❌ ${getErrorMessage(error, "Erreur de paiement. Veuillez réessayer.")}`;
       }
     }
 

@@ -3,6 +3,7 @@ import Order from "../models/Order.js";
 import { Product } from "../models/Product.js";
 import { ProductionItemStatus } from "../models/ProductionItemStatus.js";
 import { DailyInventory } from "../models/DailyInventory.js";
+import { computeInventoryBuckets } from "../utils/inventoryBuckets.js";
 import { User } from "../models/User.js";
 import { PromoCode } from "../models/PromoCode.js";
 import { PromoRedemption } from "../models/PromoRedemption.js";
@@ -729,24 +730,9 @@ export const createOrder = async (
       //   - Frais / Four →  date "YYYY-MM-DD__four"
       // Each product belongs to exactly one of those feuilles; routing them
       // to the wrong doc means the Frais page never sees éclairs etc.
-      const JOURNALIER_PRODUCTS = [
-        "Croissant", "Chocolatine", "Danoise framboise", "Brioche raisin",
-        "Chausson pomme", "Abricotine", "Palmier", "Bande frangipane",
-        "Croissant amandes", "Choco amandes", "Crois Pistache", "Brioche sucre",
-        "Brioche cannelle", "Biscuit choco", "Crois fromage", "Suisse",
-        "Qui. jambon petit", "Qui. jambon grand", "Qui. épinard petit",
-        "Qui. épinard grand", "Qui. poireaux petit", "Qui. poireaux grand",
-        "Tropezienne", "Tropezienne fraise", "Tourte provençal", "Tourte gibier",
-        "Pizza", "Quiche saumon gr", "Quiche saum petit", "Pâté poulet petit",
-        "Pâté poulet grand", "Pâté saumon petit", "Pâté saumon grand",
-        "Tourtière petit", "Tourtière grand", "Croque monsieur", "Croque végé",
-        "Plat cuisiné", "Soupe 1Litre", "Soupe", "SUPPLÉMENT :",
-      ];
-      const FOUR_PRODUCTS = [
-        "Éclair chantilly", "Éclair chocolat", "Éclair pistache", "Millefeuille",
-        "Tartelette fraise", "Tartelette fruits", "Crème brulée", "Tarte fraise",
-        "Tarte fruits", "Tropézienne", "Trop. fraise", "Mini pâtisserie",
-      ];
+      // Product lists (JOURNALIER_PRODUCTS / FOUR_PRODUCTS) and the matching
+      // logic now live in ../utils/inventoryBuckets.ts. Only `normalize` is
+      // kept here, used by applyToInventory to match an existing inventory row.
 
       // Normalize for fuzzy matching. The basic version (lowercase + remove
       // accents + collapse spaces) missed real-world variations like:
@@ -780,48 +766,10 @@ export const createOrder = async (
           .join("")
           .trim();
 
-      const matchesList = (productName: string, list: string[]) => {
-        const n = normalize(productName);
-        return list.some(
-          (known) =>
-            normalize(known) === n ||
-            normalize(known).includes(n) ||
-            n.includes(normalize(known)),
-        );
-      };
-
-      // Resolve a product to the EXACT name used on the inventory sheet so the
-      // order writes into the SAME row the Frais/Journalier page displays
-      // (instead of creating an orphan row under the raw order name).
-      // Uses exact normalized equality (NOT substring): "Mille-feuilles" maps to
-      // the sheet's "Millefeuille", but "Croissant aux fromage" does NOT collapse
-      // into "Croissant" (different words) — so those stay as separate rows.
-      const canonicalName = (productName: string, list: string[]) => {
-        const n = normalize(productName);
-        return list.find((known) => normalize(known) === n);
-      };
-
-      // Bucket order items by which feuille (Journalier vs Frais) they
-      // belong to. Frais wins on ambiguous matches (e.g. "Tropézienne" with
-      // accent is in Frais while "Tropezienne" without accent is in
-      // Journalier — we prefer Frais for fresh-pastry context). The bucket key
-      // is the canonical sheet name so quantities land on the right existing row.
-      const journalierQty: Record<string, number> = {};
-      const fourQty: Record<string, number> = {};
-      for (const item of orderData.items) {
-        const productName = item.productName;
-        if (!productName) continue;
-        const qty = item.quantity || 0;
-        if (matchesList(productName, FOUR_PRODUCTS)) {
-          const name = canonicalName(productName, FOUR_PRODUCTS) || productName;
-          fourQty[name] = (fourQty[name] || 0) + qty;
-        } else if (matchesList(productName, JOURNALIER_PRODUCTS)) {
-          const name = canonicalName(productName, JOURNALIER_PRODUCTS) || productName;
-          journalierQty[name] = (journalierQty[name] || 0) + qty;
-        } else {
-          console.log(`📦 [INVENTORY] "${productName}" matches neither feuille — skipping (custom/untracked product)`);
-        }
-      }
+      // Bucket order items onto the Journalier / Frais rows. The product lists
+      // and matching logic live in ../utils/inventoryBuckets.ts (single source
+      // of truth, shared with the inventory recompute endpoint).
+      const { journalierQty, fourQty } = computeInventoryBuckets(orderData.items);
 
       // Apply a bucket of {productName: qty} to the inventory doc at dateKey,
       // either updating an existing entry's client column or creating one.

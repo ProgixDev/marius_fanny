@@ -9,7 +9,22 @@
       "Read(//c/c/Users/Hp/marius_fanny/backend/**)",
       "Bash(node scripts/inspect-inventory.mjs)",
       "Bash(cd /c/Users/Hp/marius_fanny/frontend/src && echo \"=== fichiers inventaire ===\" && ls components/ | grep -iE \"invent\" ; echo \"=== mots-clés suppression/ajout ligne dans tous les inventaires ===\" && grep -rniE \"supprimer|delete|splice|filter\\\\\\(|removeRow|addRow|ajouter.*ligne|nouvelle ligne\" components/Inventaire* 2>/dev/null | head -25)",
-      "Read(//c/c/Users/Hp/marius_fanny/frontend/src/**)"
+      "Read(//c/c/Users/Hp/marius_fanny/frontend/src/**)",
+      "Bash(node scripts/test-refund-status.mjs)",
+      "Bash(node scripts/check-webhooks.mjs)",
+      "Bash(gh run *)",
+      "Bash(gh api *)",
+      "Bash(curl -s https://api.github.com/repos/__TRACKED_VAR__/commits/00d7d8a/check-runs -H 'Accept: application/vnd.github+json')",
+      "Bash(curl -s -o /tmp/checks.json -w \"HTTP %{http_code}\\\\n\" \"https://api.github.com/repos/wiis-dib13/Marius_Fanny/commits/00d7d8a/check-runs\" -H \"Accept: application/vnd.github+json\")",
+      "Bash(node -e ' *)",
+      "Bash(ls package-lock.json yarn.lock pnpm-lock.yaml)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('build:', p.scripts.build\\); console.log\\('pkgMgr lock present above'\\)\")",
+      "Bash(npm ci *)",
+      "Bash(echo \"=== exit: $? ===\")",
+      "Bash(echo \"=== exit: $? \\(rien au-dessus = compile OK\\) ===\")",
+      "Bash(echo \"=== exit: $? \\(rien = build TS OK\\) ===\")",
+      "Bash(echo \"=== FRONTEND exit: $? ===\")",
+      "Bash(echo \"=== FRONTEND exit: $? \\(rien = OK\\) ===\")"
     ]
   }
 }

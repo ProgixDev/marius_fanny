@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { authClient, forgotPassword } from "../lib/AuthClient"; 
 import GoldenBackground from "./GoldenBackground";
 import { Mail, ArrowLeft, Check, Lock, User, Eye, EyeOff } from "lucide-react";
-import { getRedirectPath } from "../utils/loginMultipleusers"; 
+import { getRedirectPath } from "../utils/loginMultipleusers";
+import { getErrorMessage } from "../utils/errorMessage"; 
 import { UserWithRole } from "../types";
 
 const styles = {
@@ -180,11 +181,7 @@ const AuthPage: React.FC = () => {
       }
     } catch (err: any) {
       console.error("Auth Error:", err);
-      if (err.message === "Failed to fetch") {
-        setError("Erreur réseau. Vérifiez votre connexion.");
-      } else {
-        setError(err.message || "Une erreur est survenue.");
-      }
+      setError(getErrorMessage(err, "Une erreur est survenue. Veuillez réessayer."));
     } finally {
       setLoading(false);
     }
@@ -249,11 +246,7 @@ const AuthPage: React.FC = () => {
       }
     } catch (err: any) {
       console.error("❌ [VERIFY] Email verification failed:", err);
-      if (err.message === "Failed to fetch") {
-        setError("Erreur réseau. Vérifiez votre connexion.");
-      } else {
-        setError(err.message || "Code de vérification invalide.");
-      }
+      setError(getErrorMessage(err, "Code de vérification invalide."));
     } finally {
       setLoading(false);
     }
