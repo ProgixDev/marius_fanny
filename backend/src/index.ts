@@ -106,6 +106,12 @@ const corsOptions = {
     }
   },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  // Expose set-auth-token so the browser JS can READ the bearer token from the
+  // login response and store it. Without this, the token is never saved and the
+  // app falls back to the cross-site auth cookie — which Edge/Safari block
+  // (tracking prevention), causing empty lists / "not authorized".
+  exposedHeaders: ["set-auth-token"],
   credentials: true,
 };
 

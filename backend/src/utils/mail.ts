@@ -1080,6 +1080,7 @@ export async function sendInvoiceOrderConfirmation(
   orderId?: string,
   asFacture: boolean = false,
   hideBreakdown: boolean = false,
+  organization?: string,
 ): Promise<void> {
   try {
     const itemsHtml = items
@@ -1186,6 +1187,8 @@ export async function sendInvoiceOrderConfirmation(
             </p>
 
             <div style="background-color: #F9F7F2; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+              ${organization ? `<p style="color: #999; margin: 0 0 5px 0; font-size: 12px;">Organisation</p>
+              <p style="color: #2D2A26; font-size: 16px; font-weight: bold; margin: 0 0 12px 0;">${organization}</p>` : ""}
               <p style="color: #999; margin: 0 0 5px 0; font-size: 12px;">Numéro de commande</p>
               <p style="color: #C5A065; font-size: 28px; font-weight: bold; margin: 0; letter-spacing: 2px; font-family: monospace;">${paddedNumber}</p>
               <p style="color: #999; margin: 10px 0 5px 0; font-size: 12px;">Date de commande</p>

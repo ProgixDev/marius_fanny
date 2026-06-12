@@ -1288,28 +1288,29 @@ export const reconcileOrderRefund = async (req: Request, res: Response) => {
 };
 
 /**
- * Resend the FACTURE for a government order to its billing email (the city's
- * accounts-payable, i.e. the 2nd address), NOT the contact. Used by the
- * "Renvoyer la facture" button for government clients.
+ * Resend the FACTURE/receipt email for an order — with NO payment link, so it's
+ * safe even for already-paid orders (no double-payment risk). Government orders
+ * go to the billing email (the city); everyone else gets it at the client's
+ * email. Used by the "Renvoyer la facture" button.
  * POST /api/payments/resend-facture
  */
-export const resendGovFacture = async (req: Request, res: Response) => {
+export const resendFacture = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.body as { orderId: string };
     const order = await Order.findById(orderId);
     if (!order) {
       return res.status(404).json({ success: false, error: "Commande non trouvee" });
     }
-    if (order.billingKind !== "gouvernement") {
-      return res
-        .status(400)
-        .json({ success: false, error: "Cette commande n'est pas gouvernementale." });
-    }
-    const dest = (order.billingEmail || "").trim();
+    const isGov = order.billingKind === "gouvernement";
+    const dest = (
+      isGov ? order.billingEmail || "" : order.clientInfo?.email || ""
+    ).trim();
     if (!dest) {
       return res.status(400).json({
         success: false,
-        error: "Aucun courriel de facturation (ville) n'est défini sur cette commande.",
+        error: isGov
+          ? "Aucun courriel de facturation (ville) n'est défini sur cette commande."
+          : "Aucun courriel client sur cette commande.",
       });
     }
 
@@ -1334,7 +1335,9 @@ export const resendGovFacture = async (req: Request, res: Response) => {
       order.deliveryType,
       order.notes,
       order._id.toString(),
-      true, // asFacture
+      true,  // asFacture
+      false, // hideBreakdown
+      order.billingOrganization || undefined, // organization on the facture
     );
 
     res.json({ success: true, data: { email: dest } });

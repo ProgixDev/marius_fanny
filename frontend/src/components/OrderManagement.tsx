@@ -1523,19 +1523,29 @@ export function OrderManagement() {
 
   // Resend the invoice / payment link to a client who hasn't paid yet.
   const handleResendInvoice = async (order: OrderWithPacking) => {
-    // Government orders: the facture goes to the BILLING email (the city's
-    // accounts-payable / 2nd address), NOT the contact.
-    if (order.billingKind === "gouvernement") {
-      const billingDest = (order.billingEmail || "").trim();
-      if (!billingDest) {
+    // Send the FACTURE/receipt (NO payment link) when the order is government
+    // (→ billing email / the city), already paid (→ a receipt), OR cancelled
+    // (never push a payment link for a cancelled order).
+    if (
+      order.billingKind === "gouvernement" ||
+      order.paymentStatus === "paid" ||
+      order.status === "cancelled"
+    ) {
+      const isGov = order.billingKind === "gouvernement";
+      const dest = isGov ? (order.billingEmail || "").trim() : order.client.email;
+      if (isGov && !dest) {
         alert(
           "Aucun courriel de facturation (ville) n'est défini sur cette commande. Ajoute-le dans la fiche client ou la commande.",
         );
         return;
       }
+      if (!dest) {
+        alert("Ce client n'a pas de courriel enregistré.");
+        return;
+      }
       if (
         !window.confirm(
-          `Renvoyer la facture de la commande ${formatOrderNumber(order.orderNumber)} à ${billingDest} (ville) ?`,
+          `Renvoyer la facture de la commande ${formatOrderNumber(order.orderNumber)} à ${dest}${isGov ? " (ville)" : ""} ?`,
         )
       ) {
         return;
@@ -1551,14 +1561,14 @@ export function OrderManagement() {
         if (!response.ok || !result.success) {
           throw new Error(result.error || "Échec de l'envoi de la facture");
         }
-        alert(`✅ Facture renvoyée à ${result.data?.email || billingDest}.`);
+        alert(`✅ Facture renvoyée à ${result.data?.email || dest}.`);
       } catch (err) {
         alert(`Erreur lors de l'envoi de la facture : ${getErrorMessage(err)}`);
       }
       return;
     }
 
-    // Non-government: resend the Square payment link to the contact.
+    // Unpaid, non-government → resend the Square PAYMENT LINK to the contact.
     const channel = order.paymentLinkChannel || "email";
     const dest = channel === "sms" ? order.client.phone : order.client.email;
     if (!dest) {
@@ -1913,12 +1923,12 @@ export function OrderManagement() {
                 Marquer payé
               </DropdownMenuItem>
             )}
-            {order.paymentStatus !== "paid" && order.status !== "cancelled" && (
-              <DropdownMenuItem onClick={() => handleResendInvoice(order)}>
-                <Mail className="h-4 w-4 mr-2" />
-                Renvoyer la facture
-              </DropdownMenuItem>
-            )}
+            {/* Available for ALL orders: paid/cancelled/gov → facture (receipt,
+                no link); unpaid non-cancelled → payment link. */}
+            <DropdownMenuItem onClick={() => handleResendInvoice(order)}>
+              <Mail className="h-4 w-4 mr-2" />
+              Renvoyer la facture
+            </DropdownMenuItem>
             {(() => {
               const storedPaid = (order as any).amountPaid;
               const paidAmount = storedPaid > 0
@@ -3190,6 +3200,7 @@ export function OrderManagement() {
                 paymentLinkChannel: formData.paymentLinkChannel,
                 billingKind: formData.billingKind || "standard",
                 billingEmail: formData.billingEmail || undefined,
+                billingOrganization: formData.billingOrganization || undefined,
               };
 
               if (formData.date) {
@@ -3408,6 +3419,9 @@ export function OrderManagement() {
                 items: apiItems,
                 notes: formData.notes || undefined,
                 paymentLinkChannel: formData.paymentLinkChannel,
+                billingKind: formData.billingKind || "standard",
+                billingEmail: formData.billingEmail || undefined,
+                billingOrganization: formData.billingOrganization || undefined,
               };
 
               if (formData.date) {
@@ -3545,19 +3559,23 @@ export function OrderManagement() {
                 }
               } else if (
                 formData.billingKind !== "gouvernement" &&
-                updatedOrder.paymentMethod === "payment_link" &&
-                updatedOrder.squareInvoiceId &&
                 updatedOrder.paymentStatus !== "paid" &&
+                (updatedOrder.paymentMethod === "payment_link" ||
+                  Boolean(selectedOrder.squareInvoiceId)) &&
                 Math.abs(newTotal - (selectedOrder.total || 0)) > 0.01
               ) {
-                // Order has pending invoice, total changed → cancel old + send new
+                // Unpaid order, total changed (e.g. a product was added) → send a
+                // FRESH payment link for the new total automatically. Cancel the
+                // previous invoice first only if one exists.
                 try {
-                  await fetch(`${normalizedApiUrl}/api/payments/cancel-invoice`, {
-                    method: "POST",
-                    headers: authHeaders(),
-                    credentials: "include",
-                    body: JSON.stringify({ orderId: updatedOrder.id }),
-                  });
+                  if (selectedOrder.squareInvoiceId) {
+                    await fetch(`${normalizedApiUrl}/api/payments/cancel-invoice`, {
+                      method: "POST",
+                      headers: authHeaders(),
+                      credentials: "include",
+                      body: JSON.stringify({ orderId: updatedOrder.id }),
+                    });
+                  }
                   const invoiceData = await sendPaymentLink(updatedOrder);
                   updatedOrder.squareInvoiceId = invoiceData?.invoiceId;
                   setOrders((prev) => {
@@ -3618,6 +3636,9 @@ export function OrderManagement() {
                   notes: selectedOrder.notes || "",
                   paymentMethod: selectedOrder.paymentMethod || "in_store",
                   paymentLinkChannel: selectedOrder.paymentLinkChannel || "email",
+                  billingKind: (selectedOrder as any).billingKind || "standard",
+                  billingEmail: (selectedOrder as any).billingEmail || "",
+                  billingOrganization: (selectedOrder as any).billingOrganization || "",
                   deliveryFee: selectedOrder.deliveryFee,
                   deliveryAddress: selectedOrder.deliveryAddress
                     ? {

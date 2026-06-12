@@ -90,6 +90,7 @@ interface OrderFormData {
   paymentLinkChannel: "email" | "sms";
   billingKind?: "standard" | "representant" | "gouvernement";
   billingEmail?: string;
+  billingOrganization?: string;
 }
 
 interface OrderFormItem {
@@ -166,6 +167,7 @@ export default function OrderForm({
       paymentLinkChannel: initialData?.paymentLinkChannel || "email",
       billingKind: initialData?.billingKind || "standard",
       billingEmail: initialData?.billingEmail || "",
+      billingOrganization: initialData?.billingOrganization || "",
     };
   });
 
@@ -772,6 +774,9 @@ export default function OrderForm({
       billingKind: clientBillingKind || prev.billingKind || "standard",
       // Pre-fill the invoice (billing) email from the client's saved value.
       billingEmail: (client as any).billing?.invoiceEmail || prev.billingEmail || "",
+      // Pre-fill the organisation (company / school) shown on the facture.
+      billingOrganization:
+        (client as any).billing?.organization || prev.billingOrganization || "",
       // Force paymentMethod to in_store for government clients (no Square link)
       paymentMethod:
         clientBillingKind === "gouvernement" ? "in_store" : prev.paymentMethod,
@@ -1275,6 +1280,18 @@ export default function OrderForm({
                     onChange={(e) => handleInputChange("billingEmail", e.target.value)}
                     className="w-full p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#337957]/40"
                     placeholder="comptes@ville.ca"
+                  />
+                  <label className="text-[11px] font-semibold text-gray-700 block pt-1">
+                    Nom de l'organisation (s'affiche sur la facture)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.billingOrganization || ""}
+                    onChange={(e) =>
+                      handleInputChange("billingOrganization", e.target.value)
+                    }
+                    className="w-full p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#337957]/40"
+                    placeholder="Ex: Ville de la Vallée, Commission scolaire de Laval"
                   />
                 </div>
               )}

@@ -384,7 +384,10 @@ export const createOrder = async (
 
     // Billing privileges - look up from client email in all cases
     let billingKind: "standard" | "representant" | "gouvernement" | undefined;
-    let billingOrganization: string | undefined;
+    // Organisation (company / school) shown on the facture. Per-order value
+    // wins; else the client's saved billing.organization is used.
+    let billingOrganization: string | undefined =
+      ((orderData as any).billingOrganization || "").trim() || undefined;
     // 2nd email for government clients (e.g. the city's accounts-payable) that
     // receives the invoice/facture. Per-order value wins; else the client's
     // saved billing.invoiceEmail is used.
@@ -408,7 +411,7 @@ export const createOrder = async (
       
       if (billing) {
         billingKind = billing?.kind || orderData.billingKind || "standard";
-        billingOrganization = billing?.organization || undefined;
+        if (!billingOrganization) billingOrganization = billing?.organization || undefined;
         if (!billingEmail) {
           billingEmail = ((billing as any)?.invoiceEmail || "").trim().toLowerCase() || undefined;
         }
@@ -921,6 +924,7 @@ export const createOrder = async (
             receiptPayload.orderId,
             false, // asFacture → stays a "Confirmation"
             true,  // hideBreakdown → no facture for the contact
+            billingOrganization, // organization shown in the header
           );
         } else {
           await sendOrderReceipt(receiptMode, receiptPayload);
@@ -959,7 +963,9 @@ export const createOrder = async (
               receiptPayload.deliveryType,
               receiptPayload.clientNote,
               receiptPayload.orderId,
-              true, // asFacture
+              true,  // asFacture
+              false, // hideBreakdown
+              billingOrganization, // organization shown on the facture
             );
             console.log(`✅ Facture sent to billing email ${billingEmail}`);
           } catch (e: any) {
@@ -1743,6 +1749,20 @@ export const updateOrder = async (
         changeType: "updated",
         notes: "Order notes updated"
       });
+    }
+
+    // Track and update billing fields (kind, billing email, organisation).
+    // These drive the gov facture flow, so editing a gov order must persist them.
+    if (updateData.billingKind !== undefined) {
+      order.billingKind = updateData.billingKind;
+    }
+    if (updateData.billingEmail !== undefined) {
+      order.billingEmail =
+        (updateData.billingEmail || "").trim().toLowerCase() || undefined;
+    }
+    if (updateData.billingOrganization !== undefined) {
+      order.billingOrganization =
+        (updateData.billingOrganization || "").trim() || undefined;
     }
 
     // Track and update assigned driver

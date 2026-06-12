@@ -11,7 +11,7 @@ import {
   refundPayment,
   refundOrderPayment,
   reconcileOrderRefund,
-  resendGovFacture,
+  resendFacture,
   refundOrderInStore,
   refundBalance,
   getSquareConfig,
@@ -78,7 +78,7 @@ router.post(
   "/resend-facture",
   requireAuth,
   requireAdmin,
-  resendGovFacture,
+  resendFacture,
 );
 
 // Partial refund for balance difference
