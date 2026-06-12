@@ -19,7 +19,7 @@ import {
   getAllDeliveryZones,
 } from "../utils/deliveryZones.js";
 import { sendOrderReceipt } from "../utils/emailService.js";
-import { sendOrderBalanceEmail } from "../utils/mail.js";
+import { sendOrderBalanceEmail, sendInvoiceOrderConfirmation } from "../utils/mail.js";
 import { sendSms } from "../utils/smsService.js";
 import {
   calculatePromoDiscount,
@@ -899,7 +899,32 @@ export const createOrder = async (
           orderId: order._id.toString(),
         };
 
-        await sendOrderReceipt(receiptMode, receiptPayload);
+        if (isGovernment) {
+          // Gov contact #1: a CONFIRMATION without the facture breakdown — just
+          // the order + total. The facture (with tax breakdown) goes to the
+          // billing email below.
+          await sendInvoiceOrderConfirmation(
+            receiptPayload.email,
+            receiptPayload.name,
+            receiptPayload.orderNumber,
+            receiptPayload.items,
+            receiptPayload.subtotal,
+            receiptPayload.taxAmount,
+            receiptPayload.deliveryFee,
+            receiptPayload.total,
+            undefined,
+            receiptPayload.orderDate,
+            receiptPayload.pickupDate,
+            receiptPayload.pickupTimeSlot,
+            receiptPayload.deliveryType,
+            receiptPayload.clientNote,
+            receiptPayload.orderId,
+            false, // asFacture → stays a "Confirmation"
+            true,  // hideBreakdown → no facture for the contact
+          );
+        } else {
+          await sendOrderReceipt(receiptMode, receiptPayload);
+        }
 
         console.log(
           `✅ Order receipt email (mode=${receiptMode}) sent to ${orderData.clientInfo.email}`,
@@ -916,8 +941,27 @@ export const createOrder = async (
         const contactEmail = orderData.clientInfo.email.trim().toLowerCase();
         if (isGovernment && billingEmail && billingEmail !== contactEmail) {
           try {
-            await sendOrderReceipt("invoice", { ...receiptPayload, email: billingEmail });
-            console.log(`✅ Facture also sent to billing email ${billingEmail}`);
+            // The 2nd email is the FACTURE (not the confirmation): same data,
+            // but framed/subjected as an invoice for the city to pay.
+            await sendInvoiceOrderConfirmation(
+              billingEmail,
+              receiptPayload.name,
+              receiptPayload.orderNumber,
+              receiptPayload.items,
+              receiptPayload.subtotal,
+              receiptPayload.taxAmount,
+              receiptPayload.deliveryFee,
+              receiptPayload.total,
+              undefined,
+              receiptPayload.orderDate,
+              receiptPayload.pickupDate,
+              receiptPayload.pickupTimeSlot,
+              receiptPayload.deliveryType,
+              receiptPayload.clientNote,
+              receiptPayload.orderId,
+              true, // asFacture
+            );
+            console.log(`✅ Facture sent to billing email ${billingEmail}`);
           } catch (e: any) {
             console.error(
               `⚠️ Failed to send facture to billing email ${billingEmail}:`,

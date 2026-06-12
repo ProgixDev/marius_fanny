@@ -2144,7 +2144,7 @@ export default function OrderForm({
                               type="number"
                               min={0}
                               step={0.01}
-                              value={item.unitPrice}
+                              value={item.unitPrice || ""}
                               onChange={(e) =>
                                 handleItemChange(
                                   item.id,

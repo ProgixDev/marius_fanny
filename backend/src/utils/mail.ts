@@ -1078,6 +1078,8 @@ export async function sendInvoiceOrderConfirmation(
   deliveryType?: "pickup" | "delivery",
   clientNote?: string,
   orderId?: string,
+  asFacture: boolean = false,
+  hideBreakdown: boolean = false,
 ): Promise<void> {
   try {
     const itemsHtml = items
@@ -1124,10 +1126,37 @@ export async function sendInvoiceOrderConfirmation(
         </div>`
       : "";
 
+    // The detailed tax breakdown (Sous-total / TPS / TVQ / numéros de taxes /
+    // Livraison) is the "facture". It's shown ONLY when this email IS the
+    // facture (e.g. the government billing copy). The plain confirmation keeps
+    // just the Total below, so the contact sees the amount without the invoice.
+    const factureBreakdown = hideBreakdown
+      ? ""
+      : `
+              <p style="color: #555; margin: 5px 0;">
+                <span style="display: inline-block; width: 150px;">Sous-total:</span>
+                <strong>${subtotal.toFixed(2)}$</strong>
+              </p>
+              <p style="color: #555; margin: 5px 0;">
+                <span style="display: inline-block; width: 150px;">TPS (5 %):</span>
+                <strong>${(taxAmount * (0.05 / 0.14975)).toFixed(2)}$</strong>
+              </p>
+              <p style="color: #555; margin: 5px 0;">
+                <span style="display: inline-block; width: 150px;">TVQ (9,975 %):</span>
+                <strong>${(taxAmount * (0.09975 / 0.14975)).toFixed(2)}$</strong>
+              </p>
+              <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;">
+                <span style="display: inline-block; width: 150px;">&nbsp;</span>
+                TPS: 144652641RT001 &nbsp;&nbsp; TVQ: 1201862732TQ0001
+              </p>
+              ${deliveryFee > 0 ? `<p style="color: #555; margin: 5px 0;"><span style="display: inline-block; width: 150px;">Livraison:</span><strong>${deliveryFee.toFixed(2)}$</strong></p>` : ""}`;
+
     const mailOptions = {
       from: DISPLAY_FROM,
       to: email,
-      subject: `📋 Confirmation de commande - ${paddedNumber}`,
+      subject: asFacture
+        ? `🧾 Facture - Commande ${paddedNumber}`
+        : `📋 Confirmation de commande - ${paddedNumber}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #F9F7F2; border-radius: 10px;">
           <div style="text-align: center; margin-bottom: 30px;">
@@ -1137,7 +1166,7 @@ export async function sendInvoiceOrderConfirmation(
           <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
             <div style="text-align: center; margin-bottom: 20px;">
               <div style="display: inline-block; background-color: #2196F3; color: white; padding: 10px 20px; border-radius: 20px; font-weight: bold;">
-                📋 COMMANDE CONFIRMÉE
+                ${asFacture ? "🧾 FACTURE" : "📋 COMMANDE CONFIRMÉE"}
               </div>
             </div>
 
@@ -1176,32 +1205,7 @@ export async function sendInvoiceOrderConfirmation(
             </table>
 
             <div style="text-align: right; margin-top: 20px;">
-              <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">Sous-total:</span>
-                <strong>${subtotal.toFixed(2)}$</strong>
-              </p>
-              <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">TPS (5 %):</span>
-                <strong>${(taxAmount * (0.05 / 0.14975)).toFixed(2)}$</strong>
-              </p>
-              <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">TVQ (9,975 %):</span>
-                <strong>${(taxAmount * (0.09975 / 0.14975)).toFixed(2)}$</strong>
-              </p>
-              <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;">
-                <span style="display: inline-block; width: 150px;">&nbsp;</span>
-                TPS: 144652641RT001 &nbsp;&nbsp; TVQ: 1201862732TQ0001
-              </p>
-              ${
-                deliveryFee > 0
-                  ? `
-              <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">Livraison:</span>
-                <strong>${deliveryFee.toFixed(2)}$</strong>
-              </p>
-              `
-                  : ""
-              }
+              ${factureBreakdown}
               <p style="color: #C5A065; font-size: 20px; margin: 15px 0 0 0; padding-top: 10px; border-top: 2px solid #C5A065;">
                 <span style="display: inline-block; width: 150px;">Total:</span>
                 <strong>${total.toFixed(2)}$</strong>

@@ -34,7 +34,9 @@
       "Bash(sed -n '36,46p' components/ImageUpload.tsx)",
       "Bash(sed -n '238,247p' components/ProDashboard.tsx)",
       "Bash(sed -n '370,378p' pages/DeliveryDashboard.tsx)",
-      "Bash(sed -n '455,463p' pages/DeliveryDashboard.tsx)"
+      "Bash(sed -n '455,463p' pages/DeliveryDashboard.tsx)",
+      "Bash(awk 'NR>=1065 && NR<=1255 && \\(/subject|Confirmation de|Facture|<h1|<h2|font-size: 2[0-9]px|Votre commande|payez|régler|à payer/\\)' utils/mail.ts)",
+      "Bash(awk -F: '$1>=1065 && $1<=1260')"
     ]
   }
 }

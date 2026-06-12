@@ -317,7 +317,16 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
     setQuantity(Math.max(product.minOrderQuantity || 1, 1));
     setSelectedBread("Baguette");
     setIsSliced(false);
-    setSelectedOptions({});
+    // Pré-sélectionner le 1er choix (valeur par défaut) de chaque option à
+    // choix. Sinon l'option n'est pas enregistrée tant qu'on ne clique pas
+    // dessus → elle n'apparaît pas dans la liste de production.
+    const defaults: Record<string, string> = {};
+    for (const option of ((product.customOptions || []) as any[])) {
+      if (option?.type !== "text" && Array.isArray(option?.choices) && option.choices.length > 0) {
+        defaults[option.name] = option.choices[0];
+      }
+    }
+    setSelectedOptions(defaults);
   };
 
   const handleAddToCart = () => {
@@ -398,7 +407,13 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
                         setQuantity(1);
                         setSelectedBread("Baguette");
                         setIsSliced(false);
-                        setSelectedOptions({});
+                        const recDefaults: Record<string, string> = {};
+                        for (const option of ((rec.customOptions || []) as any[])) {
+                          if (option?.type !== "text" && Array.isArray(option?.choices) && option.choices.length > 0) {
+                            recDefaults[option.name] = option.choices[0];
+                          }
+                        }
+                        setSelectedOptions(recDefaults);
                       } else {
                         onAddToCart({ ...rec, price: recPrice, selectedOptions: {} });
                       }
