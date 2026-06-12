@@ -1333,12 +1333,22 @@ export function OrderManagement() {
   };
 
   const canRefundOrder = (order: OrderWithPacking) => {
-    const isPaid = order.paymentStatus === "paid";
+    // "Was paid" (not "is paid"): a cancelled order still carries its Square
+    // payment to refund even if paymentStatus changed when it was cancelled.
+    const wasPaid =
+      order.paymentStatus === "paid" ||
+      order.balancePaid === true ||
+      ((order as any).amountPaid || 0) > 0;
     const isSquareChannel =
       order.paymentMethod === "payment_link" ||
       Boolean(order.squarePaymentId || order.squareInvoiceId);
+    const alreadyRefunded =
+      Array.isArray((order as any).refunds) && (order as any).refunds.length > 0;
 
-    return isPaid && isSquareChannel && order.status !== "cancelled";
+    // Show the Square refund even on CANCELLED orders (you may have cancelled
+    // before refunding) — but never once a refund already exists. The backend
+    // also guards against double refunds, so this is safe.
+    return wasPaid && isSquareChannel && !alreadyRefunded;
   };
 
   const canRefundInStore = (order: OrderWithPacking) => {
@@ -1875,6 +1885,12 @@ export function OrderManagement() {
               >
                 <Store className="h-4 w-4 mr-2" />
                 Rembourser via magasin
+              </DropdownMenuItem>
+            )}
+            {order.status === "cancelled" && canRefundOrder(order) && (
+              <DropdownMenuItem onClick={() => handleRefundClick(order)}>
+                <XCircle className="h-4 w-4 mr-2" />
+                Rembourser via Square
               </DropdownMenuItem>
             )}
             {order.status === "cancelled" && (
