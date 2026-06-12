@@ -89,6 +89,7 @@ interface OrderFormData {
   paymentMethod: "in_store" | "payment_link";
   paymentLinkChannel: "email" | "sms";
   billingKind?: "standard" | "representant" | "gouvernement";
+  billingEmail?: string;
 }
 
 interface OrderFormItem {
@@ -164,6 +165,7 @@ export default function OrderForm({
       paymentMethod: initialData?.paymentMethod || "in_store",
       paymentLinkChannel: initialData?.paymentLinkChannel || "email",
       billingKind: initialData?.billingKind || "standard",
+      billingEmail: initialData?.billingEmail || "",
     };
   });
 
@@ -768,6 +770,8 @@ export default function OrderForm({
       phone: client.phone,
       // Inherit billing kind from the selected client so government flow works correctly
       billingKind: clientBillingKind || prev.billingKind || "standard",
+      // Pre-fill the invoice (billing) email from the client's saved value.
+      billingEmail: (client as any).billing?.invoiceEmail || prev.billingEmail || "",
       // Force paymentMethod to in_store for government clients (no Square link)
       paymentMethod:
         clientBillingKind === "gouvernement" ? "in_store" : prev.paymentMethod,
@@ -1259,6 +1263,20 @@ export default function OrderForm({
               )}
               {formData.billingKind === "gouvernement" && (
                 <p className="text-[11px] text-blue-600">Paiement dans 6 mois</p>
+              )}
+              {formData.billingKind === "gouvernement" && (
+                <div className="mt-2 space-y-1">
+                  <label className="text-[11px] font-semibold text-gray-700">
+                    Courriel de facturation (ville) — reçoit la facture
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.billingEmail || ""}
+                    onChange={(e) => handleInputChange("billingEmail", e.target.value)}
+                    className="w-full p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#337957]/40"
+                    placeholder="comptes@ville.ca"
+                  />
+                </div>
               )}
             </div>
           )}

@@ -49,6 +49,18 @@ import { orderAPI } from "../lib/OrderAPI";
 import { normalizedApiUrl } from "../lib/AuthClient";
 import { clientAPI } from "../lib/ClientAPI";
 import { getErrorMessage } from "../utils/errorMessage";
+
+// Build headers that authenticate via BOTH the session cookie AND the bearer
+// token. Cross-site cookies are blocked by Safari/iPad (ITP), so cookie-only
+// requests fail there ("vous n'êtes pas autorisé"). The bearer token (saved at
+// login) keeps these admin actions working on tablets and in-app browsers.
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem("bearer_token");
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 import type { Order } from "../types";
 
 interface OrderItemWithPacking {
@@ -609,6 +621,7 @@ export function OrderManagement() {
       year: "numeric",
       month: "short",
       day: "numeric",
+      timeZone: "America/Montreal",
     });
   };
 
@@ -619,6 +632,7 @@ export function OrderManagement() {
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "America/Montreal",
     });
   };
 
@@ -887,7 +901,7 @@ export function OrderManagement() {
         try {
           await fetch(`${normalizedApiUrl}/api/payments/cancel-invoice`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders(),
             credentials: "include",
             body: JSON.stringify({ orderId: orderToDelete.id }),
           });
@@ -916,9 +930,7 @@ export function OrderManagement() {
     try {
       const response = await fetch(`${normalizedApiUrl}/api/payment-reminders/process`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: authHeaders(),
         credentials: "include",
       });
       
@@ -951,9 +963,7 @@ export function OrderManagement() {
     try {
       const response = await fetch(`${normalizedApiUrl}/api/payments/refund-order`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: authHeaders(),
         credentials: "include",
         body: JSON.stringify({
           orderId: orderToCancel.id,
@@ -1020,7 +1030,7 @@ export function OrderManagement() {
     try {
       const response = await fetch(`${normalizedApiUrl}/api/payments/reconcile-refund`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         credentials: "include",
         body: JSON.stringify({ orderId: order.id }),
       });
@@ -1067,7 +1077,7 @@ export function OrderManagement() {
         try {
           await fetch(`${normalizedApiUrl}/api/payments/cancel-invoice`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders(),
             credentials: "include",
             body: JSON.stringify({ orderId }),
           });
@@ -1204,10 +1214,10 @@ export function OrderManagement() {
     const shortNumber = formatOrderNumber(order.orderNumber);
     const pickupDateObj = new Date(order.pickupDate || order.orderDate);
     const date = pickupDateObj.toLocaleDateString("fr-CA", {
-      weekday: "long", year: "numeric", month: "long", day: "numeric",
+      weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "America/Montreal",
     });
     const time = order.deliveryTimeSlot || pickupDateObj.toLocaleTimeString("fr-CA", {
-      hour: "2-digit", minute: "2-digit", hour12: false,
+      hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Montreal",
     });
     const clientName = `${order.client.firstName} ${order.client.lastName}`;
     const items = order.items.map((item) => {
@@ -1356,7 +1366,7 @@ export function OrderManagement() {
         `${normalizedApiUrl}/api/payments/refund-order-in-store`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           credentials: "include",
           body: JSON.stringify({
             orderId: storeRefundOrder.id,
@@ -1483,7 +1493,7 @@ export function OrderManagement() {
 
     const response = await fetch(`${normalizedApiUrl}/api/payments/invoice`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       credentials: "include",
       body: JSON.stringify(invoicePayload),
     });
@@ -1498,6 +1508,31 @@ export function OrderManagement() {
     });
 
     return result.data;
+  };
+
+  // Resend the invoice / payment link to a client who hasn't paid yet.
+  const handleResendInvoice = async (order: OrderWithPacking) => {
+    const channel = order.paymentLinkChannel || "email";
+    const dest = channel === "sms" ? order.client.phone : order.client.email;
+    if (!dest) {
+      alert(
+        `Ce client n'a pas de ${channel === "sms" ? "numéro de téléphone" : "courriel"} enregistré.`,
+      );
+      return;
+    }
+    if (
+      !window.confirm(
+        `Renvoyer la facture de la commande ${formatOrderNumber(order.orderNumber)} à ${dest} ?`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await sendPaymentLink(order);
+      alert(`✅ Facture renvoyée à ${dest}.`);
+    } catch (err) {
+      alert(`Erreur lors de l'envoi de la facture : ${getErrorMessage(err)}`);
+    }
   };
 
   const handlePrintOrders = () => {
@@ -1823,6 +1858,12 @@ export function OrderManagement() {
               <DropdownMenuItem onClick={() => handleMarkPaid(order)}>
                 <DollarSign className="h-4 w-4 mr-2" />
                 Marquer payé
+              </DropdownMenuItem>
+            )}
+            {order.paymentStatus !== "paid" && order.status !== "cancelled" && (
+              <DropdownMenuItem onClick={() => handleResendInvoice(order)}>
+                <Mail className="h-4 w-4 mr-2" />
+                Renvoyer la facture
               </DropdownMenuItem>
             )}
             {(() => {
@@ -2548,6 +2589,7 @@ export function OrderManagement() {
                                     hour: "2-digit",
                                     minute: "2-digit",
                                     hour12: false,
+                                    timeZone: "America/Montreal",
                                   })}
                               </p>
                             </div>
@@ -3094,6 +3136,7 @@ export function OrderManagement() {
                 depositPaid: formData.billingKind !== "gouvernement" && formData.paymentMethod === "in_store",
                 paymentLinkChannel: formData.paymentLinkChannel,
                 billingKind: formData.billingKind || "standard",
+                billingEmail: formData.billingEmail || undefined,
               };
 
               if (formData.date) {
@@ -3458,7 +3501,7 @@ export function OrderManagement() {
                 try {
                   await fetch(`${normalizedApiUrl}/api/payments/cancel-invoice`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: authHeaders(),
                     credentials: "include",
                     body: JSON.stringify({ orderId: updatedOrder.id }),
                   });
@@ -3501,10 +3544,15 @@ export function OrderManagement() {
                   date: (selectedOrder.pickupDate || selectedOrder.orderDate).split("T")[0],
                   pickupTime: (() => {
                     const d = new Date(selectedOrder.pickupDate);
-                    const h = d.getHours().toString().padStart(2, "0");
-                    const mins = d.getMinutes();
+                    // Read hour/minute in Montreal time, not the browser's timezone.
+                    const parts = new Intl.DateTimeFormat("en-CA", {
+                      timeZone: "America/Montreal",
+                      hour: "2-digit", minute: "2-digit", hour12: false,
+                    }).formatToParts(d);
+                    const hourNum = parseInt(parts.find((p) => p.type === "hour")?.value || "0", 10);
+                    const mins = parseInt(parts.find((p) => p.type === "minute")?.value || "0", 10);
                     const m = mins < 15 ? "00" : mins < 45 ? "30" : "00";
-                    const finalH = mins >= 45 ? (d.getHours() + 1).toString().padStart(2, "0") : h;
+                    const finalH = (mins >= 45 ? hourNum + 1 : hourNum).toString().padStart(2, "0");
                     return `${finalH}:${m}`;
                   })(),
                   clientId: selectedOrder.clientId,
@@ -3713,7 +3761,7 @@ export function OrderManagement() {
               if (method === "square" && hasSquarePayment) {
                 const response = await fetch(`${normalizedApiUrl}/api/payments/refund-balance`, {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
+                  headers: authHeaders(),
                   credentials: "include",
                   body: JSON.stringify({
                     orderId: balanceRefundOrder.id,

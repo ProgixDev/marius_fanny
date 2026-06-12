@@ -735,12 +735,12 @@ export async function sendFullPaymentReceipt(
       .join("");
 
     const orderDateObj = orderDate ? new Date(orderDate) : new Date();
-    const formattedDate = orderDateObj.toLocaleDateString("fr-CA", { year: "numeric", month: "long", day: "numeric" });
-    const formattedTime = orderDateObj.toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
+    const formattedDate = orderDateObj.toLocaleDateString("fr-CA", { year: "numeric", month: "long", day: "numeric", timeZone: "America/Montreal" });
+    const formattedTime = orderDateObj.toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit", timeZone: "America/Montreal" });
     const paddedNumber = orderNumber.split("-").pop() || orderNumber;
     const pickupDateObj = pickupDate ? new Date(pickupDate) : null;
     const formattedPickupDate = pickupDateObj
-      ? pickupDateObj.toLocaleDateString("fr-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
+      ? pickupDateObj.toLocaleDateString("fr-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "America/Montreal" })
       : null;
     const pickupSection = formattedPickupDate
       ? `<div style="background-color: #EAF6EF; border: 2px solid #337957; border-radius: 10px; padding: 16px; margin-top: 16px; text-align: center;">
@@ -913,16 +913,18 @@ export async function sendDepositReceipt(
       year: "numeric",
       month: "long",
       day: "numeric",
+      timeZone: "America/Montreal",
     });
     const formattedTime = orderDateObj.toLocaleTimeString("fr-CA", {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "America/Montreal",
     });
     const paddedNumber = orderNumber.split("-").pop() || orderNumber;
 
     const pickupDateObjD = pickupDate ? new Date(pickupDate) : null;
     const formattedPickupDateD = pickupDateObjD
-      ? pickupDateObjD.toLocaleDateString("fr-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
+      ? pickupDateObjD.toLocaleDateString("fr-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "America/Montreal" })
       : null;
     const pickupSectionD = formattedPickupDateD
       ? `<div style="background-color: #EAF6EF; border: 2px solid #337957; border-radius: 10px; padding: 16px; margin-top: 16px; text-align: center;">
@@ -1101,16 +1103,18 @@ export async function sendInvoiceOrderConfirmation(
       year: "numeric",
       month: "long",
       day: "numeric",
+      timeZone: "America/Montreal",
     });
     const formattedTime = orderDateObj.toLocaleTimeString("fr-CA", {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "America/Montreal",
     });
     const paddedNumber = orderNumber.split("-").pop() || orderNumber;
 
     const pickupDateObjI = pickupDate ? new Date(pickupDate) : null;
     const formattedPickupDateI = pickupDateObjI
-      ? pickupDateObjI.toLocaleDateString("fr-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
+      ? pickupDateObjI.toLocaleDateString("fr-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "America/Montreal" })
       : null;
     const pickupSectionI = formattedPickupDateI
       ? `<div style="background-color: #EAF6EF; border: 2px solid #337957; border-radius: 10px; padding: 16px; margin-top: 16px; text-align: center;">
@@ -1210,7 +1214,7 @@ export async function sendInvoiceOrderConfirmation(
                 💳 Lien de paiement sécurisé
               </p>
               <p style="color: #555; margin: 5px 0 0 0; font-size: 14px;">
-                Utilisez ce lien pour régler votre commande en toute sécurité. Si vous avez la moindre question, l'équipe de Marius &amp; Fanny est là pour vous aider.
+                Utilisez ce lien pour régler votre commande en toute sécurité.
               </p>
               <div style="text-align: center; margin-top: 15px;">
                 <a href="${invoiceUrl}"
@@ -1663,6 +1667,7 @@ export async function sendQuoteEmail(data: {
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: "America/Montreal",
   });
 
   const itemsHtml = data.items

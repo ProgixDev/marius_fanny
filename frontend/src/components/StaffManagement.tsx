@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { normalizedApiUrl } from "../lib/AuthClient";
+import { authHeaders } from "../utils/authHeaders";
 
 interface StaffMember {
   id: string;
@@ -72,6 +73,7 @@ export default function StaffManagement() {
     setLoading(true);
     try {
       const response = await fetch(`${normalizedApiUrl}/api/users/staff`, {
+        headers: authHeaders(),
         credentials: "include",
       });
       const result = await response.json();
@@ -136,7 +138,7 @@ export default function StaffManagement() {
       const response = await fetch(`${normalizedApiUrl}/api/users/staff`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           email: formData.email.trim().toLowerCase(),
           name: formData.name.trim(),
@@ -217,6 +219,7 @@ export default function StaffManagement() {
         `${normalizedApiUrl}/api/users/staff/${deletingStaff.id}`,
         {
           method: "DELETE",
+          headers: authHeaders(),
           credentials: "include",
         },
       );

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { authClient, normalizedApiUrl } from "../lib/AuthClient";
+import { authHeaders } from "../utils/authHeaders";
 import { getSessionUniversal } from "../utils/getSession";
 import { productAPI } from "../lib/ProductAPI";
 import { categoryAPI } from "../lib/CategoryAPI";
@@ -240,6 +241,7 @@ export default function ProDashboard({
     setOrdersError(null);
     try {
       const response = await fetch(`${normalizedApiUrl}/api/pro-orders/mine`, {
+        headers: authHeaders(),
         credentials: "include",
       });
       if (!response.ok) {

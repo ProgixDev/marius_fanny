@@ -31,6 +31,7 @@ import type { Order } from "../types";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const normalizedApiUrl = API_URL.startsWith("http") ? API_URL : `https://${API_URL}`;
+import { authHeaders } from "../utils/authHeaders";
 
 interface Driver {
   id: string;
@@ -62,6 +63,7 @@ export default function DeliveryAssignment() {
     try {
       // Fetch orders
       const ordersRes = await fetch(`${normalizedApiUrl}/api/orders`, {
+        headers: authHeaders(),
         credentials: "include",
       });
       const ordersData = await ordersRes.json();
@@ -85,6 +87,7 @@ export default function DeliveryAssignment() {
 
       // Fetch all users then filter delivery drivers
       const usersRes = await fetch(`${normalizedApiUrl}/api/users?limit=500`, {
+        headers: authHeaders(),
         credentials: "include",
       });
       const usersData = await usersRes.json();
@@ -115,7 +118,7 @@ export default function DeliveryAssignment() {
     try {
       const res = await fetch(`${normalizedApiUrl}/api/orders/${orderId}/delivery-status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         credentials: "include",
         body: JSON.stringify({ deliveryStatus: newStatus }),
       });
@@ -164,7 +167,7 @@ export default function DeliveryAssignment() {
     try {
       await fetch(`${normalizedApiUrl}/api/orders/${selectedOrder.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         credentials: "include",
         body: JSON.stringify({
           assignedDriver: { id: selectedDriver, name: driver?.name || "Livreur", assignedAt },
@@ -183,6 +186,7 @@ export default function DeliveryAssignment() {
       year: "numeric",
       month: "short",
       day: "numeric",
+      timeZone: "America/Montreal",
     });
 
   const formatCurrency = (amount: number) =>

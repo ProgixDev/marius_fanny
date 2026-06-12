@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Upload, X, ImageIcon } from 'lucide-react';
 import { API_URL, getImageUrl } from '../utils/api';
+import { bearerHeader } from '../utils/authHeaders';
 
 interface ImageUploadProps {
   value: string;
@@ -38,6 +39,7 @@ export function ImageUpload({ value, onChange, className = '' }: ImageUploadProp
 
       const response = await fetch(`${API_URL}/api/upload/single`, {
         method: 'POST',
+        headers: bearerHeader(),
         body: formData,
         credentials: 'include', // Include auth cookies
       });

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authClient } from "../lib/AuthClient";
+import { authHeaders } from "../utils/authHeaders";
 import { getSessionUniversal } from "../utils/getSession";
 import GoldenBackground from "./GoldenBackground";
 import {
@@ -194,9 +195,7 @@ const Dashboard: React.FC = () => {
           const apiUrl = `${API_URL}/api/orders?page=${page}&limit=${limit}`;
           const response = await fetch(apiUrl, {
             credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: authHeaders(),
           });
 
           const responseText = await response.text();
@@ -237,9 +236,7 @@ const Dashboard: React.FC = () => {
 
         const response = await fetch(apiUrl, {
           credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: authHeaders(),
         });
 
         console.log(

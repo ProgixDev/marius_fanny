@@ -72,6 +72,7 @@ function ClientManagement() {
     status: "active" as "active" | "inactive" | "placeholder",
     billingKind: "standard" as "standard" | "representant" | "gouvernement",
     billingOrganization: "",
+    billingInvoiceEmail: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -86,6 +87,7 @@ function ClientManagement() {
       status: "active",
       billingKind: "standard",
       billingOrganization: "",
+      billingInvoiceEmail: "",
     });
   };
 
@@ -138,6 +140,7 @@ function ClientManagement() {
         billing: {
           kind: formData.billingKind,
           organization: formData.billingOrganization || undefined,
+          invoiceEmail: formData.billingInvoiceEmail || undefined,
         },
       });
       setIsCreateModalOpen(false);
@@ -162,6 +165,7 @@ function ClientManagement() {
       status: client.status,
       billingKind: client.billing?.kind || "standard",
       billingOrganization: client.billing?.organization || "",
+      billingInvoiceEmail: client.billing?.invoiceEmail || "",
     });
     setIsEditModalOpen(true);
   };
@@ -187,6 +191,7 @@ function ClientManagement() {
         billing: {
           kind: formData.billingKind,
           organization: formData.billingOrganization || undefined,
+          invoiceEmail: formData.billingInvoiceEmail || undefined,
         },
       });
       setClients(
@@ -202,6 +207,7 @@ function ClientManagement() {
                 billing: {
                   kind: formData.billingKind,
                   organization: formData.billingOrganization || undefined,
+                  invoiceEmail: formData.billingInvoiceEmail || undefined,
                   paymentTermsDays: formData.billingKind === "gouvernement" ? 180 : 0,
                   allowUnpaidOrders: formData.billingKind !== "standard",
                 },
@@ -677,6 +683,18 @@ function ClientManagement() {
                   className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#C5A065]/50 outline-none text-sm"
                   placeholder="Ex: Ville de la Vallée, Commission scolaire de Laval"
                 />
+                <label className="text-sm font-medium text-gray-700">
+                  Courriel de facturation (ville)
+                </label>
+                <input
+                  type="email"
+                  value={formData.billingInvoiceEmail}
+                  onChange={(e) =>
+                    handleInputChange("billingInvoiceEmail", e.target.value)
+                  }
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#C5A065]/50 outline-none text-sm"
+                  placeholder="comptes@ville.ca — reçoit la facture"
+                />
               </div>
             )}
             <p className="text-xs text-gray-500">
@@ -825,6 +843,18 @@ function ClientManagement() {
                   }
                   className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#C5A065]/50 outline-none text-sm"
                   placeholder="Ex: Ville de la Vallée, Commission scolaire de Laval"
+                />
+                <label className="text-sm font-medium text-gray-700">
+                  Courriel de facturation (ville)
+                </label>
+                <input
+                  type="email"
+                  value={formData.billingInvoiceEmail}
+                  onChange={(e) =>
+                    handleInputChange("billingInvoiceEmail", e.target.value)
+                  }
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#C5A065]/50 outline-none text-sm"
+                  placeholder="comptes@ville.ca — reçoit la facture"
                 />
               </div>
             )}

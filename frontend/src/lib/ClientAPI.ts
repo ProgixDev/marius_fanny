@@ -13,6 +13,7 @@ export interface Client {
   billing?: {
     kind: "standard" | "representant" | "gouvernement";
     organization?: string;
+    invoiceEmail?: string;
     paymentTermsDays: number;
     allowUnpaidOrders: boolean;
   };
@@ -39,6 +40,7 @@ export interface CreateClientData {
   billing?: {
     kind?: "standard" | "representant" | "gouvernement";
     organization?: string;
+    invoiceEmail?: string;
     paymentTermsDays?: number;
     allowUnpaidOrders?: boolean;
   };

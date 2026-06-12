@@ -24,7 +24,17 @@
       "Bash(echo \"=== exit: $? \\(rien au-dessus = compile OK\\) ===\")",
       "Bash(echo \"=== exit: $? \\(rien = build TS OK\\) ===\")",
       "Bash(echo \"=== FRONTEND exit: $? ===\")",
-      "Bash(echo \"=== FRONTEND exit: $? \\(rien = OK\\) ===\")"
+      "Bash(echo \"=== FRONTEND exit: $? \\(rien = OK\\) ===\")",
+      "Bash(ls -la \"c:\\\\Users\\\\Hp\\\\marius_fanny\\\\\")",
+      "Read(//c/Users/Hp/**)",
+      "Bash(echo \"=== frontend exit $? ===\")",
+      "Bash(grep -nE \"^\\\\s*\\(Mail|Send|Receipt|FileText|Mails\\),?\\\\s*$\" src/components/OrderManagement.tsx)",
+      "Bash(echo \"=== exit $? ===\")",
+      "Bash(sed -n '150,160p' components/SettingsManagement.tsx)",
+      "Bash(sed -n '36,46p' components/ImageUpload.tsx)",
+      "Bash(sed -n '238,247p' components/ProDashboard.tsx)",
+      "Bash(sed -n '370,378p' pages/DeliveryDashboard.tsx)",
+      "Bash(sed -n '455,463p' pages/DeliveryDashboard.tsx)"
     ]
   }
 }

@@ -10,6 +10,57 @@ import squareClient, { squareConfig } from "../config/square.js";
 import Order from "../models/Order.js";
 import { sendSms } from "../utils/smsService.js";
 import { sendInvoiceOrderConfirmation } from "../utils/mail.js";
+import { sendOrderReceipt } from "../utils/emailService.js";
+
+/**
+ * Send a payment-confirmation/receipt email exactly once for an order, after a
+ * Square payment completes. Without this, customers who paid via an SMS payment
+ * link never received any email (the SMS only carried the link, and the webhook
+ * marked the order paid without emailing). The atomic flag flip guards against
+ * duplicate/repeated webhooks sending the email twice.
+ */
+const sendPaidConfirmationOnce = async (orderId: any): Promise<void> => {
+  try {
+    const order = await Order.findOneAndUpdate(
+      { _id: orderId, paymentReceiptEmailSent: { $ne: true } },
+      { $set: { paymentReceiptEmailSent: true } },
+      { new: true },
+    );
+    if (!order || !order.clientInfo?.email) return;
+
+    await sendOrderReceipt("full", {
+      email: order.clientInfo.email,
+      name: `${order.clientInfo.firstName} ${order.clientInfo.lastName}`.trim(),
+      orderNumber: order.orderNumber,
+      items: (order.items || []).map((it: any) => ({
+        productName: it.productName,
+        quantity: it.quantity,
+        amount: it.amount ?? (it.unitPrice || 0) * (it.quantity || 1),
+      })),
+      subtotal: order.subtotal,
+      taxAmount: order.taxAmount,
+      deliveryFee: order.deliveryFee,
+      total: order.total,
+      paymentId: order.squarePaymentId || "square",
+      orderDate: order.orderDate,
+      pickupDate:
+        order.pickupDate ||
+        (order.deliveryDate ? new Date(order.deliveryDate) : undefined),
+      pickupTimeSlot: order.deliveryTimeSlot || undefined,
+      deliveryType: order.deliveryType,
+      clientNote: order.notes,
+      orderId: order._id.toString(),
+    });
+    console.log(
+      `✅ [WEBHOOK] Payment confirmation email sent to ${order.clientInfo.email} (${order.orderNumber})`,
+    );
+  } catch (e: any) {
+    console.error(
+      "⚠️ [WEBHOOK] Failed to send payment confirmation email:",
+      e?.message || e,
+    );
+  }
+};
 
 const isSquareUnauthorizedError = (statusCode?: number, errors?: any[]) => {
   if (statusCode === 401) return true;
@@ -1599,6 +1650,9 @@ export const squareWebhook = async (req: Request, res: Response) => {
 
             await order.save();
             console.log(`✅ [WEBHOOK] Order ${order.orderNumber} marked as PAID (invoice: ${invoiceId})`);
+            // Email a payment confirmation/receipt (covers SMS-link payers who
+            // otherwise never get any email). Idempotent — sent at most once.
+            await sendPaidConfirmationOnce(order._id);
           }
         } else {
           console.warn(`⚠️ [WEBHOOK] No order found for invoice ${invoiceId}`);
@@ -1632,6 +1686,7 @@ export const squareWebhook = async (req: Request, res: Response) => {
 
             await order.save();
             console.log(`✅ [WEBHOOK] Order ${order.orderNumber} marked as PAID (payment: ${paymentId})`);
+            await sendPaidConfirmationOnce(order._id);
           }
         }
       }

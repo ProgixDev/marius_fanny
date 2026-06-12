@@ -67,6 +67,8 @@ export interface IOrder extends Document {
   amountPaid: number; // Actual amount collected from client
   billingKind?: "standard" | "representant" | "gouvernement";
   billingOrganization?: string;
+  billingEmail?: string;
+  paymentReceiptEmailSent?: boolean;
   paymentDueDate?: Date;
   refunds?: Array<{
     refundedAt: Date;
@@ -366,6 +368,20 @@ const OrderSchema = new Schema<IOrder>(
     billingOrganization: {
       type: String,
       trim: true,
+    },
+    // For government clients: a 2nd email (e.g. the city's accounts-payable)
+    // that receives the INVOICE/facture, in addition to the contact who gets
+    // the order confirmation.
+    billingEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+    },
+    // Set once a payment-confirmation email has been sent for this order, so a
+    // duplicate/repeated Square webhook does not email the customer twice.
+    paymentReceiptEmailSent: {
+      type: Boolean,
+      default: false,
     },
     paymentDueDate: {
       type: Date,

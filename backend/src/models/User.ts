@@ -19,6 +19,7 @@ export interface IUser extends Document {
   billing?: {
     kind: "standard" | "representant" | "gouvernement";
     organization?: string;
+    invoiceEmail?: string;
     paymentTermsDays: number; // 0 = same day, 30 = net 30, etc.
     allowUnpaidOrders: boolean;
   };
@@ -86,6 +87,13 @@ const UserSchema = new Schema<IUser>(
       organization: {
         type: String,
         trim: true,
+      },
+      // For government clients: default 2nd email (city accounts-payable) that
+      // receives the invoice/facture. Can be overridden per order.
+      invoiceEmail: {
+        type: String,
+        trim: true,
+        lowercase: true,
       },
       paymentTermsDays: {
         type: Number,

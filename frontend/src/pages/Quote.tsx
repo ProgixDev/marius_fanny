@@ -187,7 +187,6 @@ export default function Quote() {
             <p className="text-lg font-bold text-green-800">Soumission acceptée !</p>
             <p className="text-sm text-green-700 mt-1">
               Votre commande {result.orderNumber ? `#${result.orderNumber.split("-").pop()}` : ""} a été créée.
-              L'équipe de Marius & Fanny vous contactera bientôt.
             </p>
             {result.paymentLinkSent && (
               <p className="text-sm text-green-700 mt-2 font-semibold">
@@ -198,8 +197,8 @@ export default function Quote() {
             {result.paymentLinkError && (
               <>
                 <p className="text-xs text-amber-700 mt-2">
-                  ⚠️ Le lien de paiement n'a pas pu être envoyé automatiquement —
-                  l'équipe vous contactera pour finaliser le paiement.
+                  ⚠️ Le lien de paiement n'a pas pu être envoyé automatiquement.
+                  Réessayez, ou contactez-nous pour finaliser le paiement.
                 </p>
                 <p className="text-[10px] text-amber-600 mt-1 font-mono">
                   Détail technique : {result.paymentLinkError}

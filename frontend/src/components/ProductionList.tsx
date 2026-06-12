@@ -12,6 +12,7 @@ import {
   List,
   ArrowUpDown
 } from "lucide-react";
+import { authHeaders } from "../utils/authHeaders";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -165,7 +166,7 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
         `${API_URL}/api/orders/production?date=${selectedDate}`,
         {
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
         }
       );
 
@@ -215,7 +216,7 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
       const response = await fetch(`${API_URL}/api/orders/production/status`, {
         method: "PATCH",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           productionItemId: item.id,
           date: selectedDate,
@@ -255,7 +256,7 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
         fetch(`${API_URL}/api/orders/production/status`, {
           method: "PATCH",
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           body: JSON.stringify({
             productionItemId: item.id,
             date: selectedDate,
@@ -291,7 +292,7 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
         fetch(`${API_URL}/api/orders/production/status`, {
           method: "PATCH",
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           body: JSON.stringify({
             productionItemId: item.id,
             date: selectedDate,

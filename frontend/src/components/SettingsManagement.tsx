@@ -18,6 +18,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
+import { authHeaders } from "../utils/authHeaders";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const normalizedApiUrl = API_URL.startsWith("http") ? API_URL : `https://${API_URL}`;
@@ -153,7 +154,7 @@ export default function SettingsManagement() {
     try {
       const res = await fetch(`${normalizedApiUrl}/api/settings`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         credentials: "include",
         body: JSON.stringify(settings),
       });

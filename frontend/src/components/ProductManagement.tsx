@@ -30,6 +30,7 @@ import type { Product, Category } from "../types";
 import { productAPI } from "../lib/ProductAPI";
 import { categoryAPI } from "../lib/CategoryAPI";
 import { getImageUrl, API_URL } from "../utils/api";
+import { bearerHeader } from "../utils/authHeaders";
 import {
   formatChoiceDisplay,
   formatChoiceForSaving,
@@ -162,7 +163,7 @@ export function ProductManagement() {
     try {
       const formData = new FormData();
       formData.append('image', file);
-      const res = await fetch(`${API_URL}/api/upload/single`, { method: 'POST', body: formData, credentials: 'include' });
+      const res = await fetch(`${API_URL}/api/upload/single`, { method: 'POST', headers: bearerHeader(), body: formData, credentials: 'include' });
       const data = await res.json();
       if (res.ok && data.url) {
         setProductForm(f => ({ ...f, images: [...f.images, getImageUrl(data.url)] }));

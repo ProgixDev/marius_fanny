@@ -15,6 +15,7 @@ export const userProfileSchema = z.object({
 export const billingSchema = z.object({
   kind: z.enum(["standard", "representant", "gouvernement"]).optional(),
   organization: z.string().max(120).optional(),
+  invoiceEmail: z.string().email().optional().or(z.literal("")),
   paymentTermsDays: z.number().int().min(0).max(365).optional(),
   allowUnpaidOrders: z.boolean().optional(),
 });

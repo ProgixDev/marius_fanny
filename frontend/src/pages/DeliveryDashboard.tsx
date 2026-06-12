@@ -14,6 +14,7 @@ import {
   Filter,
 } from "lucide-react";
 import { authClient, normalizedApiUrl } from "../lib/AuthClient";
+import { authHeaders } from "../utils/authHeaders";
 import { getSessionUniversal } from "../utils/getSession";
 import { Modal } from "@/components/ui/modal";
 
@@ -372,6 +373,7 @@ const DeliveryDashboard: React.FC = () => {
           const response = await fetch(
             `${normalizedApiUrl}/api/orders?limit=${limit}&page=${page}`,
             {
+              headers: authHeaders(),
               credentials: "include",
             },
           );
@@ -457,7 +459,7 @@ const DeliveryDashboard: React.FC = () => {
     try {
       const res = await fetch(`${normalizedApiUrl}/api/orders/${orderId}/delivery-status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         credentials: "include",
         body: JSON.stringify({ deliveryStatus: newStatus }),
       });

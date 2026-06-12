@@ -188,7 +188,7 @@ const WholesaleSection = () => {
                     <span className="text-[#337957]">Compte Pro</span>
                   </h2>
                   <p className="text-[#2D2A26]/70 leading-relaxed">
-                    Remplissez ce formulaire pour initier notre partenariat. Notre responsable commercial vous recontactera 
+                    Remplissez ce formulaire pour initier notre partenariat.
                   </p>
                 </div>
 

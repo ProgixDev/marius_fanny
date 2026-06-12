@@ -385,6 +385,11 @@ export const createOrder = async (
     // Billing privileges - look up from client email in all cases
     let billingKind: "standard" | "representant" | "gouvernement" | undefined;
     let billingOrganization: string | undefined;
+    // 2nd email for government clients (e.g. the city's accounts-payable) that
+    // receives the invoice/facture. Per-order value wins; else the client's
+    // saved billing.invoiceEmail is used.
+    let billingEmail: string | undefined =
+      ((orderData as any).billingEmail || "").trim().toLowerCase() || undefined;
     let paymentDueDate: Date | undefined;
 
     const orderEmail = (orderData.clientInfo?.email || "").trim().toLowerCase();
@@ -404,6 +409,9 @@ export const createOrder = async (
       if (billing) {
         billingKind = billing?.kind || orderData.billingKind || "standard";
         billingOrganization = billing?.organization || undefined;
+        if (!billingEmail) {
+          billingEmail = ((billing as any)?.invoiceEmail || "").trim().toLowerCase() || undefined;
+        }
         console.log("📋 [BILLING] Setting billingKind:", billingKind);
 
         const allowUnpaidOrders = !!billing?.allowUnpaidOrders;
@@ -561,6 +569,7 @@ export const createOrder = async (
       amountPaid: balancePaid ? total : depositPaid ? depositAmount : 0,
       billingKind,
       billingOrganization,
+      billingEmail,
       paymentDueDate,
       squarePaymentId: orderData.squarePaymentId,
       notes: orderData.notes,
@@ -866,7 +875,7 @@ export const createOrder = async (
               ? "deposit"
               : "full";
 
-        await sendOrderReceipt(receiptMode, {
+        const receiptPayload = {
           email: orderData.clientInfo.email,
           name: customerName,
           orderNumber: order.orderNumber,
@@ -888,11 +897,34 @@ export const createOrder = async (
           deliveryType: orderData.deliveryType,
           clientNote: orderData.notes,
           orderId: order._id.toString(),
-        });
+        };
+
+        await sendOrderReceipt(receiptMode, receiptPayload);
 
         console.log(
           `✅ Order receipt email (mode=${receiptMode}) sent to ${orderData.clientInfo.email}`,
         );
+
+        // Receipt already sent here → mark so a later Square payment webhook
+        // doesn't email a second receipt for the same order.
+        order.paymentReceiptEmailSent = true;
+        await order.save().catch(() => {});
+
+        // Government clients: also send the invoice/facture to the billing
+        // email (e.g. the city's accounts-payable), on top of the confirmation
+        // sent to the contact above.
+        const contactEmail = orderData.clientInfo.email.trim().toLowerCase();
+        if (isGovernment && billingEmail && billingEmail !== contactEmail) {
+          try {
+            await sendOrderReceipt("invoice", { ...receiptPayload, email: billingEmail });
+            console.log(`✅ Facture also sent to billing email ${billingEmail}`);
+          } catch (e: any) {
+            console.error(
+              `⚠️ Failed to send facture to billing email ${billingEmail}:`,
+              e?.message || e,
+            );
+          }
+        }
       }
     } catch (emailError: any) {
       // Log email error but don't fail the order creation

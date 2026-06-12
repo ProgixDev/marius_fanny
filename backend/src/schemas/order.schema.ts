@@ -76,6 +76,7 @@ export const createOrderSchema = z
     depositPaid: z.boolean().optional().default(false),
     squarePaymentId: z.string().optional(),
     billingKind: z.enum(["standard", "representant", "gouvernement"]).optional(),
+    billingEmail: z.string().email().optional().or(z.literal("")),
   })
   .refine(
     (data) => {

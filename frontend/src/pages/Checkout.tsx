@@ -10,6 +10,7 @@ import { productAPI } from "../lib/ProductAPI";
 import { promoAPI } from "../lib/PromoAPI";
 import { clearCart } from "../utils/cartPersistence";
 import { getErrorMessage } from "../utils/errorMessage";
+import { authHeaders } from "../utils/authHeaders";
 import { useSettings } from "../lib/SettingsContext";
 
 interface CartItem {
@@ -331,6 +332,7 @@ const Checkout: React.FC = () => {
           "👤 [CHECKOUT] Loading user data for contact information...",
         );
         const response = await fetch(`${normalizedApiUrl}/api/users/me`, {
+          headers: authHeaders(),
           credentials: "include",
         });
 
@@ -593,7 +595,7 @@ const Checkout: React.FC = () => {
 
         const response = await fetch(`${normalizedApiUrl}/api/pro-orders`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           credentials: "include",
           body: JSON.stringify(proOrderData),
         });
@@ -698,9 +700,7 @@ const Checkout: React.FC = () => {
 
       const response = await fetch(`${normalizedApiUrl}/api/orders`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: authHeaders(),
         credentials: "include",
         body: JSON.stringify(orderData),
       });
