@@ -1092,9 +1092,9 @@ export async function sendInvoiceOrderConfirmation(
           <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center; color: #555;">
             ${item.quantity}
           </td>
-          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; color: #555;">
+          ${hideBreakdown ? "" : `<td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; color: #555;">
             ${item.amount.toFixed(2)}$
-          </td>
+          </td>`}
         </tr>
       `
       )
@@ -1126,13 +1126,14 @@ export async function sendInvoiceOrderConfirmation(
         </div>`
       : "";
 
-    // The detailed tax breakdown (Sous-total / TPS / TVQ / numéros de taxes /
-    // Livraison) is the "facture". It's shown ONLY when this email IS the
-    // facture (e.g. the government billing copy). The plain confirmation keeps
-    // just the Total below, so the contact sees the amount without the invoice.
-    const factureBreakdown = hideBreakdown
+    // The whole price section (tax breakdown + Total) = the "facture". Hidden
+    // entirely for a plain confirmation (hideBreakdown=true, e.g. the gov
+    // contact email) → products + date only, no prices, no total. The amount
+    // lives only on the facture (the city's billing copy).
+    const totalsSection = hideBreakdown
       ? ""
       : `
+            <div style="text-align: right; margin-top: 20px;">
               <p style="color: #555; margin: 5px 0;">
                 <span style="display: inline-block; width: 150px;">Sous-total:</span>
                 <strong>${subtotal.toFixed(2)}$</strong>
@@ -1149,7 +1150,12 @@ export async function sendInvoiceOrderConfirmation(
                 <span style="display: inline-block; width: 150px;">&nbsp;</span>
                 TPS: 144652641RT001 &nbsp;&nbsp; TVQ: 1201862732TQ0001
               </p>
-              ${deliveryFee > 0 ? `<p style="color: #555; margin: 5px 0;"><span style="display: inline-block; width: 150px;">Livraison:</span><strong>${deliveryFee.toFixed(2)}$</strong></p>` : ""}`;
+              ${deliveryFee > 0 ? `<p style="color: #555; margin: 5px 0;"><span style="display: inline-block; width: 150px;">Livraison:</span><strong>${deliveryFee.toFixed(2)}$</strong></p>` : ""}
+              <p style="color: #C5A065; font-size: 20px; margin: 15px 0 0 0; padding-top: 10px; border-top: 2px solid #C5A065;">
+                <span style="display: inline-block; width: 150px;">Total:</span>
+                <strong>${total.toFixed(2)}$</strong>
+              </p>
+            </div>`;
 
     const mailOptions = {
       from: DISPLAY_FROM,
@@ -1196,7 +1202,7 @@ export async function sendInvoiceOrderConfirmation(
                 <tr style="background-color: #F9F7F2;">
                   <th style="padding: 10px; text-align: left; color: #2D2A26;">Produit</th>
                   <th style="padding: 10px; text-align: center; color: #2D2A26;">Qté</th>
-                  <th style="padding: 10px; text-align: right; color: #2D2A26;">Prix</th>
+                  ${hideBreakdown ? "" : `<th style="padding: 10px; text-align: right; color: #2D2A26;">Prix</th>`}
                 </tr>
               </thead>
               <tbody>
@@ -1204,13 +1210,7 @@ export async function sendInvoiceOrderConfirmation(
               </tbody>
             </table>
 
-            <div style="text-align: right; margin-top: 20px;">
-              ${factureBreakdown}
-              <p style="color: #C5A065; font-size: 20px; margin: 15px 0 0 0; padding-top: 10px; border-top: 2px solid #C5A065;">
-                <span style="display: inline-block; width: 150px;">Total:</span>
-                <strong>${total.toFixed(2)}$</strong>
-              </p>
-            </div>
+            ${totalsSection}
 
             ${invoiceUrl ? `
             <div style="background-color: #E3F2FD; padding: 15px; border-radius: 8px; margin-top: 30px; border-left: 4px solid #2196F3;">
