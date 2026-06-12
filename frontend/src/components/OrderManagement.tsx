@@ -319,6 +319,7 @@ export function OrderManagement() {
               refunds: o.refunds || undefined,
               billingKind: o.billingKind,
               billingOrganization: o.billingOrganization,
+              billingEmail: o.billingEmail,
               paymentDueDate: o.paymentDueDate,
               status: o.status || "pending",
               source: mappedSource,
@@ -1512,6 +1513,42 @@ export function OrderManagement() {
 
   // Resend the invoice / payment link to a client who hasn't paid yet.
   const handleResendInvoice = async (order: OrderWithPacking) => {
+    // Government orders: the facture goes to the BILLING email (the city's
+    // accounts-payable / 2nd address), NOT the contact.
+    if (order.billingKind === "gouvernement") {
+      const billingDest = (order.billingEmail || "").trim();
+      if (!billingDest) {
+        alert(
+          "Aucun courriel de facturation (ville) n'est défini sur cette commande. Ajoute-le dans la fiche client ou la commande.",
+        );
+        return;
+      }
+      if (
+        !window.confirm(
+          `Renvoyer la facture de la commande ${formatOrderNumber(order.orderNumber)} à ${billingDest} (ville) ?`,
+        )
+      ) {
+        return;
+      }
+      try {
+        const response = await fetch(`${normalizedApiUrl}/api/payments/resend-facture`, {
+          method: "POST",
+          headers: authHeaders(),
+          credentials: "include",
+          body: JSON.stringify({ orderId: order.id }),
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || "Échec de l'envoi de la facture");
+        }
+        alert(`✅ Facture renvoyée à ${result.data?.email || billingDest}.`);
+      } catch (err) {
+        alert(`Erreur lors de l'envoi de la facture : ${getErrorMessage(err)}`);
+      }
+      return;
+    }
+
+    // Non-government: resend the Square payment link to the contact.
     const channel = order.paymentLinkChannel || "email";
     const dest = channel === "sms" ? order.client.phone : order.client.email;
     if (!dest) {

@@ -159,6 +159,7 @@ export interface Order {
   paymentLinkChannel?: "email" | "sms";
   billingKind?: "standard" | "representant" | "gouvernement";
   billingOrganization?: string;
+  billingEmail?: string;
   paymentDueDate?: string;
   squarePaymentId?: string;
   squareInvoiceId?: string;

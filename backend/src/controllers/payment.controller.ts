@@ -1288,6 +1288,66 @@ export const reconcileOrderRefund = async (req: Request, res: Response) => {
 };
 
 /**
+ * Resend the FACTURE for a government order to its billing email (the city's
+ * accounts-payable, i.e. the 2nd address), NOT the contact. Used by the
+ * "Renvoyer la facture" button for government clients.
+ * POST /api/payments/resend-facture
+ */
+export const resendGovFacture = async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.body as { orderId: string };
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, error: "Commande non trouvee" });
+    }
+    if (order.billingKind !== "gouvernement") {
+      return res
+        .status(400)
+        .json({ success: false, error: "Cette commande n'est pas gouvernementale." });
+    }
+    const dest = (order.billingEmail || "").trim();
+    if (!dest) {
+      return res.status(400).json({
+        success: false,
+        error: "Aucun courriel de facturation (ville) n'est défini sur cette commande.",
+      });
+    }
+
+    await sendInvoiceOrderConfirmation(
+      dest,
+      `${order.clientInfo.firstName} ${order.clientInfo.lastName}`.trim(),
+      order.orderNumber,
+      (order.items || []).map((it: any) => ({
+        productName: it.productName,
+        quantity: it.quantity,
+        amount: it.amount ?? (it.unitPrice || 0) * (it.quantity || 1),
+      })),
+      order.subtotal,
+      order.taxAmount,
+      order.deliveryFee,
+      order.total,
+      undefined,
+      order.orderDate,
+      order.pickupDate ||
+        (order.deliveryDate ? new Date(order.deliveryDate) : undefined),
+      order.deliveryTimeSlot || undefined,
+      order.deliveryType,
+      order.notes,
+      order._id.toString(),
+      true, // asFacture
+    );
+
+    res.json({ success: true, data: { email: dest } });
+  } catch (error: any) {
+    console.error("❌ [RESEND-FACTURE] Error:", error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || "Erreur lors de l'envoi de la facture",
+    });
+  }
+};
+
+/**
  * Record an in-store refund (cash / debit returned at the counter).
  * No Square call — this is purely bookkeeping.
  * POST /api/payments/refund-order-in-store
