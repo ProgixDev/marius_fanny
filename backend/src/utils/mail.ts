@@ -1230,7 +1230,7 @@ export async function sendInvoiceOrderConfirmation(
             </div>
             ` : ""}
 
-            ${buildInvoiceDownloadSection(orderId)}
+            ${hideBreakdown ? "" : buildInvoiceDownloadSection(orderId)}
 
             ${buildClientNoteSection(clientNote)}
 
