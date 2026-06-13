@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Plus, Trash2, Check, ChevronsUpDown, Package, StickyNote, Lock } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -651,7 +651,22 @@ export default function OrderForm({
       ...prev,
       items: [...prev.items, newItem],
     }));
+    // Sur tablette, la nouvelle ligne apparaît plus bas, hors écran : on la
+    // marque pour défiler automatiquement dessus et confirmer visuellement
+    // l'ajout (sinon l'utilisatrice reclique sans voir que l'item est ajouté).
+    setJustAddedItemId(newItem.id);
   };
+
+  // Ref vers la dernière ligne ajoutée + défilement auto vers elle.
+  const justAddedRowRef = useRef<HTMLTableRowElement | null>(null);
+  const [justAddedItemId, setJustAddedItemId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!justAddedItemId) return;
+    justAddedRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // On retire le surlignage « flash » après quelques secondes.
+    const t = setTimeout(() => setJustAddedItemId(null), 2500);
+    return () => clearTimeout(t);
+  }, [justAddedItemId]);
 
   // Delivery/pickup time slots — matches the public Checkout page so admins
   // pick from the same options customers see.
@@ -1986,11 +2001,14 @@ export default function OrderForm({
 
                 return (
                   <React.Fragment key={item.id}>
-                    <TableRow className={`align-top ${item.isCustom ? "bg-purple-50" : ""}`}>
+                    <TableRow
+                      ref={item.id === justAddedItemId ? justAddedRowRef : undefined}
+                      className={`align-top ${item.isCustom ? "bg-purple-200 border-l-4 border-l-purple-600 ring-2 ring-inset ring-purple-400" : ""} ${item.id === justAddedItemId ? "animate-pulse ring-2 ring-inset ring-purple-600" : ""}`}
+                    >
                       <TableCell className="align-top pt-3">
                         {item.isCustom ? (
                           <div className="space-y-1">
-                            <div className="text-[10px] font-semibold text-purple-700 uppercase mb-1">Item personnalisé</div>
+                            <div className="inline-flex items-center gap-1 text-xs font-bold text-white bg-purple-600 rounded px-2 py-0.5 uppercase mb-1">Item personnalisé</div>
                             <Input
                               type="text"
                               placeholder="Nom de l'item..."

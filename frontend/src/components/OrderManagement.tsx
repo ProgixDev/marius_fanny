@@ -1221,17 +1221,34 @@ export function OrderManagement() {
       hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Montreal",
     });
     const clientName = `${order.client.firstName} ${order.client.lastName}`;
-    const items = order.items.map((item) => {
+    // Auto-shrink: plus la commande a de lignes, plus on rapetisse le texte
+    // pour qu'une longue liste tienne sur UNE seule étiquette 4×6 au lieu de
+    // déborder sur une 2e. On compte chaque item + ses lignes options/notes.
+    const parsedItems = order.items.map((item) => {
       const name = item.product?.name || `Produit #${item.productId}`;
       const options = item.selectedOptions
         ? Object.entries(item.selectedOptions).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(", ")
         : "";
       const notes = item.notes || "";
+      return { name, options, notes, quantity: item.quantity };
+    });
+    const lineCount = parsedItems.reduce(
+      (n, it) => n + 1 + (it.options ? 1 : 0) + (it.notes ? 1 : 0),
+      0,
+    );
+    // Paliers de police : { nom, sous-ligne (options/notes), padding vertical } en px
+    const density =
+      lineCount <= 8 ? { name: 16, sub: 14, pad: 5 }
+      : lineCount <= 14 ? { name: 14, sub: 12, pad: 3 }
+      : lineCount <= 20 ? { name: 12, sub: 11, pad: 2 }
+      : { name: 11, sub: 10, pad: 1 };
+
+    const items = parsedItems.map((it) => {
       return `<tr>
-        <td style="padding:5px 0;font-size:16px;border-bottom:1px dashed #ccc;">${name} <strong>x${item.quantity}</strong></td>
+        <td style="padding:${density.pad}px 0;font-size:${density.name}px;border-bottom:1px dashed #ccc;">${it.name} <strong>x${it.quantity}</strong></td>
       </tr>
-      ${options ? `<tr><td style="padding:2px 0 5px 10px;font-size:14px;color:#333;">${options}</td></tr>` : ""}
-      ${notes ? `<tr><td style="padding:2px 0 5px 10px;font-size:14px;color:#000;font-weight:bold;">${notes}</td></tr>` : ""}`;
+      ${it.options ? `<tr><td style="padding:1px 0 ${density.pad}px 10px;font-size:${density.sub}px;color:#333;">${it.options}</td></tr>` : ""}
+      ${it.notes ? `<tr><td style="padding:1px 0 ${density.pad}px 10px;font-size:${density.sub}px;color:#000;font-weight:bold;">${it.notes}</td></tr>` : ""}`;
     }).join("");
 
     const allergies = order.items
@@ -3770,7 +3787,6 @@ export function OrderManagement() {
                 value={refundEmployeeName}
                 onChange={(e) => setRefundEmployeeName(e.target.value)}
                 className="mt-1"
-                autoFocus
               />
               {!refundEmployeeName.trim() && (
                 <p className="text-xs text-red-500 mt-1">
@@ -3909,7 +3925,6 @@ export function OrderManagement() {
                   onChange={(e) => setBalanceRefundEmployee(e.target.value)}
                   placeholder="Entrez votre nom"
                   className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none text-sm"
-                  autoFocus
                 />
               </div>
 
@@ -4013,7 +4028,6 @@ export function OrderManagement() {
                 onChange={(e) => setStoreRefundEmployee(e.target.value)}
                 placeholder="Entrez votre nom"
                 className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none text-sm"
-                autoFocus
               />
             </div>
 
