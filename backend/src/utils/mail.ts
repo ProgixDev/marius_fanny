@@ -63,6 +63,18 @@ const buildCancellationPolicySection = () => `
   </div>
 `;
 
+// Réclamations notice — shown on every order confirmation (site + admin).
+const buildClaimPolicySection = () => `
+  <div style="background-color: #FDECEA; padding: 16px 20px; border-radius: 8px; margin-top: 24px; border-left: 4px solid #D9534F;">
+    <p style="color: #2D2A26; margin: 0 0 8px 0; font-weight: bold; font-size: 14px;">
+      ⚠️ Réclamations
+    </p>
+    <p style="color: #555; margin: 0; font-size: 14px; line-height: 1.6;">
+      Toute réclamation doit être faite dans les 48 h et l'item concerné, même entamé, doit nous être rapporté.
+    </p>
+  </div>
+`;
+
 const buildGoogleReviewSection = () => `
   <div style="background-color: #FFF8E7; padding: 18px; border-radius: 8px; margin-top: 24px; border-left: 4px solid #C5A065; text-align: center;">
     <p style="color: #2D2A26; margin: 0; font-weight: bold;">
@@ -836,7 +848,7 @@ export async function sendFullPaymentReceipt(
 
             <div style="background-color: #E8F5E9; padding: 15px; border-radius: 8px; margin-top: 30px; border-left: 4px solid #4CAF50;">
               <p style="color: #2D7D32; margin: 0; font-weight: bold;">
-                💚 Paiement complet effectué
+                Paiement complet effectué
               </p>
               <p style="color: #555; margin: 5px 0 0 0; font-size: 14px;">
                 Votre commande est maintenant en cours de préparation.
@@ -846,6 +858,8 @@ export async function sendFullPaymentReceipt(
             ${buildInvoiceDownloadSection(orderId)}
 
             ${buildClientNoteSection(clientNote)}
+
+            ${buildClaimPolicySection()}
 
             ${buildCancellationPolicySection()}
 
@@ -1038,6 +1052,8 @@ export async function sendDepositReceipt(
             ${buildInvoiceDownloadSection(orderId)}
 
             ${buildClientNoteSection(clientNote)}
+
+            ${buildClaimPolicySection()}
 
             ${buildCancellationPolicySection()}
 
@@ -1236,6 +1252,8 @@ export async function sendInvoiceOrderConfirmation(
             ${hideBreakdown ? "" : buildInvoiceDownloadSection(orderId)}
 
             ${buildClientNoteSection(clientNote)}
+
+            ${buildClaimPolicySection()}
 
             ${buildCancellationPolicySection()}
 

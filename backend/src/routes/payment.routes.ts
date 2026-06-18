@@ -56,11 +56,11 @@ router.get("/:paymentId", getPayment);
 router.get("/list", validateQuery(listPaymentsSchema), listPayments);
 
 // Refund a payment
-router.post("/refund", requireAuth, requireAdmin, validateBody(refundPaymentSchema), refundPayment);
+router.post("/refund", requireAuth, requireRole("admin", "vendeur"), validateBody(refundPaymentSchema), refundPayment);
 router.post(
   "/refund-order",
   requireAuth,
-  requireAdmin,
+  requireRole("admin", "vendeur"),
   validateBody(refundOrderSchema),
   refundOrderPayment,
 );
@@ -69,7 +69,7 @@ router.post(
 router.post(
   "/reconcile-refund",
   requireAuth,
-  requireAdmin,
+  requireRole("admin", "vendeur"),
   reconcileOrderRefund,
 );
 
@@ -85,7 +85,7 @@ router.post(
 router.post(
   "/refund-balance",
   requireAuth,
-  requireAdmin,
+  requireRole("admin", "vendeur"),
   refundBalance,
 );
 
@@ -93,7 +93,7 @@ router.post(
 router.post(
   "/refund-order-in-store",
   requireAuth,
-  requireAdmin,
+  requireRole("admin", "vendeur"),
   refundOrderInStore,
 );
 

@@ -97,7 +97,6 @@ export function StaffLayout({ children, user, onLogout }: StaffLayoutProps) {
           </Button>
         </div>
       </aside>
-ww
       {/* Main Content */}
       <main className="flex-1 overflow-auto flex flex-col">
         <div className="md:hidden bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-4 sticky top-0 z-30">
