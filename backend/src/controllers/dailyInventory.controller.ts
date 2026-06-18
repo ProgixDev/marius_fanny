@@ -2,8 +2,44 @@ import { Request, Response } from "express";
 import type { ApiResponse } from "../types/api.js";
 import { DailyInventory } from "../models/DailyInventory.js";
 import Order from "../models/Order.js";
-import { computeInventoryBuckets } from "../utils/inventoryBuckets.js";
+import {
+  computeInventoryBuckets,
+  JOURNALIER_PRODUCTS,
+  FOUR_PRODUCTS,
+} from "../utils/inventoryBuckets.js";
 import type { SaveDailyInventoryInput } from "../schemas/dailyInventory.schema.js";
+
+// Sentinel "dates" under which the editable product lists are persisted (set by
+// the InventaireJournalier / InventaireFour screens). Kept in sync with
+// PRODUCTS_SENTINEL_KEY in those frontend components.
+const JOURNALIER_LIST_KEY = "__products_config_daily";
+const FOUR_LIST_KEY = "__products_config_four";
+
+/**
+ * Load the LIVE editable product lists (the names Fanny maintains on screen).
+ * Falls back to the hardcoded defaults when a list hasn't been saved yet, so
+ * matching keeps working on a fresh database. Shared by the order-creation
+ * inventory update and the CLIENT-column recompute so both bucket identically.
+ */
+export async function loadInventoryLists(): Promise<{
+  journalier: string[];
+  four: string[];
+}> {
+  const [dailyCfg, fourCfg] = await Promise.all([
+    DailyInventory.findOne({ date: JOURNALIER_LIST_KEY }).lean(),
+    DailyInventory.findOne({ date: FOUR_LIST_KEY }).lean(),
+  ]);
+  const namesOf = (rec: any, fallback: string[]): string[] => {
+    const names = (rec?.entries ?? [])
+      .map((e: any) => e?.productName)
+      .filter((n: any): n is string => typeof n === "string" && n.trim().length > 0);
+    return names.length > 0 ? names : fallback;
+  };
+  return {
+    journalier: namesOf(dailyCfg, JOURNALIER_PRODUCTS),
+    four: namesOf(fourCfg, FOUR_PRODUCTS),
+  };
+}
 
 /**
  * GET /daily-inventory?date=YYYY-MM-DD
@@ -81,7 +117,9 @@ export const getInventoryComputedClient = async (
     }
   }
 
-  const { journalierQty, fourQty } = computeInventoryBuckets(items);
+  // Bucket against the LIVE editable lists so renamed rows catch their orders.
+  const { journalier: journalierList, four: fourList } = await loadInventoryLists();
+  const { journalierQty, fourQty } = computeInventoryBuckets(items, journalierList, fourList);
 
   res.json({
     success: true,

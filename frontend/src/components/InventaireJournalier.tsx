@@ -12,7 +12,8 @@ import {
   Info,
   Trash2,
   Plus,
-  Printer
+  Printer,
+  Pencil
 } from "lucide-react";
 import {
   dailyInventoryAPI,
@@ -140,6 +141,8 @@ export default function InventaireJournalier() {
     return migrateNames(saved ? JSON.parse(saved) : PRODUITS_PAR_DEFAUT);
   });
   const [newProductName, setNewProductName] = useState("");
+  // Inline rename: productId of the row currently being edited (null = none).
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
   // Clé sentinelle dans MongoDB pour persister la liste cross-appareils
   const PRODUCTS_SENTINEL_KEY = "__products_config_daily";
@@ -224,6 +227,29 @@ export default function InventaireJournalier() {
       saveProductsToBackend(updatedList);
       setToast({ type: "success", msg: `Produit "${name}" retiré.` });
     }
+  };
+
+  // ── Renommer un produit (pour matcher le nom exact du site) ──
+  // La liste éditable est la référence du matching côté serveur : renommer une
+  // ligne pour qu'elle corresponde au produit du site fait tomber les commandes
+  // sur CETTE ligne. Le nouveau nom est persisté (localStorage + backend).
+  const handleRenameProduct = (oldName: string, rawNewName: string) => {
+    const newName = rawNewName.trim();
+    setEditingProductId(null);
+    if (!newName || newName === oldName) return;
+    if (!customProducts.includes(oldName)) {
+      setToast({ type: "error", msg: "Cette ligne (historique) ne peut pas être renommée." });
+      return;
+    }
+    if (customProducts.includes(newName)) {
+      setToast({ type: "error", msg: "Ce nom existe déjà dans la liste." });
+      return;
+    }
+    const updatedList = customProducts.map((p) => (p === oldName ? newName : p));
+    setCustomProducts(updatedList);
+    localStorage.setItem("inventaire_produits_personnalises", JSON.stringify(updatedList));
+    saveProductsToBackend(updatedList);
+    setToast({ type: "success", msg: `Renommé en "${newName}" et sauvegardé.` });
   };
 
   // ── build / reload rows whenever date or products change ──
@@ -552,14 +578,37 @@ export default function InventaireJournalier() {
                           <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ background: gold }}>
                             {idx + 1}
                           </span>
-                          <span className="truncate">{row.productName}</span>
-                          <button
-                            onClick={() => handleRemoveProduct(row.productId)}
-                            className="text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                            title="Retirer de la liste"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {editingProductId === row.productId ? (
+                            <input
+                              type="text"
+                              autoFocus
+                              defaultValue={row.productName}
+                              onBlur={(e) => handleRenameProduct(row.productId, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                if (e.key === "Escape") setEditingProductId(null);
+                              }}
+                              className="flex-1 min-w-0 px-2 py-1 text-sm rounded-lg border border-[#C5A065] focus:outline-none focus:ring-2 focus:ring-[#C5A065]/20"
+                            />
+                          ) : (
+                            <>
+                              <span className="truncate">{row.productName}</span>
+                              <button
+                                onClick={() => setEditingProductId(row.productId)}
+                                className="text-stone-300 hover:text-[#C5A065] opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                title="Renommer (pour matcher le nom du site)"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleRemoveProduct(row.productId)}
+                                className="text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                title="Retirer de la liste"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
 

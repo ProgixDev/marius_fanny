@@ -1264,17 +1264,17 @@ export function OrderManagement() {
       ? `<div style="margin-top:10px;padding:8px;border:3px solid #000;font-size:16px;font-weight:900;text-align:center;">ALLERGIE: ${allergies.join(", ")}</div>`
       : "";
 
-    // Header is `position: sticky` so the order number, name and date repeat
-    // at the top of EVERY physical 4×6 sticker when one logical order
-    // overflows to a second label (long carts). Items now flow naturally —
-    // no more absolute bottom-positioned order number disappearing under
-    // overflowed content, no more stacking onto the next order's sticker.
+    // Header is `position: sticky` so the name + date repeat at the top of
+    // EVERY physical 4×6 sticker when one logical order overflows to a second
+    // label (long carts). The order number sits in a bottom footer (`.label-footer`)
+    // — per Fanny's request, "comme avant", the big # is at the bottom of each
+    // order. It flows after the items (not absolute-positioned), so it can't be
+    // hidden under overflowed content like the old version was.
     return `
       <div class="label">
         <div class="label-header">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
             <img src="${imgSrc}" alt="Marius & Fanny" style="height:36px;" />
-            <div style="font-size:34px;font-weight:900;letter-spacing:2px;">#${shortNumber}</div>
           </div>
           <div style="font-size:14px;font-weight:bold;">${date} — ${time}</div>
           <div style="font-size:18px;font-weight:900;">${clientName}</div>
@@ -1288,6 +1288,7 @@ export function OrderManagement() {
         </div>
         <table style="width:100%;border-collapse:collapse;">${items}</table>
         ${allergyHtml}
+        <div class="label-footer" style="text-align:center;margin-top:12px;padding-top:8px;border-top:2px solid #000;font-size:34px;font-weight:900;letter-spacing:2px;">#${shortNumber}</div>
       </div>`;
   };
 

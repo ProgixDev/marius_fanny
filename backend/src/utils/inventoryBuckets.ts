@@ -88,8 +88,18 @@ export interface InventoryItem {
 /**
  * Bucket order items into Journalier vs Frais (four) quantities, keyed by the
  * canonical sheet name. Frais wins on ambiguous matches.
+ *
+ * `journalierList` / `fourList` default to the hardcoded constants, but callers
+ * pass in the LIVE editable lists (the names Fanny maintains in the inventory
+ * screens, persisted in the `__products_config_*` sentinels). That way, when
+ * she renames a row to match the site's product name, order quantities land on
+ * THAT row — no more orphan rows appearing at the bottom of the sheet.
  */
-export function computeInventoryBuckets(items: InventoryItem[]): {
+export function computeInventoryBuckets(
+  items: InventoryItem[],
+  journalierList: string[] = JOURNALIER_PRODUCTS,
+  fourList: string[] = FOUR_PRODUCTS,
+): {
   journalierQty: Record<string, number>;
   fourQty: Record<string, number>;
 } {
@@ -104,11 +114,11 @@ export function computeInventoryBuckets(items: InventoryItem[]): {
     const productName = pizzaAliasSet.has(normalizeProductName(rawName))
       ? "Pizza"
       : rawName;
-    if (matchesList(productName, FOUR_PRODUCTS)) {
-      const name = canonicalName(productName, FOUR_PRODUCTS) || productName;
+    if (matchesList(productName, fourList)) {
+      const name = canonicalName(productName, fourList) || productName;
       fourQty[name] = (fourQty[name] || 0) + qty;
-    } else if (matchesList(productName, JOURNALIER_PRODUCTS)) {
-      const name = canonicalName(productName, JOURNALIER_PRODUCTS) || productName;
+    } else if (matchesList(productName, journalierList)) {
+      const name = canonicalName(productName, journalierList) || productName;
       journalierQty[name] = (journalierQty[name] || 0) + qty;
     }
     // else: custom/untracked product — not part of either feuille.

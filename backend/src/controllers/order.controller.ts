@@ -4,6 +4,7 @@ import { Product } from "../models/Product.js";
 import { ProductionItemStatus } from "../models/ProductionItemStatus.js";
 import { DailyInventory } from "../models/DailyInventory.js";
 import { computeInventoryBuckets } from "../utils/inventoryBuckets.js";
+import { loadInventoryLists } from "./dailyInventory.controller.js";
 import { User } from "../models/User.js";
 import { PromoCode } from "../models/PromoCode.js";
 import { PromoRedemption } from "../models/PromoRedemption.js";
@@ -778,10 +779,16 @@ export const createOrder = async (
           .join("")
           .trim();
 
-      // Bucket order items onto the Journalier / Frais rows. The product lists
-      // and matching logic live in ../utils/inventoryBuckets.ts (single source
-      // of truth, shared with the inventory recompute endpoint).
-      const { journalierQty, fourQty } = computeInventoryBuckets(orderData.items);
+      // Bucket order items onto the Journalier / Frais rows. The matching logic
+      // lives in ../utils/inventoryBuckets.ts and runs against the LIVE editable
+      // lists (the names Fanny maintains on the inventory screens) so a renamed
+      // row catches its orders instead of spawning an orphan row.
+      const { journalier: journalierList, four: fourList } = await loadInventoryLists();
+      const { journalierQty, fourQty } = computeInventoryBuckets(
+        orderData.items,
+        journalierList,
+        fourList,
+      );
 
       // Apply a bucket of {productName: qty} to the inventory doc at dateKey,
       // either updating an existing entry's client column or creating one.
