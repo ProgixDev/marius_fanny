@@ -13,6 +13,7 @@ export interface DailyInventoryEntry {
   berri: number;
   comm_berri: number;
   client: number;
+  clientManual?: number;
   total: number;
 }
 

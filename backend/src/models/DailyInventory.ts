@@ -7,7 +7,8 @@ export interface IDailyInventoryEntry {
   stdo: number | string;       // Comm. St-do
   berri: number | string;      // BERRI
   comm_berri: number | string; // Comm Berri
-  client: number | string;     // Comm CLIENT
+  client: number | string;     // Comm CLIENT — affiché = auto (commandes) + clientManual
+  clientManual?: number;       // ajout manuel de Fanny (delta au-dessus du calcul auto)
   total: number | string;      // auto-calculated: stdo + client only
 }
 
@@ -29,6 +30,7 @@ const DailyInventoryEntrySchema = new Schema<IDailyInventoryEntry>(
     berri: { type: Schema.Types.Mixed, default: 0 },
     comm_berri: { type: Schema.Types.Mixed, default: 0 },
     client: { type: Schema.Types.Mixed, default: 0 },
+    clientManual: { type: Number, default: 0 },
     total: { type: Schema.Types.Mixed, default: 0 },
   },
   { _id: false },

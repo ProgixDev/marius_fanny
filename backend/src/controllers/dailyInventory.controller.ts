@@ -160,6 +160,9 @@ export const saveDailyInventory = async (
     berri: normalize(entry.berri),
     comm_berri: normalize(entry.comm_berri),
     client: normalize(entry.client),
+    // Ajout manuel de Fanny (delta au-dessus du calcul auto). Peut être négatif
+    // (si elle saisit un total inférieur au compte auto) → pas de clamp à 0.
+    clientManual: Number(entry.clientManual) || 0,
     total: isFourInventory
       ? numOnly(entry.stdo) + numOnly(entry.comm_berri) + numOnly(entry.client)
       : numOnly(entry.stdo) + numOnly(entry.client),

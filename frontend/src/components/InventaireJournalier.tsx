@@ -70,6 +70,11 @@ function todayISO(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+// Valeur numérique sûre (les lignes SUPPLÉMENT stockent des chaînes).
+function numOf(v: any): number {
+  return typeof v === "number" ? v : 0;
+}
+
 function calcTotal(e: RowState): number {
   // Total = stdo + client only (addition entre Comm. St-do et Comm CLIENT)
   // Les autres colonnes (stock_stdo, berri, comm_berri) sont stockées mais pas incluses dans le total
@@ -87,7 +92,8 @@ interface RowState {
   stdo: number;
   berri: number;
   comm_berri: number;
-  client: number;
+  client: number;      // Comm CLIENT affiché = clientAuto + ajout manuel
+  clientAuto: number;  // part calculée automatiquement depuis les commandes
 }
 
 function hasInventoryValue(entry?: Partial<DailyInventoryEntry> | null): boolean {
@@ -272,8 +278,23 @@ export default function InventaireJournalier() {
       } catch {
         computedClient = null;
       }
-      const clientFor = (name: string, stored: number) =>
-        computedClient ? (computedClient[name] ?? 0) : stored;
+      // Comm CLIENT = part AUTO (commandes du jour) + AJOUT MANUEL de Fanny.
+      //  - en ligne : auto = computedClient[name], manuel = saved.clientManual
+      //  - hors ligne (recompute indispo) : on reconstitue l'auto depuis le
+      //    dernier enregistrement (client - clientManual) pour ne pas perdre
+      //    l'ajout manuel ni double-compter au prochain chargement en ligne.
+      const isSupp = (n: string) => (n || "").toLowerCase().includes("suppl");
+      const resolveClient = (name: string, saved?: DailyInventoryEntry) => {
+        if (isSupp(name)) {
+          // Ligne SUPPLÉMENT : texte libre, aucun calcul auto.
+          return { clientAuto: 0, client: (saved?.client as any) ?? 0 };
+        }
+        const manual = numOf(saved?.clientManual);
+        const clientAuto = computedClient
+          ? (computedClient[name] ?? 0)
+          : numOf(saved?.client) - manual;
+        return { clientAuto, client: Math.max(0, clientAuto + manual) };
+      };
 
       const existingMap = new Map<string, DailyInventoryEntry>(
         res.data.entries.map((e) => [e.productId, e]),
@@ -282,6 +303,7 @@ export default function InventaireJournalier() {
       const built: RowState[] = customProducts.map((name) => {
         // On utilise le nom comme ID unique
         const saved = existingMap.get(name);
+        const { clientAuto, client } = resolveClient(name, saved);
         return {
           productId: name,
           productName: name,
@@ -289,21 +311,26 @@ export default function InventaireJournalier() {
           stdo:       saved?.stdo       ?? 0,
           berri:      saved?.berri      ?? 0,
           comm_berri: saved?.comm_berri ?? 0,
-          client:     clientFor(name, saved?.client ?? 0),
+          client:     client as number,
+          clientAuto,
         };
       });
 
       const historicalRows: RowState[] = res.data.entries
         .filter((entry) => !customProducts.includes(entry.productId) && hasInventoryValue(entry))
-        .map((entry) => ({
-          productId: entry.productId,
-          productName: entry.productName,
-          stock_stdo: entry.stock_stdo ?? 0,
-          stdo: entry.stdo ?? 0,
-          berri: entry.berri ?? 0,
-          comm_berri: entry.comm_berri ?? 0,
-          client: clientFor(entry.productName, entry.client ?? 0),
-        }));
+        .map((entry) => {
+          const { clientAuto, client } = resolveClient(entry.productName, entry);
+          return {
+            productId: entry.productId,
+            productName: entry.productName,
+            stock_stdo: entry.stock_stdo ?? 0,
+            stdo: entry.stdo ?? 0,
+            berri: entry.berri ?? 0,
+            comm_berri: entry.comm_berri ?? 0,
+            client: client as number,
+            clientAuto,
+          };
+        });
 
       const mergedRows = [...built, ...historicalRows];
 
@@ -339,16 +366,23 @@ export default function InventaireJournalier() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const entries: DailyInventoryEntry[] = rows.map((r) => ({
-        productId:   r.productId,
-        productName: r.productName,
-        stock_stdo:  r.stock_stdo, // <-- Sauvegarde de la nouvelle colonne
-        stdo:        r.stdo,
-        berri:       r.berri,
-        comm_berri:  r.comm_berri,
-        client:      r.client,
-        total:       calcTotal(r),
-      }));
+      const entries: DailyInventoryEntry[] = rows.map((r) => {
+        const isSupp = (r.productName || "").toLowerCase().includes("suppl");
+        // On stocke l'AJOUT MANUEL (delta) = total affiché − part auto, pour
+        // qu'il survive aux rechargements (le compte auto, lui, est recalculé).
+        const clientManual = isSupp ? 0 : numOf(r.client) - numOf(r.clientAuto);
+        return {
+          productId:   r.productId,
+          productName: r.productName,
+          stock_stdo:  r.stock_stdo, // <-- Sauvegarde de la nouvelle colonne
+          stdo:        r.stdo,
+          berri:       r.berri,
+          comm_berri:  r.comm_berri,
+          client:      r.client,
+          clientManual,
+          total:       calcTotal(r),
+        };
+      });
 
       const res = await dailyInventoryAPI.save({ date, entries });
       setLastSaved(res.data.updatedAt);
@@ -635,6 +669,11 @@ export default function InventaireJournalier() {
                                 onFocus={(e) => e.target.select()}
                                 className="w-full text-center px-2 py-1.5 rounded-xl border border-stone-200 bg-white text-stone-800 font-semibold focus:outline-none focus:border-[#C5A065] focus:ring-2 focus:ring-[#C5A065]/20 hover:border-stone-300 transition-colors text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               />
+                            )}
+                            {col.key === "client" && !isSupplement && row.clientAuto > 0 && (
+                              <div className="mt-0.5 text-center text-[9px] text-stone-400">
+                                auto: {row.clientAuto}
+                              </div>
                             )}
                           </td>
                         );
