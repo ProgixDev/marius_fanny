@@ -397,10 +397,14 @@ export async function acceptQuote(req: Request, res: Response) {
       // corrects.
       deliveryDate: quote.deliveryDate || undefined,
       deliveryTimeSlot: quote.deliveryTimeSlot || undefined,
+      // Extract HH:MM from the slot (delivery slots are ranges like
+      // "08:00 - 09:00", so a raw concat would build an invalid Date).
       pickupDate: quote.deliveryDate
-        ? new Date(
-            `${quote.deliveryDate}T${(quote.deliveryTimeSlot || "00:00").trim() || "00:00"}:00`,
-          )
+        ? (() => {
+            const m = String(quote.deliveryTimeSlot || "").match(/^(\d{2}):(\d{2})/);
+            const hhmm = m ? `${m[1]}:${m[2]}` : "00:00";
+            return new Date(`${quote.deliveryDate}T${hhmm}:00`);
+          })()
         : undefined,
       pickupLocation: quote.pickupLocation || "Montreal",
       billingKind: quote.billingKind,
