@@ -40,6 +40,10 @@ function todayISO(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+function numOf(v: any): number {
+  return typeof v === "number" ? v : 0;
+}
+
 function hasInventoryValue(entry?: any): boolean {
   if (!entry) return false;
   return (
@@ -125,13 +129,22 @@ export default function InventaireFour() {
       } catch {
         computedClient = null;
       }
-      const clientFor = (name: string, stored: number) =>
-        computedClient ? (computedClient[name] ?? 0) : stored;
+      // Comm CLIENT = part AUTO (commandes frais) + AJOUT MANUEL de Fanny.
+      // Hors ligne (recompute indispo), on reconstitue l'auto depuis le dernier
+      // enregistrement (client - clientManual) pour ne pas perdre l'ajout manuel.
+      const resolveClient = (name: string, saved?: any) => {
+        const manual = numOf(saved?.clientManual);
+        const clientAuto = computedClient
+          ? (computedClient[name] ?? 0)
+          : numOf(saved?.client) - manual;
+        return { clientAuto, client: Math.max(0, clientAuto + manual) };
+      };
 
       const map = new Map(res.data.entries.map((e: any) => [e.productId, e]));
 
       const built = products.map(name => {
         const s = map.get(name);
+        const { clientAuto, client } = resolveClient(name, s);
         return {
           id: name,
           name: name,
@@ -139,21 +152,26 @@ export default function InventaireFour() {
           stdo: s?.stdo ?? 0,
           berri: s?.berri ?? 0,
           comm_berri: s?.comm_berri ?? 0,
-          client: clientFor(name, s?.client ?? 0)
+          client,
+          clientAuto,
         };
       });
 
       const historicalRows = res.data.entries
         .filter((entry: any) => !products.includes(entry.productId) && hasInventoryValue(entry))
-        .map((entry: any) => ({
-          id: entry.productId,
-          name: entry.productName,
-          stock_stdo: entry.stock_stdo ?? 0,
-          stdo: entry.stdo ?? 0,
-          berri: entry.berri ?? 0,
-          comm_berri: entry.comm_berri ?? 0,
-          client: clientFor(entry.productName, entry.client ?? 0),
-        }));
+        .map((entry: any) => {
+          const { clientAuto, client } = resolveClient(entry.productName, entry);
+          return {
+            id: entry.productId,
+            name: entry.productName,
+            stock_stdo: entry.stock_stdo ?? 0,
+            stdo: entry.stdo ?? 0,
+            berri: entry.berri ?? 0,
+            comm_berri: entry.comm_berri ?? 0,
+            client,
+            clientAuto,
+          };
+        });
 
       setRows([...built, ...historicalRows]);
     } catch {
@@ -174,6 +192,8 @@ export default function InventaireFour() {
         berri: r.berri,
         comm_berri: r.comm_berri,
         client: r.client,
+        // Ajout manuel (delta) = total affiché − part auto, conservé entre les chargements.
+        clientManual: numOf(r.client) - numOf(r.clientAuto),
         total: r.stdo + r.comm_berri + r.client // Comm. St-do + Comm Berri + Comm CLIENT
       }));
       await dailyInventoryAPI.save({ date: `${date}__four`, entries });
@@ -334,15 +354,18 @@ export default function InventaireFour() {
                   />
                 </td>
                 <td className="px-2 py-2 text-center">
-                  <input 
-                    type="number" 
-                    value={row.client || ""} 
+                  <input
+                    type="number"
+                    value={row.client || ""}
                     onChange={(e) => {
                       const val = parseInt(e.target.value) || 0;
                       setRows(rows.map(r => r.id === row.id ? {...r, client: val} : r));
                     }}
                     className="w-16 text-center bg-stone-50 rounded-lg py-1 border focus:border-[#C5A065] outline-none"
                   />
+                  {row.clientAuto > 0 && (
+                    <div className="mt-0.5 text-[9px] text-stone-400">auto: {row.clientAuto}</div>
+                  )}
                 </td>
                 <td className="text-center font-bold text-stone-800">
                   {row.stdo + row.comm_berri + row.client}
