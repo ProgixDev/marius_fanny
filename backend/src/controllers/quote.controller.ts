@@ -49,6 +49,8 @@ export async function createQuote(req: AuthRequest, res: Response) {
       clientInfo,
       items,
       deliveryType = "pickup",
+      deliveryDate,
+      deliveryTimeSlot,
       pickupLocation,
       deliveryAddress,
       deliveryFee = 0,
@@ -115,6 +117,8 @@ export async function createQuote(req: AuthRequest, res: Response) {
       deliveryFee: Number(deliveryFee) || 0,
       total: totals.total,
       deliveryType,
+      deliveryDate: deliveryDate || undefined,
+      deliveryTimeSlot: deliveryTimeSlot || undefined,
       pickupLocation,
       deliveryAddress: deliveryType === "delivery" ? deliveryAddress : undefined,
       billingKind,
@@ -239,6 +243,8 @@ export async function updateQuote(req: AuthRequest, res: Response) {
       clientInfo,
       items,
       deliveryType,
+      deliveryDate,
+      deliveryTimeSlot,
       pickupLocation,
       deliveryAddress,
       deliveryFee,
@@ -267,6 +273,8 @@ export async function updateQuote(req: AuthRequest, res: Response) {
       quote.total = totals.total;
     }
     if (deliveryType) quote.deliveryType = deliveryType;
+    if (deliveryDate !== undefined) quote.deliveryDate = deliveryDate || undefined;
+    if (deliveryTimeSlot !== undefined) quote.deliveryTimeSlot = deliveryTimeSlot || undefined;
     if (pickupLocation !== undefined) quote.pickupLocation = pickupLocation;
     if (deliveryAddress !== undefined) quote.deliveryAddress = deliveryAddress;
     if (deliveryFee !== undefined) quote.deliveryFee = Number(deliveryFee) || 0;
@@ -383,6 +391,17 @@ export async function acceptQuote(req: Request, res: Response) {
       total: quote.total,
       depositAmount: quote.total,
       deliveryType: quote.deliveryType,
+      // Reporter la date/heure choisie à la création de la soumission (et non la
+      // date du moment de l'acceptation). pickupDate est calculé comme dans
+      // createOrder pour que l'affichage « Date / heure » et l'inventaire soient
+      // corrects.
+      deliveryDate: quote.deliveryDate || undefined,
+      deliveryTimeSlot: quote.deliveryTimeSlot || undefined,
+      pickupDate: quote.deliveryDate
+        ? new Date(
+            `${quote.deliveryDate}T${(quote.deliveryTimeSlot || "00:00").trim() || "00:00"}:00`,
+          )
+        : undefined,
       pickupLocation: quote.pickupLocation || "Montreal",
       billingKind: quote.billingKind,
       billingOrganization: quote.billingOrganization,

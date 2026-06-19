@@ -179,6 +179,8 @@ export default function QuoteManagement() {
                 : undefined,
           })),
         deliveryType: formData.deliveryType,
+        deliveryDate: formData.date || undefined,
+        deliveryTimeSlot: formData.pickupTime || undefined,
         pickupLocation: formData.pickupLocation,
         deliveryFee: formData.deliveryFee,
         billingKind: formData.billingKind || "standard",
@@ -241,6 +243,8 @@ export default function QuoteManagement() {
                 : undefined,
           })),
         deliveryType: formData.deliveryType,
+        deliveryDate: formData.date || undefined,
+        deliveryTimeSlot: formData.pickupTime || undefined,
         pickupLocation: formData.pickupLocation,
         deliveryFee: formData.deliveryFee,
         billingKind: formData.billingKind || "standard",
@@ -328,8 +332,8 @@ export default function QuoteManagement() {
   };
 
   const buildInitialFormData = (q: QuoteData) => ({
-    date: new Date().toISOString().split("T")[0],
-    pickupTime: "",
+    date: (q as any).deliveryDate || new Date().toISOString().split("T")[0],
+    pickupTime: (q as any).deliveryTimeSlot || "",
     clientId: undefined,
     firstName: q.clientInfo.firstName,
     lastName: q.clientInfo.lastName,

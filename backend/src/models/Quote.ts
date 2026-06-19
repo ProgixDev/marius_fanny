@@ -25,6 +25,11 @@ export interface IQuote extends Document {
   deliveryFee: number;
   total: number;
   deliveryType: "pickup" | "delivery";
+  // Date/heure de ramassage ou livraison choisie à la création de la soumission.
+  // Reportée telle quelle sur la commande lors de l'acceptation (sinon la
+  // commande prenait la date du moment de l'acceptation).
+  deliveryDate?: string;
+  deliveryTimeSlot?: string;
   pickupLocation?: "Montreal" | "Laval";
   deliveryAddress?: {
     street: string;
@@ -81,6 +86,8 @@ const QuoteSchema = new Schema<IQuote>(
       required: true,
       default: "pickup",
     },
+    deliveryDate: { type: String },
+    deliveryTimeSlot: { type: String },
     pickupLocation: { type: String, enum: ["Montreal", "Laval"] },
     deliveryAddress: {
       street: String,

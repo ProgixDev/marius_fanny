@@ -2152,7 +2152,7 @@ export const updateDeliveryStatus = async (
 
     if (customerPhone && (deliveryStatus === "in_transit" || deliveryStatus === "arrived")) {
       const smsMessages: Record<string, string> = {
-        in_transit: `Votre livreur est arrivé pour la commande #${shortNumber} il vous attend à l'entrée principale. Ce numéro n'accepte pas les appels.`,
+        in_transit: `Votre livreur est en route pour la commande #${shortNumber} il vous attendra à l'entrée principale. Ce numéro n'accepte pas les appels.`,
         arrived: `Marius et Fanny: Votre livreur est arrivé pour la commande #${shortNumber}. Bon appétit!`,
       };
 
