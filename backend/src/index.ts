@@ -185,11 +185,13 @@ app.use(errorHandler);
 // Export for programmatic use
 export default app;
 
-// Only start server when running locally (not in Vercel or production)
+// Start the long-running HTTP server UNLESS we're on Vercel (serverless, where
+// the platform imports `app` and handles requests via api/index.ts — no listen).
+// On a classic host (Render, Railway, local), we must listen, including in
+// production — otherwise the host detects "no open ports" and the deploy fails.
 const isVercel = process.env.VERCEL === "1" || process.env.VERCEL === "true" || !!process.env.NOW_REGION;
-const isProduction = process.env.NODE_ENV === "production";
 
-if (!isVercel && !isProduction) {
+if (!isVercel) {
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
   });
