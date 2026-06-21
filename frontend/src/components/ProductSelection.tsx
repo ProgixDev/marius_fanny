@@ -7,7 +7,6 @@ import { getImageUrl } from '../utils/api';
 import {
   calculatePriceWithOptions,
   formatChoiceDisplay,
-  getChoicePriceDeltaForOption,
 } from '../utils/customOptions';
 
 const styles = {
@@ -633,22 +632,22 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
                 </h2>
                 
                 <div className="text-2xl font-medium text-[#337957] mb-6">
-                  {/* Prix de base */}
+                  {/* Prix — reflète l'option choisie (ex. 6 / 12 personnes) */}
                   <div className="mb-2">
                     {selectedProduct.discountPercentage && selectedProduct.discountPercentage > 0 ? (
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-base text-stone-400 line-through">
-                          {selectedProduct.price.toFixed(2)} $
+                          {getCurrentPrice().toFixed(2)} $
                         </span>
                         <span>
-                          {getDiscountedPrice(selectedProduct.price, selectedProduct.discountPercentage).toFixed(2)} $
+                          {getDiscountedPrice(getCurrentPrice(), selectedProduct.discountPercentage).toFixed(2)} $
                         </span>
                         <span className="text-[11px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
                           -{selectedProduct.discountPercentage}%
                         </span>
                       </div>
                     ) : (
-                      <span>{selectedProduct.price.toFixed(2)} $</span>
+                      <span>{getCurrentPrice().toFixed(2)} $</span>
                     )}
                     {selectedProduct.hasTaxes && (
                       <span className="text-xs text-stone-400 ml-2 font-normal">
@@ -656,13 +655,6 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
                       </span>
                     )}
                   </div>
-                  
-                  {/* Prix avec options (seulement si des options sont sélectionnées) */}
-                  {Object.keys(selectedOptions).length > 0 && (
-                    <div className="text-sm text-stone-500 border-t pt-2 mt-2">
-                      Prix avec options : <span className="text-[#337957] font-bold">{getCurrentPrice().toFixed(2)} $</span>
-                    </div>
-                  )}
                 </div>
 
                 {/* JOURS DE DISPONIBILITÉ — affiché en premier pour bien le voir */}
@@ -723,12 +715,7 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
                         <div className="flex gap-2 flex-wrap">
                           {(option.choices || []).map((choice) => {
                             const displayText = formatChoiceDisplay(choice) || choice;
-                            const additionalPrice = getChoicePriceDeltaForOption(
-                              option.choices || [],
-                              choice,
-                              selectedProduct.price,
-                            );
-                            
+
                             return (
                               <button
                                 key={`${option.name}-${displayText}`}
@@ -746,9 +733,6 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
                                 }`}
                               >
                                 <div>{displayText}</div>
-                                {additionalPrice > 0 && (
-                                  <div className="text-[10px] opacity-80">+{additionalPrice.toFixed(2)}$</div>
-                                )}
                               </button>
                             );
                           })}
