@@ -87,7 +87,9 @@ export interface InventoryItem {
 
 /**
  * Bucket order items into Journalier vs Frais (four) quantities, keyed by the
- * canonical sheet name. Frais wins on ambiguous matches.
+ * canonical sheet name. A product that exists in BOTH sheets (e.g. Tropézienne)
+ * counts in both. For a fuzzy-only match (slightly different name, no exact
+ * match), Frais wins — as before.
  *
  * `journalierList` / `fourList` default to the hardcoded constants, but callers
  * pass in the LIVE editable lists (the names Fanny maintains in the inventory
@@ -114,12 +116,23 @@ export function computeInventoryBuckets(
     const productName = pizzaAliasSet.has(normalizeProductName(rawName))
       ? "Pizza"
       : rawName;
-    if (matchesList(productName, fourList)) {
-      const name = canonicalName(productName, fourList) || productName;
-      fourQty[name] = (fourQty[name] || 0) + qty;
+
+    // Exact (normalized) match in each list. Un produit présent dans LES DEUX
+    // feuilles (ex. Tropézienne, qui est à la fois en Journalier et en Frais)
+    // compte dans les DEUX — pas seulement Frais.
+    const fourCanon = canonicalName(productName, fourList);
+    const journalierCanon = canonicalName(productName, journalierList);
+
+    if (fourCanon || journalierCanon) {
+      if (fourCanon) fourQty[fourCanon] = (fourQty[fourCanon] || 0) + qty;
+      if (journalierCanon)
+        journalierQty[journalierCanon] = (journalierQty[journalierCanon] || 0) + qty;
+    } else if (matchesList(productName, fourList)) {
+      // Repli flou (nom légèrement différent, pas de correspondance exacte) :
+      // Frais prioritaire, comme avant.
+      fourQty[productName] = (fourQty[productName] || 0) + qty;
     } else if (matchesList(productName, journalierList)) {
-      const name = canonicalName(productName, journalierList) || productName;
-      journalierQty[name] = (journalierQty[name] || 0) + qty;
+      journalierQty[productName] = (journalierQty[productName] || 0) + qty;
     }
     // else: custom/untracked product — not part of either feuille.
   }
