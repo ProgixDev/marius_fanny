@@ -670,11 +670,6 @@ export default function InventaireJournalier() {
                                 className="w-full text-center px-2 py-1.5 rounded-xl border border-stone-200 bg-white text-stone-800 font-semibold focus:outline-none focus:border-[#C5A065] focus:ring-2 focus:ring-[#C5A065]/20 hover:border-stone-300 transition-colors text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               />
                             )}
-                            {col.key === "client" && !isSupplement && row.clientAuto > 0 && (
-                              <div className="mt-0.5 text-center text-[9px] text-stone-400">
-                                auto: {row.clientAuto}
-                              </div>
-                            )}
                           </td>
                         );
                       })}

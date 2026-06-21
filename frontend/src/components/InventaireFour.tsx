@@ -363,9 +363,6 @@ export default function InventaireFour() {
                     }}
                     className="w-16 text-center bg-stone-50 rounded-lg py-1 border focus:border-[#C5A065] outline-none"
                   />
-                  {row.clientAuto > 0 && (
-                    <div className="mt-0.5 text-[9px] text-stone-400">auto: {row.clientAuto}</div>
-                  )}
                 </td>
                 <td className="text-center font-bold text-stone-800">
                   {row.stdo + row.comm_berri + row.client}
