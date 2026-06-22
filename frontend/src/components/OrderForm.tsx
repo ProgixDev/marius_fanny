@@ -198,7 +198,12 @@ export default function OrderForm({
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [activePosCategory, setActivePosCategory] = useState<string>("all");
+  // Edit-mode: don't punish the admin for an order whose date is already in the
+  // past — the prep-time delay/cutoff is only enforced for genuinely NEW orders.
+  const isEditing = !!initialData;
   const preparationWarnings = useMemo(() => {
+    // En modification d'une commande existante, on n'impose pas le délai de prépa.
+    if (isEditing) return [] as { itemId: string; label: string }[];
     if (!formData.date) return [] as { itemId: string; label: string }[];
 
     const warnings: { itemId: string; label: string }[] = [];
@@ -216,7 +221,7 @@ export default function OrderForm({
       }
     }
     return warnings;
-  }, [formData.date, formData.pickupTime, formData.items, products]);
+  }, [formData.date, formData.pickupTime, formData.items, products, isEditing]);
 
   const editPaymentAdjustment = useMemo(() => {
     if (!pricingBaseline) return null;
@@ -618,9 +623,7 @@ export default function OrderForm({
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  // Edit-mode: don't punish the admin for an order whose date is already in
-  // the past. We only enforce the cutoff for genuinely new orders.
-  const isEditing = !!initialData;
+  // isEditing est défini plus haut (= !!initialData).
   const minPickupDateStr = isEditing ? undefined : getMinimumPickupDateStr();
 
   function getPreparationTimeWarning(productId: number) {
@@ -978,16 +981,20 @@ export default function OrderForm({
       }
     });
 
-    // Validation du délai de préparation (avertissement bloquant pour l'admin)
-    formData.items.forEach((item, index) => {
-      if (item.productId && !item.isCustom) {
-        if (!validatePreparationTime(formData.date, item.productId, formData.pickupTime)) {
-          const warning = getPreparationTimeWarning(item.productId);
-          newErrors[`item_${index}_preparation`] =
-            `⚠️ ${warning || "Délai de préparation insuffisant pour la date sélectionnée."}`;
+    // Validation du délai de préparation (avertissement bloquant pour l'admin).
+    // Ignorée en MODIFICATION : on doit pouvoir ajuster une commande déjà passée
+    // (date proche/passée) sans être bloqué par le délai.
+    if (!isEditing) {
+      formData.items.forEach((item, index) => {
+        if (item.productId && !item.isCustom) {
+          if (!validatePreparationTime(formData.date, item.productId, formData.pickupTime)) {
+            const warning = getPreparationTimeWarning(item.productId);
+            newErrors[`item_${index}_preparation`] =
+              `⚠️ ${warning || "Délai de préparation insuffisant pour la date sélectionnée."}`;
+          }
         }
-      }
-    });
+      });
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -1996,7 +2003,7 @@ export default function OrderForm({
                 const priceError = errors[`item_${index}_price`];
                 // Avertissement délai de préparation en temps réel
                 const livePreparationWarning =
-                  !item.isCustom && item.productId && formData.date
+                  !isEditing && !item.isCustom && item.productId && formData.date
                     ? !validatePreparationTime(formData.date, item.productId, formData.pickupTime)
                       ? getPreparationTimeWarning(item.productId) || "Délai de préparation insuffisant pour la date sélectionnée."
                       : null
