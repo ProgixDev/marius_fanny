@@ -242,25 +242,53 @@ export default function InventaireFour() {
 
         <button
           onClick={() => {
-            const printContent = document.getElementById("inventaire-frais-table");
-            if (!printContent) return;
             const win = window.open("", "_blank");
             if (!win) return;
+            // Tableau propre généré depuis les données (sans icônes ni champs),
+            // compact et en paysage pour tenir sur une seule page.
+            const fmtDate = new Date(date + "T00:00:00").toLocaleDateString("fr-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+            const cols = [
+              { key: "stock_stdo", label: "ST-do" },
+              { key: "stdo", label: "Comm. St-do" },
+              { key: "berri", label: "BERRI" },
+              { key: "comm_berri", label: "Comm Berri" },
+              { key: "client", label: "Comm CLIENT" },
+            ];
+            const n = (v: any) => (typeof v === "number" ? v : 0);
+            const heads = cols.map((c) => `<th>${c.label}</th>`).join("");
+            const body = rows.map((r, idx) => {
+              const cells = cols.map((c) => {
+                const v = r[c.key];
+                return `<td>${typeof v === "number" ? (v === 0 ? "" : v) : (v || "")}</td>`;
+              }).join("");
+              const total = n(r.stdo) + n(r.comm_berri) + n(r.client);
+              return `<tr><td class="prod">${idx + 1}. ${r.name}</td>${cells}<td>${total || ""}</td></tr>`;
+            }).join("");
+            const footCells = cols.map((c) => {
+              const sum = rows.reduce((s, r) => s + n(r[c.key]), 0);
+              return `<td>${sum || ""}</td>`;
+            }).join("");
+            const grand = rows.reduce((s, r) => s + n(r.stdo) + n(r.comm_berri) + n(r.client), 0);
             win.document.write(`
               <html><head><title>Inventaire Frais — ${date}</title>
               <style>
-                body { font-family: Arial, sans-serif; padding: 20px; }
-                h1 { font-size: 18px; margin-bottom: 4px; }
-                p { color: #666; font-size: 12px; margin-bottom: 16px; }
+                @page { size: A4 landscape; margin: 8mm; }
+                body { font-family: Arial, sans-serif; }
+                h1 { font-size: 15px; margin: 0 0 2px; }
+                p { color: #666; font-size: 11px; margin: 0 0 8px; text-transform: capitalize; }
                 table { width: 100%; border-collapse: collapse; }
-                th, td { border: 1px solid #ddd; padding: 6px 10px; font-size: 12px; text-align: center; }
-                th { background: #f5f5f5; font-weight: bold; }
-                td:first-child, th:first-child { text-align: left; }
-                @media print { body { padding: 0; } }
+                th, td { border: 1px solid #ccc; padding: 2px 4px; font-size: 10px; text-align: center; }
+                th { background: #f0f0f0; }
+                td.prod, th.prod { text-align: left; width: 26%; }
+                tfoot td { font-weight: bold; background: #f7f7f7; }
               </style></head><body>
               <h1>Inventaire Frais</h1>
-              <p>${new Date(date + "T00:00:00").toLocaleDateString("fr-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
-              ${printContent.outerHTML}
+              <p>${fmtDate}</p>
+              <table>
+                <thead><tr><th class="prod">Pâtisserie</th>${heads}<th>Total</th></tr></thead>
+                <tbody>${body}</tbody>
+                <tfoot><tr><td class="prod">Totaux</td>${footCells}<td>${grand || ""}</td></tr></tfoot>
+              </table>
               </body></html>
             `);
             win.document.close();
