@@ -40,6 +40,7 @@ import {
 import { getAvailableTimeSlots } from "../utils/timeSlots";
 import { calculatePriceWithOptions } from "../utils/customOptions";
 import { getImageUrl } from "../utils/api";
+import { effectivePrepHours } from "../utils/prepTime";
 
 interface OrderFormProps {
   onSubmit: (formData: OrderFormData) => void;
@@ -555,7 +556,9 @@ export default function OrderForm({
     const timeDiff = orderDateTime.getTime() - now.getTime();
     const hoursDiff = timeDiff / (1000 * 60 * 60);
 
-    return hoursDiff >= product.preparationTimeHours;
+    // Délai EFFECTIF (24h→17h, 48h→34h, 72h→51h) : permet de ramasser tôt le
+    // lendemain même en commandant l'après-midi. L'affichage reste 24h/48h/72h.
+    return hoursDiff >= effectivePrepHours(product.preparationTimeHours);
   }
 
   // Read "now" through the bakery's clock (America/Montreal), like Checkout
