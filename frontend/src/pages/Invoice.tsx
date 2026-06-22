@@ -9,7 +9,7 @@ import { Download } from "lucide-react";
 // document" → the whole Invoice page fails to render. The /public order
 // endpoint doesn't require auth, so this page doesn't actually need the
 // auth client at all.
-const RAW_API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const RAW_API_URL = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
 const normalizedApiUrl = RAW_API_URL.startsWith("http") ? RAW_API_URL : `https://${RAW_API_URL}`;
 
 interface OrderData {

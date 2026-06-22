@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { authHeaders } from "../utils/authHeaders";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
 const normalizedApiUrl = API_URL.startsWith("http") ? API_URL : `https://${API_URL}`;
 
 interface BusinessHours {
