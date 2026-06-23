@@ -1648,16 +1648,39 @@ export const cancelInvoice = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: "Facture Square introuvable" });
     }
 
-    // If already cancelled or paid, skip
-    if (invoice.status === "CANCELED" || invoice.status === "PAID") {
+    // Efface la référence du lien sur la commande → l'icône repasse en
+    // "payé en boutique" et le lien n'est plus considéré comme actif.
+    const clearOrderInvoice = async () => {
+      try {
+        if (orderId) {
+          await Order.findByIdAndUpdate(orderId, { $unset: { squareInvoiceId: "" } });
+        } else {
+          await Order.updateOne(
+            { squareInvoiceId: targetInvoiceId },
+            { $unset: { squareInvoiceId: "" } },
+          );
+        }
+      } catch {
+        /* non bloquant */
+      }
+    };
+
+    // Déjà PAYÉE : c'est un vrai paiement en ligne → ne rien annuler ni effacer.
+    if (invoice.status === "PAID") {
+      return res.json({ success: true, data: { status: invoice.status, alreadyHandled: true } });
+    }
+    // Déjà annulée : on nettoie juste la référence.
+    if (invoice.status === "CANCELED") {
+      await clearOrderInvoice();
       return res.json({ success: true, data: { status: invoice.status, alreadyHandled: true } });
     }
 
-    // Cancel via Square
+    // Annuler via Square
     const cancelResp = await squareClient.invoices.cancel({
       invoiceId: targetInvoiceId,
       version: invoice.version!,
     });
+    await clearOrderInvoice();
 
     console.log(`✅ [INVOICE] Cancelled Square invoice ${targetInvoiceId}`);
     res.json({ success: true, data: cancelResp });

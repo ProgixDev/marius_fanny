@@ -535,26 +535,17 @@ export function OrderManagement() {
       ((order as any).amountPaid || 0) > 0;
     if (!hasSomePayment) return null;
 
-    const paidViaBoutique = order.source === "online";
-    if (paidViaBoutique) {
+    // Lien de paiement envoyé par l'admin (commande téléphone) = une FACTURE
+    // Square → squareInvoiceId. Paiement direct du client sur le site web =
+    // squarePaymentId sans facture.
+    const adminPaymentLink = Boolean(order.squareInvoiceId);
+    const websiteOnline = !adminPaymentLink && Boolean(order.squarePaymentId);
+
+    // Site web (le client paie en ligne lui-même) → ordinateur GRIS
+    if (websiteOnline) {
       return (
         <span
-          title="Payé via boutique"
-          className="inline-flex items-center justify-center rounded-full bg-emerald-200 text-emerald-900 p-1"
-        >
-          <Home className="h-4 w-4" />
-        </span>
-      );
-    }
-
-    const paidViaSquareLink =
-      order.paymentMethod === "payment_link" ||
-      Boolean(order.squarePaymentId || order.squareInvoiceId);
-
-    if (paidViaSquareLink) {
-      return (
-        <span
-          title="Payé via lien Square"
+          title="Payé en ligne (site web)"
           className="inline-flex items-center justify-center rounded-full bg-stone-200 text-stone-600 p-1"
         >
           <Monitor className="h-3.5 w-3.5" />
@@ -562,9 +553,22 @@ export function OrderManagement() {
       );
     }
 
+    // Lien de paiement envoyé par l'admin (téléphone) → ordinateur BLEU
+    if (adminPaymentLink) {
+      return (
+        <span
+          title="Payé via lien (téléphone)"
+          className="inline-flex items-center justify-center rounded-full bg-blue-100 text-blue-700 p-1"
+        >
+          <Monitor className="h-3.5 w-3.5" />
+        </span>
+      );
+    }
+
+    // Sinon : payé en boutique / comptant → icône maison
     return (
       <span
-        title="Payé via boutique"
+        title="Payé en boutique"
         className="inline-flex items-center justify-center rounded-full bg-emerald-200 text-emerald-900 p-1"
       >
         <Home className="h-4 w-4" />
@@ -1104,6 +1108,11 @@ export function OrderManagement() {
   };
 
   const handleMarkPaid = async (order: OrderWithPacking) => {
+    // « Marquer payé » = paiement reçu en magasin (pas via Square). Si un lien
+    // Square avait été envoyé mais PAS encore payé, on l'annule pour éviter un
+    // double paiement, et on retire sa référence → l'icône repasse en "boutique".
+    const hadUnpaidLink = Boolean(order.squareInvoiceId) && !order.squarePaymentId;
+
     const payload: any = {
       depositPaid: true,
       balancePaid: true,
@@ -1121,11 +1130,28 @@ export function OrderManagement() {
       amountPaid: order.total,
       depositPaidAt: order.depositPaidAt || new Date().toISOString(),
       balancePaidAt: new Date().toISOString(),
+      // Lien non payé annulé → on enlève la référence localement (icône boutique)
+      squareInvoiceId: hadUnpaidLink ? undefined : order.squareInvoiceId,
     };
 
     const updatedOrders = orders.map((o) => (o.id === order.id ? updatedOrder : o));
     setOrders(updatedOrders);
     setFilteredOrders(applyOrderFilters(updatedOrders));
+    if (selectedOrder?.id === order.id) setSelectedOrder(updatedOrder);
+
+    // Annuler le lien Square non payé (paiement finalement en magasin)
+    if (hadUnpaidLink) {
+      try {
+        await fetch(`${normalizedApiUrl}/api/payments/cancel-invoice`, {
+          method: "POST",
+          headers: authHeaders(),
+          credentials: "include",
+          body: JSON.stringify({ orderId: order.id }),
+        });
+      } catch (e) {
+        console.warn("Failed to cancel Square invoice on mark-paid:", e);
+      }
+    }
 
     try {
       await orderAPI.updateOrder(order.id, payload);
