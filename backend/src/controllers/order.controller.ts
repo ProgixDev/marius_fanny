@@ -109,8 +109,11 @@ export const createOrder = async (
       const mm = parseInt(d.toLocaleString("en-CA", { timeZone: "America/Montreal", minute: "2-digit" }));
       return hh * 60 + mm;
     };
-    // Displayed to users as 14h00; real backend cutoff is 14h15.
-    const CUTOFF_MINUTES = 14 * 60 + 15;
+    // Limite haute acceptée par le serveur = 14h30, pour laisser le BACK OFFICE
+    // (admin) saisir une commande jusqu'à 14h30. Le site PUBLIC reste affiché à
+    // 14h00 et bloqué à 14h15 côté frontend (Checkout), donc les clients ne sont
+    // pas affectés.
+    const CUTOFF_MINUTES = 14 * 60 + 30;
 
     const now = new Date();
     const targetDateStr =

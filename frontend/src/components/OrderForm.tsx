@@ -590,10 +590,11 @@ export default function OrderForm({
     };
   }
 
-  // Displayed to staff/customers as 14h00, real gate sits at 14h15 (15-min
-  // margin so a customer who hesitated at 14h01 doesn't get bounced). Same
+  // Back office (admin) : limite à 14h30 pour laisser le temps de saisir la
+  // commande sans se faire repousser (le site public reste à 14h00 / 14h15).
+  // (ancien commentaire) Displayed to staff/customers as 14h00. Same
   // value lives in Checkout.tsx and the backend createOrder validation.
-  const CUTOFF_MINUTES = 14 * 60 + 15;
+  const CUTOFF_MINUTES = 14 * 60 + 30;
 
   /**
    * Earliest pickup date the admin can pick for the current cart.
@@ -912,7 +913,7 @@ export default function OrderForm({
         month: "long",
       });
       newErrors.date = past14
-        ? `Passé 14h00 — la commande doit être pour ${minLabel} au plus tôt.`
+        ? `Passé 14h30 — la commande doit être pour ${minLabel} au plus tôt.`
         : `Date trop tôt — minimum ${minLabel}.`;
     }
     if ((formData.deliveryType === "pickup" || formData.deliveryType === "delivery") && !formData.pickupTime) {
@@ -1044,7 +1045,7 @@ export default function OrderForm({
               <p className="text-[10px] text-gray-500 mt-1">
                 Minimum : {new Date(`${minPickupDateStr}T12:00:00`).toLocaleDateString("fr-CA", { weekday: "long", day: "numeric", month: "long" })}
                 {getMontrealNow().hour * 60 + getMontrealNow().minute >= CUTOFF_MINUTES
-                  ? " (commandes pour demain à passer avant 14h00)"
+                  ? " (commandes pour demain à passer avant 14h30)"
                   : ""}
               </p>
             )}
