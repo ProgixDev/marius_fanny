@@ -891,8 +891,14 @@ export default function OrderForm({
       newErrors.phone =
         "Le téléphone est requis pour envoyer le lien de paiement par SMS";
     }
-    if (!formData.email.trim()) {
-      newErrors.email = "L'email est requis";
+    // Email optionnel (ex. client âgé sans courriel). Requis UNIQUEMENT si on
+    // envoie le lien de paiement par courriel (sinon on ne pourrait pas l'envoyer).
+    const emailNeededForLink =
+      formData.paymentMethod === "payment_link" &&
+      formData.paymentLinkChannel === "email";
+    if (emailNeededForLink && !formData.email.trim()) {
+      newErrors.email =
+        "L'email est requis pour envoyer le lien de paiement par courriel";
     }
     if (!formData.date) {
       newErrors.date = "La date est requise";

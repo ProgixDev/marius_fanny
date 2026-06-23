@@ -651,11 +651,13 @@ export const createOrder = async (
 
     // Automatically create a client record when this email does not exist yet.
     try {
-      const normalizedEmail = orderData.clientInfo.email.trim().toLowerCase();
-      const firstName = orderData.clientInfo.firstName.trim();
-      const lastName = orderData.clientInfo.lastName.trim();
+      const normalizedEmail = (orderData.clientInfo?.email || "").trim().toLowerCase();
+      // Pas d'email (client sans courriel) → aucun compte client à créer/synchroniser.
+      if (normalizedEmail) {
+      const firstName = (orderData.clientInfo?.firstName || "").trim();
+      const lastName = (orderData.clientInfo?.lastName || "").trim();
       const fullName = `${firstName} ${lastName}`.trim();
-      const normalizedPhone = orderData.clientInfo.phone.trim();
+      const normalizedPhone = (orderData.clientInfo?.phone || "").trim();
 
       const existingClient = await User.findOne({ email: normalizedEmail });
 
@@ -718,6 +720,7 @@ export const createOrder = async (
           existingClient.role,
         );
       }
+      } // fin if (normalizedEmail)
     } catch (clientError: any) {
       console.error(
         "⚠️ Failed to auto-create client from order:",
@@ -876,6 +879,8 @@ export const createOrder = async (
         console.log(
           `📧 [ORDER] Skipping confirmation email — payment-link flow; createInvoice will send the branded email with the Square link.`,
         );
+      } else if (!(orderData.clientInfo?.email || "").trim()) {
+        console.log("📧 [ORDER] Pas d'email client — aucun reçu envoyé.");
       } else {
         const receiptMode: "full" | "deposit" | "invoice" = paidInStore
           ? "full"
@@ -886,7 +891,7 @@ export const createOrder = async (
               : "full";
 
         const receiptPayload = {
-          email: orderData.clientInfo.email,
+          email: orderData.clientInfo.email || "",
           name: customerName,
           orderNumber: order.orderNumber,
           items: orderData.items.map((item) => ({
@@ -949,7 +954,7 @@ export const createOrder = async (
         // Government clients: also send the invoice/facture to the billing
         // email (e.g. the city's accounts-payable), on top of the confirmation
         // sent to the contact above.
-        const contactEmail = orderData.clientInfo.email.trim().toLowerCase();
+        const contactEmail = (orderData.clientInfo.email || "").trim().toLowerCase();
         if (isGovernment && billingEmail && billingEmail !== contactEmail) {
           try {
             // The 2nd email is the FACTURE (not the confirmation): same data,
@@ -1474,7 +1479,10 @@ export const updateOrder = async (
     // Track and update client info
     if (updateData.clientInfo) {
       const oldClientInfo = { ...order.clientInfo };
-      order.clientInfo = updateData.clientInfo;
+      order.clientInfo = {
+        ...updateData.clientInfo,
+        email: updateData.clientInfo.email || "",
+      };
       changes.push({
         changedAt: new Date(),
         changedBy: userId,

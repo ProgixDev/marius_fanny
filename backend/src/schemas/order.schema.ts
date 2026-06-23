@@ -33,7 +33,9 @@ export const orderItemSchema = z.object({
 export const clientInfoSchema = z.object({
   firstName: z.string().min(1, "Le prénom est requis"),
   lastName: z.string().min(1, "Le nom de famille est requis"),
-  email: z.string().email("Format d'email invalide"),
+  // Email OPTIONNEL (ex. client âgé sans courriel) : accepte vide ou absent.
+  // Le format reste validé si une valeur est fournie.
+  email: z.string().email("Format d'email invalide").optional().or(z.literal("")),
   phone: z
     .string()
     .optional()
