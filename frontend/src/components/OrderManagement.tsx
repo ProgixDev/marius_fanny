@@ -555,7 +555,7 @@ export function OrderManagement() {
       return (
         <span
           title="Payé via lien Square"
-          className="inline-flex items-center justify-center rounded-full bg-blue-100 text-blue-700 p-1"
+          className="inline-flex items-center justify-center rounded-full bg-stone-200 text-stone-600 p-1"
         >
           <Monitor className="h-3.5 w-3.5" />
         </span>
