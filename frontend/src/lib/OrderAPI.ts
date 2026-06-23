@@ -92,6 +92,11 @@ class OrderAPI {
     return this.request<any>(qs ? `?${qs}` : "");
   }
 
+  /** GET /api/orders/stats — statistiques du tableau de bord (commandes payées) */
+  async getStats() {
+    return this.request<any>("/stats");
+  }
+
   /** POST /api/orders */
   async createOrder(data: {
     clientInfo: {

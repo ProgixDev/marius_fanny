@@ -1920,6 +1920,101 @@ export const updateOrder = async (
 };
 
 /**
+ * Dashboard statistics — computed from REAL orders.
+ * GET /api/orders/stats
+ *
+ * Chiffre d'affaires & ventes totales = commandes PAYÉES uniquement
+ * (paymentStatus "paid", hors annulées), pour le mois en cours, avec le %
+ * d'évolution vs le mois précédent. Inclut aussi les produits les plus vendus
+ * et l'activité récente (vraies dernières commandes).
+ */
+export const getOrderStats = async (_req: Request, res: Response<ApiResponse>) => {
+  try {
+    const now = new Date();
+    const startThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+    // Commandes payées, non annulées
+    const paidOrders = await Order.find({
+      paymentStatus: "paid",
+      status: { $ne: "cancelled" },
+    })
+      .select("total items orderDate createdAt")
+      .lean();
+
+    const dateOf = (o: any): Date => new Date(o.orderDate || o.createdAt);
+    const thisMonth = paidOrders.filter((o) => dateOf(o) >= startThisMonth);
+    const lastMonth = paidOrders.filter(
+      (o) => dateOf(o) >= startLastMonth && dateOf(o) < startThisMonth,
+    );
+
+    const sumTotal = (arr: any[]) =>
+      arr.reduce((s, o) => s + (Number(o.total) || 0), 0);
+    const totalRevenue = sumTotal(thisMonth);
+    const lastRevenue = sumTotal(lastMonth);
+    const totalSales = thisMonth.length;
+    const lastSales = lastMonth.length;
+
+    // % d'évolution (arrondi à 0,1). Si pas de référence le mois dernier :
+    // +100% s'il y a de l'activité ce mois, sinon 0%.
+    const pct = (cur: number, prev: number) =>
+      prev > 0
+        ? Math.round(((cur - prev) / prev) * 1000) / 10
+        : cur > 0
+          ? 100
+          : 0;
+
+    // Produits les plus vendus (mois en cours, par quantité)
+    const qtyByName: Record<string, number> = {};
+    for (const o of thisMonth) {
+      for (const it of (o.items as any[]) || []) {
+        const name = it?.productName || `Produit #${it?.productId}`;
+        qtyByName[name] = (qtyByName[name] || 0) + (Number(it?.quantity) || 0);
+      }
+    }
+    const topProducts = Object.entries(qtyByName)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, quantity]) => ({ name, quantity }));
+
+    // Activité récente : 5 dernières commandes (tous statuts)
+    const recent = await Order.find({})
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select("orderNumber clientInfo total status paymentStatus createdAt")
+      .lean();
+    const recentActivity = recent.map((o: any) => ({
+      orderNumber: o.orderNumber,
+      clientName:
+        `${o.clientInfo?.firstName || ""} ${o.clientInfo?.lastName || ""}`.trim() ||
+        o.clientInfo?.name ||
+        "Client",
+      total: Number(o.total) || 0,
+      status: o.status,
+      paymentStatus: o.paymentStatus,
+      createdAt: o.createdAt,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        totalRevenue,
+        totalSales,
+        revenueChange: pct(totalRevenue, lastRevenue),
+        salesChange: pct(totalSales, lastSales),
+        topProducts,
+        recentActivity,
+      },
+    });
+  } catch (error: any) {
+    console.error("getOrderStats error:", error);
+    res
+      .status(500)
+      .json({ success: false, error: error?.message || "Failed to compute stats" });
+  }
+};
+
+/**
  * Get order change history
  * GET /api/orders/:id/history
  */

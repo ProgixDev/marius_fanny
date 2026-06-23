@@ -11,6 +11,7 @@ import {
   getDeliveryZones,
   getOrderHistory,
   updateDeliveryStatus,
+  getOrderStats,
 } from "../controllers/order.controller.js";
 import { validateBody, validateQuery } from "../middleware/validation.js";
 import {
@@ -64,6 +65,10 @@ router.patch(
 
 // Get all orders with pagination and filters (requires authentication)
 router.get("/", requireAuth, validateQuery(orderQuerySchema), getOrders);
+
+// Dashboard stats (requires authentication) — BEFORE "/:id" so "stats" n'est
+// pas interprété comme un id de commande.
+router.get("/stats", requireAuth, getOrderStats);
 
 // Get a single order by ID (requires authentication)
 router.get("/:id", requireAuth, getOrderById);

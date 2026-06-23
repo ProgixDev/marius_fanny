@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { productAPI } from "../lib/ProductAPI";
+import { orderAPI } from "../lib/OrderAPI";
 import { normalizedApiUrl } from "../lib/AuthClient";
 import {
   Package,
@@ -49,6 +50,22 @@ interface Statistics {
   salesChange: number;
 }
 
+interface DashboardStats {
+  totalRevenue: number;
+  totalSales: number;
+  revenueChange: number;
+  salesChange: number;
+  topProducts: { name: string; quantity: number }[];
+  recentActivity: {
+    orderNumber: string;
+    clientName: string;
+    total: number;
+    status: string;
+    paymentStatus: string;
+    createdAt: string;
+  }[];
+}
+
 interface FormData {
   name: string;
   category: string;
@@ -88,6 +105,14 @@ export default function AdminDashboard() {
   const [productsLoading, setProductsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("overview");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalRevenue: 0,
+    totalSales: 0,
+    revenueChange: 0,
+    salesChange: 0,
+    topProducts: [],
+    recentActivity: [],
+  });
   const navigate = useNavigate();
 
   const gold = "#C5A065";
@@ -95,7 +120,29 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchProducts();
+    fetchStats();
   }, []);
+
+  const fetchStats = async () => {
+    try {
+      const res = await orderAPI.getStats();
+      if (res?.data) setStats(res.data);
+    } catch (error) {
+      console.error("Failed to fetch dashboard stats:", error);
+    }
+  };
+
+  // "il y a X" lisible pour l'activité récente
+  const timeAgo = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(diff / 60000);
+    if (min < 1) return "à l'instant";
+    if (min < 60) return `il y a ${min} min`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `il y a ${h} h`;
+    const d = Math.floor(h / 24);
+    return `il y a ${d} j`;
+  };
 
   const fetchProducts = async () => {
     try {
@@ -138,17 +185,15 @@ export default function AdminDashboard() {
 
   const statistics: Statistics = {
     totalProducts: products.length,
-    totalRevenue: products.reduce((sum, p) => sum + (p.revenue || 0), 0),
+    totalRevenue: stats.totalRevenue,
     lowStock: products.filter(p => !p.available).length,
-    totalSales: products.reduce((sum, p) => sum + (p.sales || 0), 0),
-    revenueChange: 12.5,
-    salesChange: 8.3,
+    totalSales: stats.totalSales,
+    revenueChange: stats.revenueChange,
+    salesChange: stats.salesChange,
   };
 
-  // Produits les plus vendus
-  const topProducts = [...products]
-    .sort((a, b) => (b.sales || 0) - (a.sales || 0))
-    .slice(0, 5);
+  // Produits les plus vendus (vraies ventes du mois, depuis les commandes payées)
+  const topProducts = stats.topProducts;
 
   return (
     <div className="relative flex h-screen bg-[#F9F7F2] font-sans text-stone-800">
@@ -438,30 +483,31 @@ export default function AdminDashboard() {
                     <BarChart3 className="text-[#C5A065]" size={24} />
                   </div>
                   <div className="space-y-3 md:space-y-4">
-                    {topProducts.map((product, index) => (
-                      <div
-                        key={product.id}
-                        className="flex items-center gap-3 md:gap-4"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-[#C5A065] text-white flex items-center justify-center font-bold text-sm shrink-0">
-                          {index + 1}
+                    {topProducts.length === 0 ? (
+                      <p className="text-sm text-gray-400">Aucune vente ce mois-ci pour l'instant.</p>
+                    ) : (
+                      topProducts.map((product, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center gap-3 md:gap-4"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-[#C5A065] text-white flex items-center justify-center font-bold text-sm shrink-0">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-[#2D2A26] text-sm md:text-base truncate">
+                              {product.name}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="font-bold text-[#2D2A26] text-sm md:text-base">
+                              {product.quantity}
+                            </p>
+                            <p className="text-xs text-gray-500">vendus</p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-[#2D2A26] text-sm md:text-base truncate">
-                            {product.name}
-                          </p>
-                          <p className="text-xs md:text-sm text-gray-500">
-                            {Array.isArray(product.category) ? product.category.join(", ") : String(product.category || "")}
-                          </p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="font-bold text-[#2D2A26] text-sm md:text-base">
-                            {product.sales}
-                          </p>
-                          <p className="text-xs text-gray-500">ventes</p>
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
 
@@ -471,46 +517,30 @@ export default function AdminDashboard() {
                     Activité récente
                   </h3>
                   <div className="space-y-3 md:space-y-4">
-                    {[
-                      {
-                        action: "Nouveau produit ajouté",
-                        item: "Éclair au Chocolat",
-                        time: "Il y a 2h",
-                      },
-                      {
-                        action: "Stock mis à jour",
-                        item: "Baguette Tradition",
-                        time: "Il y a 4h",
-                      },
-                      {
-                        action: "Produit modifié",
-                        item: "Croissant Pur Beurre",
-                        time: "Il y a 5h",
-                      },
-                      {
-                        action: "Alerte stock bas",
-                        item: "Pain au Chocolat",
-                        time: "Il y a 6h",
-                      },
-                    ].map((activity, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-start gap-3 pb-3 md:pb-4 border-b border-gray-100 last:border-0"
-                      >
-                        <div className="w-2 h-2 rounded-full bg-[#C5A065] mt-2 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm md:text-base text-[#2D2A26] font-medium">
-                            {activity.action}
-                          </p>
-                          <p className="text-xs md:text-sm text-gray-500 truncate">
-                            {activity.item}
-                          </p>
+                    {stats.recentActivity.length === 0 ? (
+                      <p className="text-sm text-gray-400">Aucune commande récente.</p>
+                    ) : (
+                      stats.recentActivity.map((act, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-start gap-3 pb-3 md:pb-4 border-b border-gray-100 last:border-0"
+                        >
+                          <div className="w-2 h-2 rounded-full bg-[#C5A065] mt-2 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm md:text-base text-[#2D2A26] font-medium">
+                              Commande #{act.orderNumber} — {act.total.toFixed(2)} $
+                            </p>
+                            <p className="text-xs md:text-sm text-gray-500 truncate">
+                              {act.clientName}
+                              {act.paymentStatus === "paid" ? " · Payé" : " · Non payé"}
+                            </p>
+                          </div>
+                          <span className="text-xs text-gray-400 shrink-0">
+                            {timeAgo(act.createdAt)}
+                          </span>
                         </div>
-                        <span className="text-xs text-gray-400 shrink-0">
-                          {activity.time}
-                        </span>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
