@@ -1988,6 +1988,11 @@ export const getOrderStats = async (_req: Request, res: Response<ApiResponse>) =
       .slice(0, 5)
       .map(([name, quantity]) => ({ name, quantity }));
 
+    // Commandes à préparer : encore actives (ni terminées, ni annulées, ni livrées)
+    const ordersToPrepare = await Order.countDocuments({
+      status: { $nin: ["completed", "cancelled", "delivered"] },
+    });
+
     // Activité récente : 5 dernières commandes (tous statuts)
     const recent = await Order.find({})
       .sort({ createdAt: -1 })
@@ -2013,6 +2018,7 @@ export const getOrderStats = async (_req: Request, res: Response<ApiResponse>) =
         totalSales,
         revenueChange: pct(totalRevenue, lastRevenue),
         salesChange: pct(totalSales, lastSales),
+        ordersToPrepare,
         topProducts,
         recentActivity,
       },

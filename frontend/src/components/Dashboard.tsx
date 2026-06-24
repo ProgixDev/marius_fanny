@@ -12,7 +12,6 @@ import {
   Menu,
   DollarSign,
   ShoppingCart,
-  AlertCircle,
   TrendingUp,
   TrendingDown,
   BarChart3,
@@ -45,7 +44,7 @@ import InventaireFrais from "./InventaireFour";
 interface Statistics {
   totalProducts: number;
   totalRevenue: number;
-  lowStock: number;
+  ordersToPrepare: number;
   totalSales: number;
   revenueChange: number;
   salesChange: number;
@@ -56,6 +55,7 @@ interface DashboardStats {
   totalSales: number;
   revenueChange: number;
   salesChange: number;
+  ordersToPrepare: number;
   topProducts: { name: string; quantity: number }[];
   recentActivity: {
     orderNumber: string;
@@ -111,6 +111,7 @@ export default function AdminDashboard() {
     totalSales: 0,
     revenueChange: 0,
     salesChange: 0,
+    ordersToPrepare: 0,
     topProducts: [],
     recentActivity: [],
   });
@@ -203,7 +204,7 @@ export default function AdminDashboard() {
   const statistics: Statistics = {
     totalProducts: products.length,
     totalRevenue: stats.totalRevenue,
-    lowStock: products.filter(p => !p.available).length,
+    ordersToPrepare: stats.ordersToPrepare,
     totalSales: stats.totalSales,
     revenueChange: stats.revenueChange,
     salesChange: stats.salesChange,
@@ -494,11 +495,11 @@ export default function AdminDashboard() {
                   color="purple"
                 />
                 <StatCard
-                  title="Alertes stock"
-                  value={statistics.lowStock}
-                  icon={<AlertCircle size={24} />}
+                  title="Commandes à préparer"
+                  value={statistics.ordersToPrepare}
+                  icon={<ClipboardList size={24} />}
                   color="red"
-                  alert={statistics.lowStock > 0}
+                  alert={statistics.ordersToPrepare > 0}
                 />
               </div>
 
