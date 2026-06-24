@@ -16,6 +16,7 @@ import paymentReminderRoutes from "./paymentReminder.routes.js";
 import settingsRoutes from "./settings.routes.js";
 import contactRoutes from "./contact.routes.js";
 import quoteRoutes from "./quote.routes.js";
+import visitRoutes from "./visit.routes.js";
 
 const router = Router();
 
@@ -279,5 +280,6 @@ router.use("/payment-reminders", paymentReminderRoutes);
 router.use("/settings", settingsRoutes);
 router.use("/contact", contactRoutes);
 router.use("/quotes", quoteRoutes);
+router.use("/visits", visitRoutes);
 
 export default router;

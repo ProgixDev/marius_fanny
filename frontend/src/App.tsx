@@ -119,6 +119,23 @@ const App: React.FC = () => {
     saveCart(cartItems);
   }, [cartItems]);
 
+  // Compter une visite du SITE (1 fois par session, pages publiques seulement).
+  useEffect(() => {
+    try {
+      const path = window.location.pathname;
+      const adminPaths = [
+        "/dashboard", "/stuff", "/staff", "/user", "/pro",
+        "/se-connecter", "/forgot_password", "/reset-password", "/verify-email",
+      ];
+      if (adminPaths.some((p) => path.startsWith(p))) return; // pas les pages admin/staff
+      if (sessionStorage.getItem("mf_visit_tracked")) return; // 1 fois par session
+      sessionStorage.setItem("mf_visit_tracked", "1");
+      fetch("/api/visits/track", { method: "POST" }).catch(() => {});
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   // Listen for cart updates from other components
   useEffect(() => {
     const handleCartUpdate = () => {

@@ -24,6 +24,7 @@ import {
   Clock,
   TicketPercent,
   FileText,
+  Eye,
 } from "lucide-react";
 import StaffManagement from "./StaffManagement";
 import ClientManagement from "./ClientManagement";
@@ -113,6 +114,7 @@ export default function AdminDashboard() {
     topProducts: [],
     recentActivity: [],
   });
+  const [visits, setVisits] = useState({ today: 0, thisMonth: 0, monthChange: 0 });
   const navigate = useNavigate();
 
   const gold = "#C5A065";
@@ -121,6 +123,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchProducts();
     fetchStats();
+    fetchVisits();
   }, []);
 
   const fetchStats = async () => {
@@ -129,6 +132,20 @@ export default function AdminDashboard() {
       if (res?.data) setStats(res.data);
     } catch (error) {
       console.error("Failed to fetch dashboard stats:", error);
+    }
+  };
+
+  const fetchVisits = async () => {
+    try {
+      const token = localStorage.getItem("bearer_token");
+      const res = await fetch(`${normalizedApiUrl}/api/visits/stats`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (json?.data) setVisits(json.data);
+    } catch (error) {
+      console.error("Failed to fetch visit stats:", error);
     }
   };
 
@@ -442,7 +459,20 @@ export default function AdminDashboard() {
 
             <div className="p-3 sm:p-4 md:p-8">
               {/* Stats Grid - Responsive */}
-              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6 mb-6 md:mb-8">
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 mb-6 md:mb-8">
+                <StatCard
+                  title="Visites aujourd'hui"
+                  value={visits.today}
+                  icon={<Eye size={24} />}
+                  color="blue"
+                />
+                <StatCard
+                  title="Visites ce mois"
+                  value={visits.thisMonth}
+                  change={visits.monthChange}
+                  icon={<BarChart3 size={24} />}
+                  color="purple"
+                />
                 <StatCard
                   title="Produits"
                   value={statistics.totalProducts}

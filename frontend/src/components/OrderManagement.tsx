@@ -2053,6 +2053,22 @@ export function OrderManagement() {
               </div>
             );
           })}
+          {(() => {
+            // Note de commande (saisie par le client / la boutique). On retire
+            // les lignes techniques (Square Invoice/Refund ID) pour n'afficher
+            // que la vraie note.
+            const cleanNote = (order.notes || "")
+              .split("\n")
+              .filter((l) => !/^Square (Invoice|Refund) ID:/i.test(l.trim()))
+              .join("\n")
+              .trim();
+            return cleanNote ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-900">
+                <span className="font-semibold">📝 Note : </span>
+                {cleanNote}
+              </div>
+            ) : null;
+          })()}
         </div>
       ),
     },
@@ -3604,13 +3620,16 @@ export function OrderManagement() {
               } else if (
                 formData.billingKind !== "gouvernement" &&
                 updatedOrder.paymentStatus !== "paid" &&
-                (updatedOrder.paymentMethod === "payment_link" ||
-                  Boolean(selectedOrder.squareInvoiceId)) &&
-                Math.abs(newTotal - (selectedOrder.total || 0)) > 0.01
+                updatedOrder.paymentMethod === "payment_link" &&
+                (
+                  // Passage "magasin → envoyer un lien" : pas encore de lien → en créer un
+                  !selectedOrder.squareInvoiceId ||
+                  // OU total modifié → renvoyer un lien à jour
+                  Math.abs(newTotal - (selectedOrder.total || 0)) > 0.01
+                )
               ) {
-                // Unpaid order, total changed (e.g. a product was added) → send a
-                // FRESH payment link for the new total automatically. Cancel the
-                // previous invoice first only if one exists.
+                // Commande non payée passée en lien (ou total modifié) → on
+                // (ré)envoie un lien de paiement. On annule l'ancien lien s'il existe.
                 try {
                   if (selectedOrder.squareInvoiceId) {
                     await fetch(`${normalizedApiUrl}/api/payments/cancel-invoice`, {
