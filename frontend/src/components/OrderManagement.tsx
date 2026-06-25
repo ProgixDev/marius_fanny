@@ -1650,9 +1650,20 @@ export function OrderManagement() {
             ? order.items
                 .map((item) => {
                   const productName = item.product?.name ?? `Produit #${item.productId}`;
-                  return `${productName} (x${item.quantity})`;
+                  // Détails comme dans la "Vue complète" : options (pain, etc.),
+                  // allergies/note client.
+                  const { chips, parsed } = getItemOptionChips(item);
+                  const lines: string[] = [];
+                  if (chips.length) lines.push(chips.join(", "));
+                  if (parsed.allergies) lines.push(`Allergies: ${parsed.allergies}`);
+                  if (parsed.note) lines.push(`Note: ${parsed.note}`);
+                  if (parsed.description) lines.push(parsed.description);
+                  const detail = lines.length
+                    ? `<div style="font-size:11px;color:#555;margin-left:10px;">${lines.join("<br/>")}</div>`
+                    : "";
+                  return `<div style="margin-bottom:6px;"><strong>${productName} (x${item.quantity})</strong>${detail}</div>`;
                 })
-                .join("<br />")
+                .join("")
             : "Aucun produit";
 
         return `

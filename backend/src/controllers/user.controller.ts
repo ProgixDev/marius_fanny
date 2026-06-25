@@ -362,6 +362,23 @@ export async function updateClient(req: AuthRequest, res: Response) {
       { new: true, runValidators: true },
     );
 
+    // Si l'email a changé, propager le nouvel email sur les commandes du client.
+    // Sinon le backfill (qui recrée un client à partir de l'email des commandes)
+    // recréerait un client en double pour l'ancien email.
+    const oldEmail = (targetUser.email || "").trim().toLowerCase();
+    const nextEmail = (newEmail || "").trim().toLowerCase();
+    if (nextEmail && nextEmail !== oldEmail) {
+      await Order.updateMany(
+        {
+          $or: [
+            { userId: targetUser._id.toString() },
+            { "clientInfo.email": oldEmail },
+          ],
+        },
+        { $set: { "clientInfo.email": newEmail } },
+      );
+    }
+
     res.json({ success: true, data: user, message: "Client mis à jour" });
   } catch (error) {
     if (error instanceof AppError) throw error;

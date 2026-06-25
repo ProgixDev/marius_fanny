@@ -813,6 +813,18 @@ export default function OrderForm({
     setSelectedBillingAddressId(null);
   };
 
+  // Déverrouille la section client pour pouvoir CHANGER le client d'une commande
+  // (les champs sont verrouillés tant qu'un client est sélectionné, pour éviter
+  // les échanges de nom accidentels). Permet de rechercher/saisir un autre client.
+  const handleUnlockClient = () => {
+    setSelectedClient(null);
+    setEmailSearch("");
+    setSelectedAddressId(null);
+    setSelectedBillingAddressId(null);
+    setFormData((prev) => ({ ...prev, clientId: undefined }));
+    setEmailOpen(true);
+  };
+
   const handleEmailChange = (value: string) => {
     setEmailSearch(value);
     setFormData((prev) => ({ ...prev, email: value }));
@@ -1134,9 +1146,20 @@ export default function OrderForm({
       {/* SECTION 2: Informations client */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-gray-200">
         <div>
-          <Label htmlFor="email" className="text-xs text-gray-600">
-            EMAIL:
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="email" className="text-xs text-gray-600">
+              EMAIL:
+            </Label>
+            {selectedClient && (
+              <button
+                type="button"
+                onClick={handleUnlockClient}
+                className="text-xs font-medium text-blue-600 hover:underline"
+              >
+                Changer de client
+              </button>
+            )}
+          </div>
           <Popover open={emailOpen && !selectedClient} onOpenChange={(o) => !selectedClient && setEmailOpen(o)}>
             <PopoverTrigger asChild>
               <Button

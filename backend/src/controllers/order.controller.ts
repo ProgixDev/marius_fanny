@@ -1019,6 +1019,29 @@ export const createOrder = async (
  * Get production list - orders broken down by product for kitchen staff
  * GET /api/orders/production
  */
+// Bornes UTC d'un JOUR CALENDAIRE de Montréal (gère l'heure d'été/hiver) pour
+// une date "YYYY-MM-DD". Sans ça, `new Date("2026-06-27T00:00")` donne des
+// bornes en UTC (serveur), et une commande du 26 au soir à Montréal (= 27 à
+// 00:00 UTC) apparaît à tort dans la page du 27.
+function montrealDayRangeUTC(dateStr: string): { start: Date; end: Date } {
+  const offsetMinutes = (utc: Date): number => {
+    const dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Montreal",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+    });
+    const p: Record<string, string> = {};
+    for (const part of dtf.formatToParts(utc)) p[part.type] = part.value;
+    const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+    return (asUTC - utc.getTime()) / 60000; // ex. -240 (EDT) ou -300 (EST)
+  };
+  const guessStart = new Date(`${dateStr}T00:00:00.000Z`);
+  const start = new Date(guessStart.getTime() - offsetMinutes(guessStart) * 60000);
+  const guessEnd = new Date(`${dateStr}T23:59:59.999Z`);
+  const end = new Date(guessEnd.getTime() - offsetMinutes(guessEnd) * 60000);
+  return { start, end };
+}
+
 export const getProductionList = async (
   req: Request,
   res: Response<ApiResponse>,
@@ -1033,9 +1056,9 @@ export const getProductionList = async (
 
     // Filter by pickup/delivery date if provided
     if (date) {
-      // Treat YYYY-MM-DD as a local calendar day (avoid UTC shift with `new Date(date)`).
-      const startOfDay = new Date(`${date}T00:00:00.000`);
-      const endOfDay = new Date(`${date}T23:59:59.999`);
+      // Bornes du jour calendaire de Montréal (et non du serveur/UTC), pour ne
+      // pas faire apparaître une commande du 26 au soir dans la page du 27.
+      const { start: startOfDay, end: endOfDay } = montrealDayRangeUTC(date);
 
       query.$or = [
         { pickupDate: { $gte: startOfDay, $lte: endOfDay } },
