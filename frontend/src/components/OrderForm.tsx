@@ -556,7 +556,11 @@ export default function OrderForm({
     const product = products.find((p) => p.id === productId);
     if (!product || !product.preparationTimeHours) return true;
 
-    const orderDateTime = new Date(`${orderDate}T${pickupTime || "00:00"}:00`);
+    // Les créneaux de LIVRAISON sont des plages ("11:30 - 12:00"). On extrait
+    // l'heure de DÉBUT (HH:MM), sinon `new Date("...T11:30 - 12:00:00")` donne
+    // une date invalide (NaN) → faux "délai insuffisant" sur les livraisons.
+    const startTime = (pickupTime || "").match(/\d{1,2}:\d{2}/)?.[0] || "00:00";
+    const orderDateTime = new Date(`${orderDate}T${startTime}:00`);
     const now = new Date();
     const timeDiff = orderDateTime.getTime() - now.getTime();
     const hoursDiff = timeDiff / (1000 * 60 * 60);
