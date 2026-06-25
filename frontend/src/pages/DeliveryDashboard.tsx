@@ -28,6 +28,7 @@ interface DeliveryOrder {
     firstName: string;
     lastName: string;
     phone: string;
+    phoneExtension?: string;
     email: string;
   };
   deliveryAddress: {
@@ -35,6 +36,7 @@ interface DeliveryOrder {
     city: string;
     postalCode: string;
     province: string;
+    details?: string;
   };
   status: "pending" | "in_transit" | "arrived" | "delivered";
   items: Array<{
@@ -337,6 +339,7 @@ const DeliveryDashboard: React.FC = () => {
           firstName: String(client.firstName || ""),
           lastName: String(client.lastName || ""),
           phone: String(client.phone || ""),
+          phoneExtension: String(client.phoneExtension || ""),
           email: String(client.email || ""),
         },
         deliveryAddress: {
@@ -344,6 +347,7 @@ const DeliveryDashboard: React.FC = () => {
           city: String(order.deliveryAddress?.city || ""),
           postalCode: String(order.deliveryAddress?.postalCode || ""),
           province: String(order.deliveryAddress?.province || ""),
+          details: String(order.deliveryAddress?.details || ""),
         },
         status: mappedStatus,
         items,
@@ -971,6 +975,9 @@ const DeliveryDashboard: React.FC = () => {
                       >
                         <Phone className="w-4 h-4 shrink-0" />
                         {order.clientInfo.phone}
+                        {order.clientInfo.phoneExtension
+                          ? ` · poste ${order.clientInfo.phoneExtension}`
+                          : ""}
                       </a>
                     )}
                     <a
@@ -987,6 +994,14 @@ const DeliveryDashboard: React.FC = () => {
                         {order.deliveryAddress.street}, {order.deliveryAddress.city}
                       </span>
                     </a>
+                    {order.deliveryAddress.details && (
+                      <div className="flex items-start gap-2 text-gray-700">
+                        <span className="w-4 shrink-0" />
+                        <span className="text-xs font-medium">
+                          {order.deliveryAddress.details}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
@@ -1078,6 +1093,9 @@ const DeliveryDashboard: React.FC = () => {
                           </div>
                           <div className="text-xs text-gray-500">
                             {order.clientInfo.phone}
+                            {order.clientInfo.phoneExtension
+                              ? ` · poste ${order.clientInfo.phoneExtension}`
+                              : ""}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -1087,6 +1105,11 @@ const DeliveryDashboard: React.FC = () => {
                           <div className="text-xs text-gray-500">
                             {order.deliveryAddress.city}
                           </div>
+                          {order.deliveryAddress.details && (
+                            <div className="text-xs text-gray-700 font-medium mt-0.5">
+                              {order.deliveryAddress.details}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
@@ -1181,12 +1204,18 @@ const DeliveryDashboard: React.FC = () => {
                     <a href={`tel:${selectedOrder.clientInfo.phone}`} className="text-[#C5A065] hover:underline">
                       {selectedOrder.clientInfo.phone}
                     </a>
+                    {selectedOrder.clientInfo.phoneExtension && (
+                      <span className="text-gray-600">· poste {selectedOrder.clientInfo.phoneExtension}</span>
+                    )}
                   </div>
                   <div className="flex items-start gap-2 text-sm">
                     <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
                     <div>
                       <p>{selectedOrder.deliveryAddress.street}</p>
                       <p>{selectedOrder.deliveryAddress.city}, {selectedOrder.deliveryAddress.postalCode}</p>
+                      {selectedOrder.deliveryAddress.details && (
+                        <p className="font-medium text-gray-800">{selectedOrder.deliveryAddress.details}</p>
+                      )}
                     </div>
                   </div>
                 </div>

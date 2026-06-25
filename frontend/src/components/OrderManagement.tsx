@@ -277,6 +277,7 @@ export function OrderManagement() {
                 lastName: o.clientInfo?.lastName || "",
                 email: o.clientInfo?.email || "",
                 phone: o.clientInfo?.phone || "",
+                phoneExtension: o.clientInfo?.phoneExtension || "",
                 status: "active" as const,
                 createdAt: o.createdAt,
                 updatedAt: o.updatedAt,
@@ -3125,6 +3126,11 @@ export function OrderManagement() {
                             {selectedOrder.deliveryAddress.province}{" "}
                             {selectedOrder.deliveryAddress.postalCode}
                           </div>
+                          {(selectedOrder.deliveryAddress as any).details && (
+                            <div className="font-medium text-gray-900 mt-1">
+                              {(selectedOrder.deliveryAddress as any).details}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -3260,6 +3266,7 @@ export function OrderManagement() {
                   lastName: formData.lastName,
                   email: formData.email,
                   phone: formData.phone,
+                  phoneExtension: formData.phoneExtension || undefined,
                 },
                 pickupLocation: formData.pickupLocation,
                 deliveryType: formData.deliveryType,
@@ -3295,6 +3302,7 @@ export function OrderManagement() {
                   city: formData.deliveryAddress.city,
                   province: formData.deliveryAddress.province || "QC",
                   postalCode: formData.deliveryAddress.postalCode,
+                  details: formData.deliveryAddress.details || undefined,
                 };
                 if (formData.date) {
                   payload.deliveryDate = formData.date;
@@ -3484,6 +3492,7 @@ export function OrderManagement() {
                   lastName: formData.lastName,
                   email: formData.email,
                   phone: formData.phone,
+                  phoneExtension: formData.phoneExtension || undefined,
                 },
                 pickupLocation: formData.pickupLocation,
                 deliveryType: formData.deliveryType,
@@ -3516,6 +3525,7 @@ export function OrderManagement() {
                   city: formData.deliveryAddress.city,
                   province: formData.deliveryAddress.province || "QC",
                   postalCode: formData.deliveryAddress.postalCode,
+                  details: formData.deliveryAddress.details || undefined,
                 };
                 if (formData.date) {
                   payload.deliveryDate = formData.date;
@@ -3704,6 +3714,7 @@ export function OrderManagement() {
                   firstName: selectedOrder.client.firstName,
                   lastName: selectedOrder.client.lastName,
                   phone: selectedOrder.client.phone,
+                  phoneExtension: (selectedOrder.client as any).phoneExtension || "",
                   email: selectedOrder.client.email,
                   pickupLocation: selectedOrder.pickupLocation,
                   deliveryType: selectedOrder.deliveryType,
@@ -3720,6 +3731,7 @@ export function OrderManagement() {
                         city: selectedOrder.deliveryAddress.city,
                         province: selectedOrder.deliveryAddress.province,
                         postalCode: selectedOrder.deliveryAddress.postalCode,
+                        details: (selectedOrder.deliveryAddress as any).details || "",
                       }
                     : undefined,
                   items: selectedOrder.items.map(item => ({

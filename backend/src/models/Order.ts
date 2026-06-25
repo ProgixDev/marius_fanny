@@ -5,6 +5,7 @@ export interface IAddress {
   city: string;
   province?: string;
   postalCode: string;
+  details?: string;
 }
 
 export interface IOrderItem {
@@ -24,6 +25,7 @@ export interface IClientInfo {
   lastName: string;
   email: string;
   phone: string;
+  phoneExtension?: string;
 }
 
 export interface IOrderChange {
@@ -125,6 +127,10 @@ const AddressSchema = new Schema<IAddress>(
       trim: true,
       uppercase: true,
     },
+    details: {
+      type: String,
+      trim: true,
+    },
   },
   { _id: false },
 );
@@ -201,6 +207,11 @@ const ClientInfoSchema = new Schema<IClientInfo>(
       type: String,
       required: false,
       default: "",
+      trim: true,
+    },
+    phoneExtension: {
+      type: String,
+      required: false,
       trim: true,
     },
   },

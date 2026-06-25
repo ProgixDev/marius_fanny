@@ -63,6 +63,7 @@ interface OrderFormData {
   firstName: string;
   lastName: string;
   phone: string;
+  phoneExtension?: string;
   email: string;
   items: OrderFormItem[];
   notes: string;
@@ -73,6 +74,7 @@ interface OrderFormData {
     city: string;
     province: string;
     postalCode: string;
+    details?: string;
   };
   billingAddress?: {
     street: string;
@@ -145,6 +147,7 @@ export default function OrderForm({
       firstName: initialData?.firstName || "",
       lastName: initialData?.lastName || "",
       phone: initialData?.phone || "",
+      phoneExtension: initialData?.phoneExtension || "",
       email: initialData?.email || "",
       items: initialItems,
       notes: initialData?.notes || "",
@@ -1251,15 +1254,26 @@ export default function OrderForm({
           <Label htmlFor="phone" className="text-xs text-gray-600">
             TÉL:
           </Label>
-          <Input
-            id="phone"
-            type="tel"
-            value={formData.phone}
-            onChange={(e) => handleInputChange("phone", e.target.value)}
-            readOnly={!!selectedClient}
-            className={`${errors.phone ? "border-red-500" : ""} ${selectedClient ? "bg-gray-50 text-gray-600 cursor-not-allowed" : ""}`}
-            placeholder="(___) ___-____"
-          />
+          <div className="flex gap-2">
+            <Input
+              id="phone"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => handleInputChange("phone", e.target.value)}
+              readOnly={!!selectedClient}
+              className={`flex-1 ${errors.phone ? "border-red-500" : ""} ${selectedClient ? "bg-gray-50 text-gray-600 cursor-not-allowed" : ""}`}
+              placeholder="(___) ___-____"
+            />
+            <Input
+              id="phoneExtension"
+              type="text"
+              value={formData.phoneExtension || ""}
+              onChange={(e) => handleInputChange("phoneExtension", e.target.value)}
+              className="w-24"
+              placeholder="Poste"
+              title="Poste téléphonique (optionnel)"
+            />
+          </div>
           {errors.phone && (
             <p className="text-xs text-red-500 mt-1">{errors.phone}</p>
           )}
@@ -1478,6 +1492,31 @@ export default function OrderForm({
                   {errors.deliveryAddress}
                 </p>
               )}
+            </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="deliveryDetails" className="text-xs text-gray-600">
+                DÉTAILS (compagnie, étage, local… — optionnel):
+              </Label>
+              <Input
+                id="deliveryDetails"
+                type="text"
+                value={formData.deliveryAddress?.details || ""}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    deliveryAddress: {
+                      ...prev.deliveryAddress,
+                      street: prev.deliveryAddress?.street || "",
+                      city: prev.deliveryAddress?.city || "",
+                      province: prev.deliveryAddress?.province || "",
+                      postalCode: prev.deliveryAddress?.postalCode || "",
+                      details: e.target.value,
+                    },
+                  }))
+                }
+                placeholder="Ex.: Centre administratif, 3e étage, local 305"
+              />
             </div>
 
             <div>

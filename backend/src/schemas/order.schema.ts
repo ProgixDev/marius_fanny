@@ -11,6 +11,8 @@ export const addressSchema = z.object({
     .string()
     .min(3, "Le code postal doit contenir au moins 3 caractères")
     .max(10, "Le code postal ne peut pas dépasser 10 caractères"),
+  // Détails optionnels : compagnie, étage, local…
+  details: z.string().max(300).optional(),
 });
 
 // Order item schema
@@ -44,6 +46,8 @@ export const clientInfoSchema = z.object({
       (val) => !val || /^[\d\s\-().+]+$/.test(val),
       "Le numéro de téléphone contient des caractères invalides",
     ),
+  // Poste téléphonique (optionnel)
+  phoneExtension: z.string().max(20).optional(),
 });
 
 // Create order schema - for POST /api/orders
