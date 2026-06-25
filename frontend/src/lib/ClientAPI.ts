@@ -122,7 +122,9 @@ class ClientAPI {
   }
 
   async updateClient(id: number, data: Partial<CreateClientData>): Promise<Client> {
-    const result = await this.request<any>(`/${id}`, {
+    // Endpoint dédié client : accessible au staff (vendeur) — évite le
+    // "Forbidden" de la route admin /users/:id.
+    const result = await this.request<any>(`/clients/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
     });

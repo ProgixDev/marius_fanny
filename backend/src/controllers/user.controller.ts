@@ -3,7 +3,7 @@ import { AuthRequest } from "../middleware/auth.js";
 import { User } from "../models/User.js";
 import Order from "../models/Order.js";
 import { AppError } from "../middleware/errorHandler.js";
-import { canManageUser } from "../utils/roles.js";
+import { canManageUser, getRoleLevel } from "../utils/roles.js";
 import { getAuth } from "../config/auth.js";
 
 async function backfillMissingClientsFromOrders() {
@@ -289,6 +289,83 @@ export async function updateUser(req: AuthRequest, res: Response) {
   } catch (error) {
     if (error instanceof AppError) throw error;
     throw new AppError("Failed to update user", 500);
+  }
+}
+
+/**
+ * Update a CLIENT by ID — accessible au staff (vendeur, admin, etc.).
+ * Sécurité : ne peut modifier QUE des clients (jamais le staff/admin).
+ * Permet à une vendeuse de corriger le téléphone/courriel d'un client sans
+ * être bloquée par le « Forbidden » de la route admin /users/:id.
+ */
+export async function updateClient(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const { firstName, lastName, phone, status, email: newEmail, billing } = req.body;
+
+    const targetUser = await User.findById(id);
+    if (!targetUser) {
+      throw new AppError("Client introuvable", 404);
+    }
+
+    // On n'autorise la modification que pour des CLIENTS (niveau < staff).
+    if (getRoleLevel(targetUser.role || "user") >= getRoleLevel("staff")) {
+      throw new AppError("Cet accès ne permet de modifier que des clients", 403);
+    }
+
+    const normalizeBilling = (input: any, existing?: any) => {
+      if (!input) return existing;
+      const kind = input.kind || existing?.kind || "standard";
+      if (kind === "representant") {
+        return {
+          kind,
+          organization: input.organization ?? existing?.organization,
+          paymentTermsDays: 0,
+          allowUnpaidOrders: true,
+        };
+      }
+      if (kind === "gouvernement") {
+        return {
+          kind,
+          organization: input.organization ?? existing?.organization,
+          invoiceEmail: input.invoiceEmail ?? existing?.invoiceEmail,
+          paymentTermsDays: Number.isFinite(input.paymentTermsDays)
+            ? input.paymentTermsDays
+            : existing?.paymentTermsDays ?? 180,
+          allowUnpaidOrders: input.allowUnpaidOrders ?? true,
+        };
+      }
+      return {
+        kind: "standard",
+        organization: input.organization ?? existing?.organization,
+        paymentTermsDays: 0,
+        allowUnpaidOrders: false,
+      };
+    };
+
+    const updateFields: Record<string, any> = {};
+    if (firstName !== undefined || lastName !== undefined) {
+      const fName = firstName ?? targetUser.name?.split(" ")[0] ?? "";
+      const lName = lastName ?? targetUser.name?.split(" ").slice(1).join(" ") ?? "";
+      updateFields.name = `${fName} ${lName}`.trim();
+    }
+    if (phone !== undefined) updateFields["profile.phoneNumber"] = phone;
+    if (status !== undefined) updateFields.status = status;
+    if (newEmail !== undefined) updateFields.email = newEmail;
+    if (billing !== undefined) {
+      updateFields.billing = normalizeBilling(billing, (targetUser as any).billing);
+    }
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      { $set: updateFields },
+      { new: true, runValidators: true },
+    );
+
+    res.json({ success: true, data: user, message: "Client mis à jour" });
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError("Échec de la mise à jour du client", 500);
   }
 }
 

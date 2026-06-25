@@ -108,6 +108,19 @@ router.get(
 );
 
 /**
+ * @route   PUT /api/users/clients/:id
+ * @desc    Update a client (staff-accessible; clients only, never staff/admin)
+ * @access  Private (Admin/Staff)
+ */
+router.put(
+  "/clients/:id",
+  requireAuth,
+  requireStaff,
+  validateParams(userIdParamSchema),
+  asyncHandler(userController.updateClient),
+);
+
+/**
  * @route   POST /api/users/staff
  * @desc    Create a new staff member with email/password/role
  * @access  Private (Admin only)

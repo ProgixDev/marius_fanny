@@ -102,14 +102,12 @@ function ClientManagement() {
     if (!formData.lastName.trim()) {
       return "Le nom de famille est requis";
     }
-    // Phone is no longer strictly required at creation — clients who self-sign
-    // up online rarely give one, and we only need it later if/when sending a
-    // Square payment link by SMS. Admin can always come back and add it.
-    if (formData.status !== "placeholder" && !formData.email.trim()) {
-      return "L'email est requis pour les clients actifs";
+    // Le téléphone est OBLIGATOIRE (clients sans courriel possibles); le
+    // courriel est facultatif. S'il est fourni, il doit être valide.
+    if (formData.status !== "placeholder" && !formData.phone.trim()) {
+      return "Le téléphone est requis";
     }
     if (
-      formData.status !== "placeholder" &&
       formData.email &&
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)
     ) {
@@ -624,10 +622,7 @@ function ClientManagement() {
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">
-              Email{" "}
-              {formData.status !== "placeholder" && (
-                <span className="text-red-500">*</span>
-              )}
+              Email <span className="text-gray-400 text-xs">(facultatif)</span>
             </label>
             <input
               type="email"
@@ -785,10 +780,7 @@ function ClientManagement() {
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">
-              Email{" "}
-              {formData.status !== "placeholder" && (
-                <span className="text-red-500">*</span>
-              )}
+              Email <span className="text-gray-400 text-xs">(facultatif)</span>
             </label>
             <input
               type="email"

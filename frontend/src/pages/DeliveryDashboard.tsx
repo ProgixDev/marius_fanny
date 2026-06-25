@@ -473,8 +473,18 @@ const DeliveryDashboard: React.FC = () => {
     }
   };
 
+  // Interprète une valeur de date comme un JOUR CALENDAIRE local, sans décalage
+  // de fuseau. Une date stockée à minuit UTC ("2026-06-25T00:00:00.000Z") ou une
+  // chaîne "2026-06-25" doivent afficher le 25 juin, même en heure de Montréal.
+  const toCalendarDate = (value: string) => {
+    const s = String(value || "");
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return new Date(s);
+  };
+
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = toCalendarDate(dateString);
     return date.toLocaleDateString("fr-CA", {
       day: "2-digit",
       month: "2-digit",
@@ -503,7 +513,7 @@ const DeliveryDashboard: React.FC = () => {
   };
 
   const formatDayName = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = toCalendarDate(dateString);
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
@@ -545,7 +555,7 @@ const DeliveryDashboard: React.FC = () => {
       afterTomorrow.setDate(today.getDate() + 2);
       
       filtered = filtered.filter((order) => {
-        const orderDate = new Date(order.createdAt);
+        const orderDate = toCalendarDate(order.createdAt);
         orderDate.setHours(0, 0, 0, 0);
         
         if (dateFilter === "today") {
@@ -563,6 +573,15 @@ const DeliveryDashboard: React.FC = () => {
     
     return filtered;
   };
+
+  // Nombre de livraisons prévues AUJOURD'HUI (pour le petit badge de notification)
+  const todayDeliveriesCount = orders.filter((order) => {
+    const d = toCalendarDate(order.createdAt);
+    d.setHours(0, 0, 0, 0);
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return d.getTime() === t.getTime();
+  }).length;
 
   if (loading) {
     return (
@@ -657,6 +676,12 @@ const DeliveryDashboard: React.FC = () => {
                 {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
               <h2 className="text-xl font-semibold text-gray-900">Commandes</h2>
+              {todayDeliveriesCount > 0 && (
+                <span className="inline-flex items-center gap-1 bg-[#C5A065] text-white text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap">
+                  <Package className="w-3.5 h-3.5" />
+                  {todayDeliveriesCount} aujourd'hui
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-4">
@@ -714,7 +739,7 @@ const DeliveryDashboard: React.FC = () => {
         )}
 
         {/* PAGE CONTENT */}
-        <div className="p-6 lg:p-8">
+        <div className="p-3 sm:p-6 lg:p-8">
           {/* FILTRES - REPOSITIONNÉS */}
           <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between">
@@ -891,8 +916,94 @@ const DeliveryDashboard: React.FC = () => {
             )}
           </div>
 
-          {/* TABLEAU DES COMMANDES - FOND BLANC */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          {/* VUE MOBILE (portrait, dans la voiture) — cartes empilées */}
+          <div className="md:hidden space-y-3">
+            {filteredOrders.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-6 py-12 text-center">
+                <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500">Aucune commande trouvée</p>
+              </div>
+            ) : (
+              filteredOrders.map((order) => (
+                <button
+                  key={order.id}
+                  onClick={() => setSelectedOrder(order)}
+                  className="w-full text-left bg-white rounded-lg shadow-sm border border-gray-200 p-4 active:bg-gray-50"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-gray-900 text-base">
+                        #{formatOrderNumber(order.orderNumber)}
+                      </div>
+                      <div className="text-xs text-blue-600 font-medium mt-0.5">
+                        {formatDayName(order.createdAt)} · {formatDate(order.createdAt)}
+                        {order.estimatedDeliveryTime ? ` · ${order.estimatedDeliveryTime}` : ""}
+                      </div>
+                    </div>
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                        order.status === "pending"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : order.status === "in_transit"
+                          ? "bg-blue-100 text-blue-800"
+                          : order.status === "arrived"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      {order.status === "pending" && "En attente"}
+                      {order.status === "in_transit" && "En route"}
+                      {order.status === "arrived" && "Arrivé"}
+                      {order.status === "delivered" && "Livré"}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 space-y-2 text-sm">
+                    <div className="flex items-center gap-2 text-gray-900 font-medium">
+                      <User className="w-4 h-4 text-gray-400 shrink-0" />
+                      {order.clientInfo.firstName} {order.clientInfo.lastName}
+                    </div>
+                    {order.clientInfo.phone && (
+                      <a
+                        href={`tel:${order.clientInfo.phone}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-2 text-blue-600 font-medium"
+                      >
+                        <Phone className="w-4 h-4 shrink-0" />
+                        {order.clientInfo.phone}
+                      </a>
+                    )}
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                        `${order.deliveryAddress.street}, ${order.deliveryAddress.city}`,
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-start gap-2 text-gray-700"
+                    >
+                      <MapPin className="w-4 h-4 text-[#C5A065] shrink-0 mt-0.5" />
+                      <span className="underline decoration-gray-300">
+                        {order.deliveryAddress.street}, {order.deliveryAddress.city}
+                      </span>
+                    </a>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                    <span className="font-semibold text-gray-900">
+                      {order.totalAmount.toFixed(2)}$
+                    </span>
+                    <span className="text-[#C5A065] font-medium text-sm flex items-center gap-1">
+                      Voir détails <ChevronRight className="w-4 h-4" />
+                    </span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+
+          {/* TABLEAU DES COMMANDES (ordinateur) - FOND BLANC */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hidden md:block">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
