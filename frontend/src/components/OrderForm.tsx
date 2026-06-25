@@ -176,6 +176,9 @@ export default function OrderForm({
   const [emailOpen, setEmailOpen] = useState(false);
   const [emailSearch, setEmailSearch] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  // Quand l'utilisatrice clique "Changer de client", on empêche la liaison
+  // automatique (depuis initialData) de re-verrouiller aussitôt le client.
+  const [clientManuallyCleared, setClientManuallyCleared] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(
     null,
   );
@@ -250,6 +253,7 @@ export default function OrderForm({
   // fields stay locked (prevents the name-swap bug).
   useEffect(() => {
     if (selectedClient) return;
+    if (clientManuallyCleared) return; // l'utilisatrice a choisi de changer de client
     const targetEmail = (initialData?.email || "").trim().toLowerCase();
     const targetId = initialData?.clientId;
     if (!targetEmail && !targetId) return;
@@ -262,7 +266,7 @@ export default function OrderForm({
       setSelectedClient(match);
       setEmailSearch(match.email);
     }
-  }, [clients, initialData?.email, initialData?.clientId, selectedClient]);
+  }, [clients, initialData?.email, initialData?.clientId, selectedClient, clientManuallyCleared]);
 
   useEffect(() => {
     if (formData.deliveryType === "pickup") {
@@ -817,11 +821,19 @@ export default function OrderForm({
   // (les champs sont verrouillés tant qu'un client est sélectionné, pour éviter
   // les échanges de nom accidentels). Permet de rechercher/saisir un autre client.
   const handleUnlockClient = () => {
+    setClientManuallyCleared(true);
     setSelectedClient(null);
     setEmailSearch("");
     setSelectedAddressId(null);
     setSelectedBillingAddressId(null);
-    setFormData((prev) => ({ ...prev, clientId: undefined }));
+    setFormData((prev) => ({
+      ...prev,
+      clientId: undefined,
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+    }));
     setEmailOpen(true);
   };
 
@@ -1146,20 +1158,9 @@ export default function OrderForm({
       {/* SECTION 2: Informations client */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-gray-200">
         <div>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="email" className="text-xs text-gray-600">
-              EMAIL:
-            </Label>
-            {selectedClient && (
-              <button
-                type="button"
-                onClick={handleUnlockClient}
-                className="text-xs font-medium text-blue-600 hover:underline"
-              >
-                Changer de client
-              </button>
-            )}
-          </div>
+          <Label htmlFor="email" className="text-xs text-gray-600">
+            EMAIL:
+          </Label>
           <Popover open={emailOpen && !selectedClient} onOpenChange={(o) => !selectedClient && setEmailOpen(o)}>
             <PopoverTrigger asChild>
               <Button
@@ -1277,18 +1278,7 @@ export default function OrderForm({
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-[11px] text-green-800 hover:bg-green-100"
-                onClick={() => {
-                  setSelectedClient(null);
-                  setEmailSearch("");
-                  setFormData((prev) => ({
-                    ...prev,
-                    clientId: undefined,
-                    firstName: "",
-                    lastName: "",
-                    email: "",
-                    phone: "",
-                  }));
-                }}
+                onClick={handleUnlockClient}
               >
                 Changer de client
               </Button>
