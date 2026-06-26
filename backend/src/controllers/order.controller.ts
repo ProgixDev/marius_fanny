@@ -1509,6 +1509,20 @@ export const updateOrder = async (
         ...updateData.clientInfo,
         email: updateData.clientInfo.email || "",
       };
+
+      // Si on a CHANGÉ de client (courriel différent), re-rattacher la commande
+      // au bon compte (userId) pour qu'elle apparaisse dans le « Mon compte » du
+      // nouveau client. On ne met à jour QUE si un compte correspond — sinon on
+      // ne déracine pas la commande (client saisi sans compte).
+      const newEmail = (updateData.clientInfo.email || "").trim().toLowerCase();
+      const prevEmail = ((oldClientInfo as any).email || "").trim().toLowerCase();
+      if (newEmail && newEmail !== prevEmail) {
+        const matchedUser = await User.findOne({ email: newEmail }).select("_id").lean();
+        if (matchedUser?._id) {
+          order.userId = matchedUser._id.toString();
+        }
+      }
+
       changes.push({
         changedAt: new Date(),
         changedBy: userId,
