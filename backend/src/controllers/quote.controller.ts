@@ -431,6 +431,15 @@ export async function acceptQuote(req: Request, res: Response) {
       };
     }
 
+    // Rattacher la commande au compte du client (créé/retrouvé à la création du
+    // devis) pour qu'elle apparaisse dans son « Mon compte ».
+    const quoteUser = await User.findOne({ email: quote.clientInfo.email })
+      .select("_id")
+      .lean();
+    if (quoteUser?._id) {
+      orderData.userId = quoteUser._id.toString();
+    }
+
     const order = new Order(orderData);
     await order.save();
 
