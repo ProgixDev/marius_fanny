@@ -374,6 +374,7 @@ export async function updateClient(req: AuthRequest, res: Response) {
     }
     if (firstName !== undefined) orderSet["clientInfo.firstName"] = firstName;
     if (lastName !== undefined) orderSet["clientInfo.lastName"] = lastName;
+    if (phone !== undefined) orderSet["clientInfo.phone"] = phone;
     if (Object.keys(orderSet).length > 0) {
       await Order.updateMany(
         {
