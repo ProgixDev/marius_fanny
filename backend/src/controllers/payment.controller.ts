@@ -621,16 +621,15 @@ export const createInvoice = async (req: Request, res: Response) => {
       deliveryType,
     } = req.body;
 
-    // Validate required fields
-    if (!orderId || !customerEmail || !customerName || !items || !total) {
+    // Validate required fields. Le courriel n'est requis QUE pour l'envoi par
+    // courriel — un envoi par SMS n'en a pas besoin (cliente sans courriel).
+    if (!orderId || !customerName || !items || !total) {
       console.error(`❌ [INVOICE] Missing required fields`);
       return res.status(400).json({
         success: false,
-        error: "orderId, customerEmail, customerName, items, and total are required",
+        error: "orderId, customerName, items, and total are required",
       });
     }
-
-    console.log(`📧 [INVOICE] Creating invoice for ${customerEmail} (Order: ${orderId})`);
 
     const normalizedPhone = normalizeSquarePhoneNumber(customerPhone);
 
@@ -640,6 +639,14 @@ export const createInvoice = async (req: Request, res: Response) => {
         error: "Un numero de telephone valide est requis pour l'envoi par SMS",
       });
     }
+    if (deliveryChannel !== "sms" && !customerEmail) {
+      return res.status(400).json({
+        success: false,
+        error: "Un courriel est requis pour l'envoi de la facture par courriel",
+      });
+    }
+
+    console.log(`📧 [INVOICE] Creating invoice (Order: ${orderId}, canal: ${deliveryChannel})`);
 
     // Build line items for the invoice
     const lineItems = items.map((item: any) => ({
@@ -700,7 +707,8 @@ export const createInvoice = async (req: Request, res: Response) => {
     const customerResponse = await squareClient.customers.create({
       givenName: customerName.split(" ")[0] || customerName,
       familyName: customerName.split(" ").slice(1).join(" ") || undefined,
-      emailAddress: customerEmail,
+      // N'attacher le courriel que s'il existe (Square rejette une chaîne vide).
+      ...(customerEmail ? { emailAddress: customerEmail } : {}),
       // Only attach phone when actually delivering by SMS — Square rejects
       // borderline numbers with INVALID_PHONE_NUMBER otherwise.
       ...(deliveryChannel === "sms" && normalizedPhone

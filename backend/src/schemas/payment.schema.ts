@@ -45,7 +45,10 @@ export const listPaymentsSchema = z.object({
 export const createInvoiceSchema = z.object({
   orderId: z.string().min(1, "Order ID is required"),
   orderNumber: z.string().optional(),
-  customerEmail: z.string().email("Valid email is required"),
+  // Courriel optionnel : pour l'envoi par SMS, on n'a pas besoin de courriel.
+  // Le format reste validé si une valeur non vide est fournie ; l'exigence
+  // "email requis pour l'envoi par courriel" est gérée dans le contrôleur.
+  customerEmail: z.string().email("Valid email is required").optional().or(z.literal("")),
   customerPhone: z.string().optional(),
   customerName: z.string().min(1, "Customer name is required"),
   deliveryChannel: z.enum(["email", "sms"]).optional().default("email"),
