@@ -161,15 +161,20 @@ export function OrderManagement() {
 
     if (selectedDate) {
       next = next.filter((order) => {
-        const raw = String(
-          order.pickupDate ||
-            (order as any).deliveryDate ||
-            order.orderDate ||
-            order.createdAt ||
-            ""
-        );
-        const dateKey = raw.includes("T") ? raw.split("T")[0] : raw.slice(0, 10);
-        return dateKey === selectedDate;
+        // 1) Commandes en livraison : deliveryDate est déjà une chaîne "YYYY-MM-DD".
+        const dd = (order as any).deliveryDate;
+        if (typeof dd === "string" && /^\d{4}-\d{2}-\d{2}/.test(dd)) {
+          return dd.slice(0, 10) === selectedDate;
+        }
+        // 2) Sinon : jour calendaire de MONTRÉAL de la date de ramassage. Gère
+        //    aussi bien une chaîne ISO qu'un objet Date, et le bon fuseau (sinon
+        //    une comparaison brute échouait et n'affichait aucune commande).
+        const src = order.pickupDate || order.orderDate || order.createdAt;
+        if (!src) return false;
+        const d = new Date(src as any);
+        if (isNaN(d.getTime())) return false;
+        const key = d.toLocaleDateString("en-CA", { timeZone: "America/Montreal" });
+        return key === selectedDate;
       });
     }
 
