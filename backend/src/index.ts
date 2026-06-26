@@ -195,4 +195,18 @@ if (!isVercel) {
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
   });
+
+  // Filet de sécurité : re-synchronise les commandes payées dans Square mais
+  // restées "non payées" dans le site (au cas où un webhook se perd). Au
+  // démarrage (après 1 min) puis toutes les 30 min.
+  import("./controllers/payment.controller.js")
+    .then(({ reconcileUnpaidOrders }) => {
+      const run = () =>
+        reconcileUnpaidOrders().catch((e) =>
+          console.error("[RECONCILE] erreur:", e?.message || e),
+        );
+      setTimeout(run, 60 * 1000);
+      setInterval(run, 30 * 60 * 1000);
+    })
+    .catch((e) => console.error("[RECONCILE] init échouée:", e?.message || e));
 }

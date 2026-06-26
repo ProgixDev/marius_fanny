@@ -1842,7 +1842,11 @@ export const squareWebhook = async (req: Request, res: Response) => {
       }
     }
 
-    if (eventType === "payment.completed" || eventType === "payment.updated") {
+    if (
+      eventType === "payment.completed" ||
+      eventType === "payment.updated" ||
+      eventType === "payment.created"
+    ) {
       const payment = event?.data?.object?.payment;
       const paymentId = payment?.id;
       const paymentStatus = payment?.status;
@@ -1945,6 +1949,47 @@ export const squareWebhook = async (req: Request, res: Response) => {
     res.status(200).json({ received: true });
   }
 };
+
+/**
+ * Filet de sécurité auto-réparateur. Même si un webhook se perd (coupure,
+ * retries épuisés…), on détecte les commandes NON payées dont la facture Square
+ * est en réalité PAYÉE, et on les marque payées. Lancé périodiquement par le
+ * serveur (voir index.ts). Idempotent et sans danger (n'agit que sur PAID).
+ */
+export async function reconcileUnpaidOrders(): Promise<number> {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const orders = await Order.find({
+    paymentStatus: { $ne: "paid" },
+    status: { $ne: "cancelled" },
+    squareInvoiceId: { $exists: true, $nin: [null, ""] },
+    createdAt: { $gte: since },
+  });
+
+  let fixed = 0;
+  for (const order of orders) {
+    try {
+      const r = await squareClient.invoices.get({ invoiceId: order.squareInvoiceId! });
+      const inv = (r as any)?.invoice || r;
+      if (inv?.status !== "PAID") continue;
+      if (order.status === "cancelled" || ((order as any).refunds?.length > 0)) continue;
+
+      order.paymentStatus = "paid";
+      order.depositPaid = true;
+      order.balancePaid = true;
+      order.amountPaid = order.total || 0;
+      order.depositPaidAt = order.depositPaidAt || new Date();
+      order.balancePaidAt = new Date();
+      await order.save();
+      fixed++;
+      console.log(`🔄 [RECONCILE] Commande ${order.orderNumber} marquée PAYÉE (facture ${order.squareInvoiceId})`);
+      await sendPaidConfirmationOnce(order._id);
+    } catch {
+      /* facture introuvable / erreur réseau : on réessaiera au prochain cycle */
+    }
+  }
+  if (fixed > 0) console.log(`🔄 [RECONCILE] ${fixed} commande(s) re-synchronisée(s) avec Square`);
+  return fixed;
+}
 
 /**
  * Server-side helper: build a Square invoice for an existing Order, publish it,
