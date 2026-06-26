@@ -1535,6 +1535,27 @@ export const updateOrder = async (
       });
     }
 
+    // Track and update deliveryDate (chaîne "YYYY-MM-DD" utilisée par le portail
+    // livreur et la liste de production). Sans ça, modifier la date d'une
+    // commande en LIVRAISON laissait l'ancienne date affichée au livreur / sur
+    // la production (pickupDate changeait mais pas deliveryDate).
+    if (
+      updateData.deliveryDate !== undefined &&
+      updateData.deliveryDate !== order.deliveryDate
+    ) {
+      const oldDeliveryDate = order.deliveryDate;
+      order.deliveryDate = updateData.deliveryDate;
+      changes.push({
+        changedAt: new Date(),
+        changedBy: userId,
+        field: "deliveryDate",
+        oldValue: oldDeliveryDate,
+        newValue: updateData.deliveryDate,
+        changeType: "updated",
+        notes: "Delivery date changed",
+      });
+    }
+
     // Track and update pickup/delivery time slot. This was previously not
     // handled at all, so modifying the hour through the admin form looked
     // like it worked (the local React state showed the new value) but the
