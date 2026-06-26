@@ -17,6 +17,7 @@ import {
   getSquareConfig,
   createInvoice,
   getInvoice,
+  resendInvoiceLink,
   squareWebhook,
   cancelInvoice,
 } from "../controllers/payment.controller.js";
@@ -112,6 +113,14 @@ router.post(
 
 // Get invoice by ID
 router.get("/invoice/:invoiceId", getInvoice);
+
+// Renvoyer le MÊME lien de paiement (facture existante) sans en recréer un
+router.post(
+  "/resend-invoice-link",
+  requireAuth,
+  requireRole("admin", "vendeur"),
+  resendInvoiceLink,
+);
 
 // Cancel a Square invoice
 router.post("/cancel-invoice", requireAuth, requireAdmin, cancelInvoice);

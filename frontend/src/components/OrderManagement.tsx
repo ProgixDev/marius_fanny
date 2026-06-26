@@ -1630,8 +1630,31 @@ export function OrderManagement() {
       return;
     }
     try {
-      await sendPaymentLink(order);
-      alert(`✅ Facture renvoyée à ${dest}.`);
+      // Renvoyer le MÊME lien si une facture existe déjà (évite de créer un
+      // nouveau lien à chaque renvoi). On ne crée une facture que s'il n'y en
+      // a aucune (premier envoi).
+      const resp = await fetch(`${normalizedApiUrl}/api/payments/resend-invoice-link`, {
+        method: "POST",
+        headers: authHeaders(),
+        credentials: "include",
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const result = await resp.json();
+      if (result.success) {
+        alert(`✅ Lien de paiement (le même) renvoyé à ${result.dest || dest}.`);
+        return;
+      }
+      if (result.code === "ALREADY_PAID") {
+        alert("Cette commande est déjà payée — aucun lien à renvoyer.");
+        return;
+      }
+      if (result.code === "NO_INVOICE") {
+        // Aucune facture encore créée → on en crée une (premier envoi).
+        await sendPaymentLink(order);
+        alert(`✅ Lien de paiement envoyé à ${dest}.`);
+        return;
+      }
+      throw new Error(result.error || "Impossible de renvoyer le lien existant.");
     } catch (err) {
       alert(`Erreur lors de l'envoi de la facture : ${getErrorMessage(err)}`);
     }
