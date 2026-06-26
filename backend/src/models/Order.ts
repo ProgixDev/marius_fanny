@@ -195,8 +195,12 @@ const ClientInfoSchema = new Schema<IClientInfo>(
       trim: true,
     },
     email: {
+      // Optionnel : certaines clientes ne donnent pas de courriel. La commande
+      // peut être honorée par téléphone. (Le modèle exigeait `required: true`,
+      // ce qui bloquait l'enregistrement d'une commande sans courriel.)
       type: String,
-      required: true,
+      required: false,
+      default: "",
       trim: true,
       lowercase: true,
     },
