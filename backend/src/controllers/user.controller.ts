@@ -362,12 +362,19 @@ export async function updateClient(req: AuthRequest, res: Response) {
       { new: true, runValidators: true },
     );
 
-    // Si l'email a changé, propager le nouvel email sur les commandes du client.
-    // Sinon le backfill (qui recrée un client à partir de l'email des commandes)
-    // recréerait un client en double pour l'ancien email.
+    // Propager les corrections (courriel ET nom) sur les commandes du client,
+    // pour que corriger une faute de frappe corrige aussi les commandes déjà
+    // créées (sinon elles gardent l'ancien nom/courriel — copie figée). On cible
+    // les commandes par compte (userId) OU par ancien courriel.
     const oldEmail = (targetUser.email || "").trim().toLowerCase();
     const nextEmail = (newEmail || "").trim().toLowerCase();
+    const orderSet: Record<string, any> = {};
     if (nextEmail && nextEmail !== oldEmail) {
+      orderSet["clientInfo.email"] = newEmail;
+    }
+    if (firstName !== undefined) orderSet["clientInfo.firstName"] = firstName;
+    if (lastName !== undefined) orderSet["clientInfo.lastName"] = lastName;
+    if (Object.keys(orderSet).length > 0) {
       await Order.updateMany(
         {
           $or: [
@@ -375,7 +382,7 @@ export async function updateClient(req: AuthRequest, res: Response) {
             { "clientInfo.email": oldEmail },
           ],
         },
-        { $set: { "clientInfo.email": newEmail } },
+        { $set: orderSet },
       );
     }
 
