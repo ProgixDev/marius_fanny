@@ -2527,7 +2527,45 @@ export function OrderManagement() {
                     {selectedOrderForProducts.items.map((item) => (
                       <tr key={item.id}>
                         <td className="px-4 py-3 text-sm">
-                          {item.product?.name ?? `Produit #${item.productId}`}
+                          <div className="font-medium text-gray-900">
+                            {item.product?.name ?? `Produit #${item.productId}`}
+                          </div>
+                          {(() => {
+                            // Détails pour la préparation : options (pain…),
+                            // allergies et note client.
+                            const { chips, parsed } = getItemOptionChips(item);
+                            return (
+                              <>
+                                {chips.length > 0 && (
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {chips.map((opt) => (
+                                      <span
+                                        key={opt}
+                                        className="inline-flex rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-[10px]"
+                                      >
+                                        {opt}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                {parsed.allergies && (
+                                  <div className="mt-1 text-[11px] font-medium text-amber-800">
+                                    Allergies : {parsed.allergies}
+                                  </div>
+                                )}
+                                {parsed.note && (
+                                  <div className="mt-1 text-[11px] text-gray-600">
+                                    Note : {parsed.note}
+                                  </div>
+                                )}
+                                {parsed.description && (
+                                  <div className="mt-1 text-[11px] italic text-purple-800">
+                                    {parsed.description}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-3 text-sm">{item.quantity}</td>
                         <td className="px-4 py-3 text-sm">{formatCurrency(item.unitPrice)}</td>

@@ -1164,9 +1164,14 @@ export const getProductionList = async (
       order.items.map((item, idx) => {
         const productById = productMap.get(item.productId);
         const productByName = productNameMap.get(item.productName.toLowerCase());
+        // Produit PERSONNALISÉ (productId 0) : aucun type de production défini.
+        // On le rattache par défaut aux PÂTISSIERS pour qu'il apparaisse dans
+        // leur liste de production (demande de Fanny).
+        const isCustomItem = !item.productId || item.productId === 0;
         const resolvedProductionType =
           normalizeProductionType(productById?.productionType) ??
-          normalizeProductionType(productByName?.productionType);
+          normalizeProductionType(productByName?.productionType) ??
+          (isCustomItem ? "patisserie" : null);
 
         return {
           id: `${order._id}-${idx}`,
