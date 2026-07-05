@@ -78,7 +78,7 @@ router.post(
 router.post(
   "/resend-facture",
   requireAuth,
-  requireAdmin,
+  requireRole("admin", "vendeur"),
   resendFacture,
 );
 

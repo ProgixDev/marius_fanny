@@ -1832,7 +1832,9 @@ export function OrderManagement() {
         }
 
         const due = getPaymentDueDateForOrder(order);
-        if (!due) return <span className="text-xs text-gray-400">-</span>;
+        // Garde-fou : une date INVALIDE ferait planter due.toISOString()
+        // (RangeError) → page blanche quand on affiche les commandes ramassées.
+        if (!due || isNaN(due.getTime())) return <span className="text-xs text-gray-400">-</span>;
         const isOverdue = order.paymentStatus !== "paid" && new Date() > due;
         return (
           <span className={isOverdue ? "text-xs font-bold text-red-700" : "text-xs text-gray-700"}>

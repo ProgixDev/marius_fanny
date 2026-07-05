@@ -75,12 +75,32 @@ function numOf(v: any): number {
   return typeof v === "number" ? v : 0;
 }
 
+// Normalisation pour comparer les noms (sans accents / casse / espaces).
+function normalizeMatch(s: string): string {
+  return (s || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+// Produits dont la colonne "Comm Berri" DOIT s'additionner au total (demande
+// interne de Fanny). Par défaut, "Comm Berri" n'entre PAS dans le total.
+// ⚠️ Doit rester synchronisé avec le backend (dailyInventory.controller.ts).
+const BERRI_DANS_TOTAL = new Set(
+  ["Frangipane", "Tropezienne", "Tropezienne fraise", "Croque végé"].map(normalizeMatch),
+);
+
 function calcTotal(e: RowState): number {
-  // Total = stdo + client only (addition entre Comm. St-do et Comm CLIENT)
-  // Les autres colonnes (stock_stdo, berri, comm_berri) sont stockées mais pas incluses dans le total
+  // Total = Comm. St-do + Comm CLIENT. La colonne "Comm Berri" n'y entre PAS,
+  // SAUF pour quelques produits (voir BERRI_DANS_TOTAL).
   const stdo = typeof e.stdo === "number" ? e.stdo : 0;
   const client = typeof e.client === "number" ? e.client : 0;
-  return stdo + client;
+  const commBerri = BERRI_DANS_TOTAL.has(normalizeMatch(e.productName))
+    ? (typeof e.comm_berri === "number" ? e.comm_berri : 0)
+    : 0;
+  return stdo + client + commBerri;
 }
 
 // ─── types ──────────────────────────────────────────────────────────────────

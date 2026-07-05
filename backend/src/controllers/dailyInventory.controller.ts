@@ -153,20 +153,40 @@ export const saveDailyInventory = async (
     return Math.max(0, Number(value) || 0);
   };
 
-  const sanitizedEntries = (entries as any[]).map((entry) => ({
-    ...entry,
-    stock_stdo: normalize(entry.stock_stdo),
-    stdo: normalize(entry.stdo),
-    berri: normalize(entry.berri),
-    comm_berri: normalize(entry.comm_berri),
-    client: normalize(entry.client),
-    // Ajout manuel de Fanny (delta au-dessus du calcul auto). Peut être négatif
-    // (si elle saisit un total inférieur au compte auto) → pas de clamp à 0.
-    clientManual: Number(entry.clientManual) || 0,
-    total: isFourInventory
-      ? numOnly(entry.stdo) + numOnly(entry.comm_berri) + numOnly(entry.client)
-      : numOnly(entry.stdo) + numOnly(entry.client),
-  }));
+  // Produits dont la colonne "Comm Berri" DOIT s'additionner au total de
+  // l'inventaire JOURNALIER (organisation interne). Par défaut, "Comm Berri"
+  // n'entre pas dans le total journalier. Doit rester synchronisé avec le
+  // frontend (InventaireJournalier.tsx).
+  const matchName = (s: any): string =>
+    String(s || "")
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, " ");
+  const BERRI_DANS_TOTAL_JOURNALIER = new Set(
+    ["Frangipane", "Tropezienne", "Tropezienne fraise", "Croque végé"].map(matchName),
+  );
+
+  const sanitizedEntries = (entries as any[]).map((entry) => {
+    const commBerriJournalier = BERRI_DANS_TOTAL_JOURNALIER.has(matchName(entry.productName))
+      ? numOnly(entry.comm_berri)
+      : 0;
+    return {
+      ...entry,
+      stock_stdo: normalize(entry.stock_stdo),
+      stdo: normalize(entry.stdo),
+      berri: normalize(entry.berri),
+      comm_berri: normalize(entry.comm_berri),
+      client: normalize(entry.client),
+      // Ajout manuel de Fanny (delta au-dessus du calcul auto). Peut être négatif
+      // (si elle saisit un total inférieur au compte auto) → pas de clamp à 0.
+      clientManual: Number(entry.clientManual) || 0,
+      total: isFourInventory
+        ? numOnly(entry.stdo) + numOnly(entry.comm_berri) + numOnly(entry.client)
+        : numOnly(entry.stdo) + numOnly(entry.client) + commBerriJournalier,
+    };
+  });
 
   // @ts-ignore – user injected by requireAuth middleware
   const savedBy: string | undefined = req.user?.email ?? req.user?.id ?? undefined;
