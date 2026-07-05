@@ -40,7 +40,11 @@ import {
 import { getAvailableTimeSlots } from "../utils/timeSlots";
 import { calculatePriceWithOptions } from "../utils/customOptions";
 import { getImageUrl } from "../utils/api";
-import { effectivePrepHours } from "../utils/prepTime";
+
+// Heure limite back office : commandes du lendemain acceptées jusqu'à 14h30.
+// Défini au niveau MODULE pour éviter tout problème d'ordre d'initialisation
+// (validatePreparationTime est appelé par un useMemo en haut du composant).
+const CUTOFF_MINUTES = 14 * 60 + 30;
 
 interface OrderFormProps {
   onSubmit: (formData: OrderFormData) => void;
@@ -558,23 +562,24 @@ export default function OrderForm({
   function validatePreparationTime(
     orderDate: string,
     productId: number,
-    pickupTime?: string,
+    _pickupTime?: string,
   ) {
     const product = products.find((p) => p.id === productId);
     if (!product || !product.preparationTimeHours) return true;
 
-    // Les créneaux de LIVRAISON sont des plages ("11:30 - 12:00"). On extrait
-    // l'heure de DÉBUT (HH:MM), sinon `new Date("...T11:30 - 12:00:00")` donne
-    // une date invalide (NaN) → faux "délai insuffisant" sur les livraisons.
-    const startTime = (pickupTime || "").match(/\d{1,2}:\d{2}/)?.[0] || "00:00";
-    const orderDateTime = new Date(`${orderDate}T${startTime}:00`);
-    const now = new Date();
-    const timeDiff = orderDateTime.getTime() - now.getTime();
-    const hoursDiff = timeDiff / (1000 * 60 * 60);
-
-    // Délai EFFECTIF (24h→17h, 48h→34h, 72h→51h) : permet de ramasser tôt le
-    // lendemain même en commandant l'après-midi. L'affichage reste 24h/48h/72h.
-    return hoursDiff >= effectivePrepHours(product.preparationTimeHours);
+    // Validation par JOUR CALENDAIRE — cohérente avec le BACKEND et le sélecteur
+    // de date : valide si la date choisie >= date minimale du produit
+    // = aujourd'hui (Montréal) + jours de préparation (+1 si passé 14h30).
+    // L'ancienne comparaison en HEURES (effectivePrepHours = 17h pour "1 jour")
+    // était plus stricte que le sélecteur/backend → faux "délai insuffisant"
+    // alors que la date respectait pourtant le délai affiché.
+    const prepDays = Math.ceil(product.preparationTimeHours / 24);
+    const m = getMontrealNow();
+    const cutoffPenalty = m.hour * 60 + m.minute >= CUTOFF_MINUTES ? 1 : 0;
+    const d = new Date(Date.UTC(m.year, m.month - 1, m.day, 12, 0, 0));
+    d.setUTCDate(d.getUTCDate() + prepDays + cutoffPenalty);
+    const minStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+    return orderDate >= minStr;
   }
 
   // Read "now" through the bakery's clock (America/Montreal), like Checkout
@@ -600,12 +605,6 @@ export default function OrderForm({
       minute: get("minute"),
     };
   }
-
-  // Back office (admin) : limite à 14h30 pour laisser le temps de saisir la
-  // commande sans se faire repousser (le site public reste à 14h00 / 14h15).
-  // (ancien commentaire) Displayed to staff/customers as 14h00. Same
-  // value lives in Checkout.tsx and the backend createOrder validation.
-  const CUTOFF_MINUTES = 14 * 60 + 30;
 
   /**
    * Earliest pickup date the admin can pick for the current cart.
