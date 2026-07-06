@@ -22,6 +22,7 @@ import {
 import { sendOrderReceipt } from "../utils/emailService.js";
 import { sendOrderBalanceEmail, sendInvoiceOrderConfirmation } from "../utils/mail.js";
 import { sendSms } from "../utils/smsService.js";
+import { cancelSquareInvoiceById } from "./payment.controller.js";
 import {
   calculatePromoDiscount,
   isPromoCurrentlyValid,
@@ -1963,6 +1964,24 @@ export const updateOrder = async (
         changeType: "payment_updated",
         notes: "Square invoice ID updated"
       });
+    }
+
+    // Si cette mise à jour marque la commande PAYÉE (en magasin) alors qu'un
+    // lien Square était encore OUVERT et NON payé, on annule ce lien pour éviter
+    // un double paiement, et on retire sa référence → l'icône repasse en
+    // "boutique". Robuste et automatique, quel que soit le chemin frontend.
+    const markedPaidThisUpdate =
+      updateData.depositPaid === true || updateData.balancePaid === true;
+    if (
+      markedPaidThisUpdate &&
+      order.paymentStatus === "paid" &&
+      !order.squarePaymentId &&
+      order.squareInvoiceId
+    ) {
+      const cancelled = await cancelSquareInvoiceById(order.squareInvoiceId);
+      if (cancelled) {
+        order.set("squareInvoiceId", undefined);
+      }
     }
 
     // Add all changes to order history

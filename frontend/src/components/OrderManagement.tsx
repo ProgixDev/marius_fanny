@@ -156,7 +156,16 @@ export function OrderManagement() {
     let next = list;
 
     if (!showArchived) {
-      next = next.filter((order) => !isArchivedStatus(order.status));
+      next = next.filter((order) => {
+        if (isArchivedStatus(order.status)) return false;
+        // Commande ANNULÉE ET REMBOURSÉE = réglée → on la retire du tableau de
+        // bord (elle reste dans le dossier du client). Réapparaît avec le filtre
+        // "Afficher ramassées/terminées".
+        const refunded =
+          Array.isArray((order as any).refunds) && (order as any).refunds.length > 0;
+        if (order.status === "cancelled" && refunded) return false;
+        return true;
+      });
     }
 
     if (selectedDate) {

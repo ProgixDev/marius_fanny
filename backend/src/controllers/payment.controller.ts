@@ -1720,6 +1720,29 @@ export const getInvoice = async (req: Request, res: Response) => {
  * was sent and not yet paid).
  * POST /api/payments/cancel-invoice
  */
+/**
+ * Annule une facture Square par son ID SI elle n'est PAS payée.
+ * Renvoie true seulement si elle a été effectivement annulée (donc l'appelant
+ * peut alors effacer la référence squareInvoiceId de la commande). Ne touche pas
+ * à la base ici. Utilisé quand une commande est marquée payée en magasin alors
+ * qu'un lien Square était encore ouvert → on évite le double paiement.
+ */
+export async function cancelSquareInvoiceById(invoiceId: string): Promise<boolean> {
+  try {
+    const getResp = await squareClient.invoices.get({ invoiceId });
+    const invoice = (getResp as any)?.invoice;
+    if (!invoice) return false;
+    // PAYÉE = vrai paiement en ligne → ne pas annuler. Déjà annulée → rien à faire.
+    if (invoice.status === "PAID" || invoice.status === "CANCELED") return false;
+    await squareClient.invoices.cancel({ invoiceId, version: invoice.version! });
+    console.log(`✅ [INVOICE] Lien Square annulé automatiquement (mark-paid): ${invoiceId}`);
+    return true;
+  } catch (e: any) {
+    console.warn(`⚠️ [INVOICE] Échec annulation auto ${invoiceId}:`, e?.message || e);
+    return false;
+  }
+}
+
 export const cancelInvoice = async (req: Request, res: Response) => {
   try {
     const { orderId, invoiceId } = req.body as { orderId?: string; invoiceId?: string };
