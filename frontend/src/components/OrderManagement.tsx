@@ -429,10 +429,15 @@ export function OrderManagement() {
         label: "Ramassee",
         className: "bg-green-100 text-green-800",
       },
+      delivered: { label: "Livree", className: "bg-green-100 text-green-800" },
       cancelled: { label: "Annulee", className: "bg-red-100 text-red-800" },
     };
 
-    const config = statusConfig[status];
+    // Garde-fou : un statut non prévu ne doit JAMAIS faire planter le tableau
+    // (c'était le cas de "delivered" → toutes les commandes disparaissaient).
+    const config =
+      (statusConfig as Record<string, { label: string; className: string }>)[status] ||
+      { label: String(status || "—"), className: "bg-gray-100 text-gray-800" };
     return (
       <span
         className={`px-2 py-1 rounded-full text-xs font-medium ${config.className}`}
@@ -551,7 +556,9 @@ export function OrderManagement() {
       paid: { label: "Payé", className: "bg-green-100 text-green-800" },
     };
 
-    const config = paymentConfig[paymentStatus];
+    const config =
+      (paymentConfig as Record<string, { label: string; className: string }>)[paymentStatus] ||
+      { label: String(paymentStatus || "—"), className: "bg-gray-100 text-gray-800" };
     return (
       <span
         className={`px-2 py-1 rounded-full text-xs font-medium ${config.className}`}
