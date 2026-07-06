@@ -746,6 +746,14 @@ export const createInvoice = async (req: Request, res: Response) => {
         invoiceNumber: `${orderId}-${Date.now()}`,
         title: `Commande ${orderNumber || orderId}`,
         description: notes || `Facture pour la commande ${orderNumber || orderId}`,
+        // Numéros de taxe (TPS/TVQ) affichés sur la facture Square, sous les articles.
+        customFields: [
+          {
+            label: "Numéros de taxe",
+            value: "TPS: 144652641RT001 · TVQ: 1201862732TQ0001",
+            placement: "BELOW_LINE_ITEMS",
+          },
+        ],
         primaryRecipient: {
           customerId: squareCustomerId,
         },
@@ -2134,6 +2142,13 @@ export async function createInvoiceForExistingOrder(
       invoiceNumber: `${orderId}-${Date.now()}`,
       title: `Commande ${orderNumber}`,
       description: `Facture pour la commande ${orderNumber}`,
+      customFields: [
+        {
+          label: "Numéros de taxe",
+          value: "TPS: 144652641RT001 · TVQ: 1201862732TQ0001",
+          placement: "BELOW_LINE_ITEMS",
+        },
+      ],
       primaryRecipient: { customerId: squareCustomerId },
       paymentRequests: [
         { requestType: "BALANCE", dueDate: invoiceDueDate, automaticPaymentSource: "NONE" },
