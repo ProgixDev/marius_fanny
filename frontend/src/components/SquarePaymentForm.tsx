@@ -3,7 +3,7 @@
  * Handles Square Web Payments SDK integration
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { PaymentForm, CreditCard } from "react-square-web-payments-sdk";
 import { normalizedApiUrl } from "../lib/AuthClient";
 
@@ -34,6 +34,10 @@ export default function SquarePaymentForm({
     locationId: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  // Anti double-paiement : verrou dès le 1er clic sur « Payer » pour empêcher un
+  // double-clic de créer 2 paiements / 2 commandes.
+  const [isProcessing, setIsProcessing] = useState(false);
+  const submittingRef = useRef(false);
 
   // Fetch Square configuration from backend
   useEffect(() => {
@@ -91,6 +95,14 @@ export default function SquarePaymentForm({
   }, [onPaymentError]);
 
   const handleCardTokenizeResponse = async (token: any, buyer: any) => {
+    // Anti double-paiement : si un paiement est déjà en cours, on ignore ce
+    // second déclenchement (double-clic) → jamais 2 paiements / 2 commandes.
+    if (submittingRef.current) {
+      console.warn("⛔ [FRONTEND] Paiement déjà en cours — clic ignoré (anti-double).");
+      return;
+    }
+    submittingRef.current = true; // verrou synchrone AVANT tout await
+    setIsProcessing(true);
     try {
       console.log(
         "💳 [FRONTEND] Tokenize response received:",
@@ -108,6 +120,8 @@ export default function SquarePaymentForm({
           token.errors || token.status,
         );
         onPaymentError(new Error(`Card tokenization failed: ${token.status}`));
+        submittingRef.current = false; // échec → on autorise une nouvelle tentative
+        setIsProcessing(false);
         return;
       }
 
@@ -153,15 +167,20 @@ export default function SquarePaymentForm({
           "✅ [FRONTEND] Payment processed successfully:",
           result.data,
         );
+        // Paiement réussi → on GARDE le verrou (la commande va être créée).
         onPaymentSuccess(result.data);
       } else {
         console.error("❌ [FRONTEND] Payment failed:", result.error);
         console.error("📋 [FRONTEND] Error details:", result.details);
         onPaymentError(new Error(result.error || "Payment failed"));
+        submittingRef.current = false; // échec → nouvelle tentative permise
+        setIsProcessing(false);
       }
     } catch (error) {
       console.error("💥 [FRONTEND] Payment processing error:", error);
       onPaymentError(error);
+      submittingRef.current = false; // erreur → nouvelle tentative permise
+      setIsProcessing(false);
     }
   };
 
@@ -235,7 +254,14 @@ export default function SquarePaymentForm({
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full relative">
+      {isProcessing && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg bg-white/80 backdrop-blur-sm cursor-not-allowed">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C5A065]"></div>
+          <p className="text-sm font-medium text-stone-700">Traitement du paiement…</p>
+          <p className="text-xs text-stone-500">Ne cliquez pas à nouveau.</p>
+        </div>
+      )}
       <PaymentForm
         applicationId={squareConfig.applicationId}
         locationId={squareConfig.locationId}

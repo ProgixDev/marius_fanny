@@ -10,6 +10,7 @@ import {
   Info,
   Plus,
   Trash2,
+  Pencil,
   Printer
 } from "lucide-react";
 import { dailyInventoryAPI } from "../lib/DailyInventoryAPI";
@@ -111,6 +112,27 @@ export default function InventaireFour() {
         total: 0,
       })),
     }).catch(() => {});
+  };
+
+  // Renommer un produit de la liste (comme dans l'inventaire journalier).
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const handleRenameProduct = (oldName: string, rawNewName: string) => {
+    const newName = rawNewName.trim();
+    setEditingProductId(null);
+    if (!newName || newName === oldName) return;
+    if (!products.includes(oldName)) {
+      setToast({ type: "error", msg: "Cette ligne (historique) ne peut pas être renommée." });
+      return;
+    }
+    if (products.includes(newName)) {
+      setToast({ type: "error", msg: "Ce nom existe déjà dans la liste." });
+      return;
+    }
+    const updatedList = products.map((p) => (p === oldName ? newName : p));
+    setProducts(updatedList);
+    localStorage.setItem("produits_inventaire_four", JSON.stringify(updatedList));
+    saveProductsToBackend(updatedList);
+    setToast({ type: "success", msg: `Renommé en "${newName}" et sauvegardé.` });
   };
 
   const loadData = useCallback(async () => {
@@ -325,16 +347,47 @@ export default function InventaireFour() {
             {rows.map((row, idx) => (
               <tr key={row.id} className="hover:bg-amber-50/20 transition-colors">
                 <td className="px-6 py-3 font-medium text-stone-800">
-                  <div className="flex items-center justify-between">
-                    <span>{row.name}</span>
-                    <button onClick={() => {
-                      if (window.confirm(`Retirer "${row.name}" de la liste pour tous les utilisateurs ?`)) {
-                        const up = products.filter(p => p !== row.id);
-                        setProducts(up);
-                        localStorage.setItem("produits_inventaire_four", JSON.stringify(up));
-                        saveProductsToBackend(up);
-                      }
-                    }} className="text-stone-300 hover:text-red-500 shrink-0"><Trash2 size={14}/></button>
+                  <div className="flex items-center justify-between gap-2">
+                    {editingProductId === row.id ? (
+                      <input
+                        type="text"
+                        autoFocus
+                        defaultValue={row.name}
+                        onBlur={(e) => handleRenameProduct(row.id, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                          if (e.key === "Escape") setEditingProductId(null);
+                        }}
+                        className="flex-1 min-w-0 px-2 py-1 text-sm rounded-lg border border-[#C5A065] focus:outline-none focus:ring-2 focus:ring-[#C5A065]/20"
+                      />
+                    ) : (
+                      <>
+                        <span className="truncate">{row.name}</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => setEditingProductId(row.id)}
+                            className="text-stone-300 hover:text-[#C5A065]"
+                            title="Renommer (pour matcher le nom du site)"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Retirer "${row.name}" de la liste pour tous les utilisateurs ?`)) {
+                                const up = products.filter(p => p !== row.id);
+                                setProducts(up);
+                                localStorage.setItem("produits_inventaire_four", JSON.stringify(up));
+                                saveProductsToBackend(up);
+                              }
+                            }}
+                            className="text-stone-300 hover:text-red-500"
+                            title="Retirer de la liste"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </td>
                 <td className="px-2 py-2 text-center">

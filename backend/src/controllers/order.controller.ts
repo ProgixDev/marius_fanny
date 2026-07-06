@@ -93,6 +93,25 @@ export const createOrder = async (
   try {
     const orderData = req.body;
 
+    // --- Anti-doublon : si un paiement Square a déjà servi à créer une commande,
+    // on renvoie cette commande au lieu d'en créer une 2e (double-clic / requête
+    // rejouée). Chaque paiement Square a un ID unique. ---
+    if (orderData.squarePaymentId) {
+      const existing = await Order.findOne({
+        squarePaymentId: orderData.squarePaymentId,
+      });
+      if (existing) {
+        console.warn(
+          `⛔ [ORDER] Doublon évité : le paiement ${orderData.squarePaymentId} a déjà la commande ${existing.orderNumber}`,
+        );
+        return res.status(200).json({
+          success: true,
+          data: existing,
+          message: "Commande déjà créée pour ce paiement (doublon évité).",
+        } as any);
+      }
+    }
+
     // --- Cutoff: orders for tomorrow must be placed before 14:00 (Montreal time) ---
     const toMontrealDate = (d: Date) => {
       const s = d.toLocaleDateString("en-CA", { timeZone: "America/Montreal" });
