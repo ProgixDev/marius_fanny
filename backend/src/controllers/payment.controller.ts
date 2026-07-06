@@ -648,6 +648,20 @@ export const createInvoice = async (req: Request, res: Response) => {
 
     console.log(`📧 [INVOICE] Creating invoice (Order: ${orderId}, canal: ${deliveryChannel})`);
 
+    // Annuler un éventuel ANCIEN lien Square encore ouvert pour cette commande
+    // (ex. lien renvoyé après modification) → on ne laisse jamais 2 liens actifs
+    // en même temps dans Square.
+    try {
+      const existing: any = await Order.findById(orderId)
+        .select("squareInvoiceId squarePaymentId")
+        .lean();
+      if (existing?.squareInvoiceId && !existing?.squarePaymentId) {
+        await cancelSquareInvoiceById(existing.squareInvoiceId);
+      }
+    } catch {
+      /* non bloquant */
+    }
+
     // Build line items for the invoice
     const lineItems = items.map((item: any) => ({
       name: item.name,
