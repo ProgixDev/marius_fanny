@@ -85,6 +85,30 @@ export const createProOrder = async (
 
     const body = req.body;
 
+    // Anti-doublon : si ce paiement Square a déjà créé une commande pro (renvoi
+    // automatique du filet de sécurité après une coupure réseau), on renvoie la
+    // commande existante au lieu d'en créer une seconde. Le paymentId est
+    // embarqué dans les notes ("Paiement Square: <id>").
+    const paymentIdMatch = String(body.notes || "").match(
+      /Paiement Square:\s*([A-Za-z0-9]+)/,
+    );
+    if (paymentIdMatch) {
+      const existingPro = await ProOrder.findOne({
+        userId: authReq.user.id,
+        notes: { $regex: paymentIdMatch[1] },
+      });
+      if (existingPro) {
+        console.warn(
+          `⛔ [PRO-ORDER] Doublon évité : le paiement ${paymentIdMatch[1]} a déjà la commande ${existingPro.orderNumber}`,
+        );
+        return res.status(200).json({
+          success: true,
+          data: existingPro,
+          message: "Commande déjà créée pour ce paiement (doublon évité).",
+        });
+      }
+    }
+
     const items = body.items.map((item) => {
       const quantity = Math.max(1, Number(item.quantity || 0));
       const unitPrice = Math.max(0, Number(item.unitPrice || 0));

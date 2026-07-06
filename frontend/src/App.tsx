@@ -119,6 +119,20 @@ const App: React.FC = () => {
     saveCart(cartItems);
   }, [cartItems]);
 
+  // Filet de sécurité "paiement sans commande" : au chargement du site, on
+  // renvoie automatiquement toute commande PAYÉE qui n'aurait pas pu être
+  // enregistrée (coupure réseau pendant le checkout). Best effort, silencieux.
+  useEffect(() => {
+    (async () => {
+      try {
+        const { flushPendingOrders } = await import("./utils/orderRecovery");
+        await flushPendingOrders();
+      } catch {
+        /* ignore — réessaiera au prochain chargement */
+      }
+    })();
+  }, []);
+
   // Compter une visite du SITE (1 fois par session, pages publiques seulement).
   useEffect(() => {
     try {

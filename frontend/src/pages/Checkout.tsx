@@ -11,6 +11,7 @@ import { promoAPI } from "../lib/PromoAPI";
 import { clearCart } from "../utils/cartPersistence";
 import { getErrorMessage } from "../utils/errorMessage";
 import { authHeaders } from "../utils/authHeaders";
+import { submitPaidOrderWithRetry } from "../utils/orderRecovery";
 import { useSettings } from "../lib/SettingsContext";
 
 interface CartItem {
@@ -593,19 +594,19 @@ const Checkout: React.FC = () => {
           notes: `Commande PRO payée (${state.deliveryType === "pickup" ? "Ramassage" : "Livraison"}) - ${deliveryDate}${deliveryTime ? ` ${deliveryTime}` : ""} | Paiement Square: ${paymentId}`,
         };
 
-        const response = await fetch(`${normalizedApiUrl}/api/pro-orders`, {
-          method: "POST",
-          headers: authHeaders(),
-          credentials: "include",
-          body: JSON.stringify(proOrderData),
+        // Filet de sécurité : la carte est déjà débitée. On réessaie
+        // l'enregistrement et on ne perd jamais la commande (voir orderRecovery).
+        const proOutcome = await submitPaidOrderWithRetry({
+          endpoint: `${normalizedApiUrl}/api/pro-orders`,
+          payload: proOrderData,
+          paymentId,
         });
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || errorData.message || "Failed to submit pro order");
+        if (!proOutcome.ok) {
+          throw new Error(proOutcome.error || "Failed to submit pro order");
         }
 
-        const result = await response.json();
+        const result = proOutcome.result;
         const orderNumber = String(result?.data?.orderNumber || "");
 
         clearCart();
@@ -698,19 +699,22 @@ const Checkout: React.FC = () => {
         notes: `Square Payment ID: ${paymentId} | ${state.deliveryType === 'pickup' ? 'Ramassage' : 'Livraison'} prévu${state.deliveryType === 'pickup' ? '' : 'e'}: ${deliveryDate}${deliveryTime ? ` ${deliveryTime}` : ''}`,
       };
 
-      const response = await fetch(`${normalizedApiUrl}/api/orders`, {
-        method: "POST",
-        headers: authHeaders(),
-        credentials: "include",
-        body: JSON.stringify(orderData),
+      // Filet de sécurité : la carte est déjà débitée à ce stade. On réessaie
+      // l'enregistrement (coupures réseau passagères) et, en cas d'échec, la
+      // commande est conservée localement puis renvoyée automatiquement au
+      // prochain chargement du site — l'argent n'est jamais pris sans commande.
+      // Le backend déduplique par squarePaymentId, donc les renvois sont sûrs.
+      const saveOutcome = await submitPaidOrderWithRetry({
+        endpoint: `${normalizedApiUrl}/api/orders`,
+        payload: orderData,
+        paymentId,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to save order");
+      if (!saveOutcome.ok) {
+        throw new Error(saveOutcome.error || "Failed to save order");
       }
 
-      const result = await response.json();
+      const result = saveOutcome.result;
       const rawOrderNumber = result?.data?.orderNumber || "";
       const orderDigitsMatch = String(rawOrderNumber).trim().match(/-(\d{1,4})$/);
       const displayOrderNumber = orderDigitsMatch
@@ -769,16 +773,24 @@ const Checkout: React.FC = () => {
             <div className="flex items-start gap-3 text-amber-700 bg-amber-50 p-4 rounded-lg border border-amber-200">
               <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
               <div>
-                <p className="font-semibold">Problème d'enregistrement</p>
+                <p className="font-semibold">Paiement bien reçu</p>
                 <p>
-                  Le paiement a été effectué, mais l'enregistrement de la
-                  commande a échoué.
+                  Votre paiement a été effectué avec succès. L'enregistrement de
+                  la commande a rencontré un ralentissement, mais{" "}
+                  <span className="font-semibold">
+                    votre commande a été sauvegardée
+                  </span>{" "}
+                  et sera finalisée automatiquement.
                 </p>
               </div>
             </div>
-            <div className="text-stone-600">
-              <p>
-                Veuillez contacter le support avec cet identifiant de paiement :
+            <div className="text-stone-600 text-sm">
+              <p className="font-medium text-stone-700">
+                Surtout, ne payez pas une seconde fois.
+              </p>
+              <p className="mt-1">
+                Notre équipe voit votre paiement et confirmera votre commande.
+                En cas de doute, contactez-nous avec cet identifiant :
               </p>
               <code className="block mt-2 bg-stone-100 p-2 rounded text-sm text-stone-800">
                 {paymentId}

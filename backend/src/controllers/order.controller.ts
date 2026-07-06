@@ -143,7 +143,17 @@ export const createOrder = async (
           ? toMontrealDate(new Date(orderData.deliveryDate))
           : null;
 
-    if (targetDateStr) {
+    // --- Filet de sécurité "argent sans commande" ---
+    // Si la commande est DÉJÀ PAYÉE (paiement Square encaissé), on NE la refuse
+    // JAMAIS pour une raison de délai/cutoff/date fermée : la carte du client a
+    // été débitée AVANT cet enregistrement, donc refuser ici = argent pris sans
+    // commande (exactement le bug "Attention requise" vécu par une cliente).
+    // Une commande payée est toujours enregistrée ; si la date pose problème,
+    // le back office contacte le client. Les contrôles ci-dessous ne concernent
+    // donc que les commandes NON payées à ce stade.
+    const isPaidOrder = !!orderData.squarePaymentId;
+
+    if (targetDateStr && !isPaidOrder) {
       const todayStr = toMontrealDate(now);
       const currentMinutes = getMontrealMinutes(now);
       const pastCutoff = currentMinutes >= CUTOFF_MINUTES;
