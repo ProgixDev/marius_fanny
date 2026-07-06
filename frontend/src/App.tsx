@@ -165,13 +165,22 @@ const App: React.FC = () => {
       }
     };
     ping();
-    const intervalId = window.setInterval(ping, 10 * 60 * 1000);
+    // Toutes les 5 min (les onglets en arrière-plan sont ralentis par le
+    // navigateur, donc on complète avec focus + visibilitychange).
+    const intervalId = window.setInterval(ping, 5 * 60 * 1000);
     const onFocus = () => ping();
+    // visibilitychange = déclenché de façon fiable quand l'onglet redevient
+    // visible (plus fiable que focus après une longue période en arrière-plan).
+    const onVisible = () => {
+      if (document.visibilityState === "visible") ping();
+    };
     window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
       window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
