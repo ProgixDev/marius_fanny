@@ -110,6 +110,11 @@ export function OrderManagement() {
   const [filteredOrders, setFilteredOrders] = useState<OrderWithPacking[]>(orders);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [showArchived, setShowArchived] = useState(false);
+  // Filtre par catégorie (couleur de ligne) : Berri (bleu) / Sainte-Dorothée
+  // (blanc) / Livraison (jaune).
+  const [locationFilter, setLocationFilter] = useState<
+    "all" | "berri" | "stedorothee" | "livraison"
+  >("all");
   const [selectedOrderForProducts, setSelectedOrderForProducts] = useState<OrderWithPacking | null>(null);
   const [isProductsModalOpen, setIsProductsModalOpen] = useState(false);
   
@@ -168,6 +173,21 @@ export function OrderManagement() {
       });
     }
 
+    // Filtre par catégorie (même logique que la couleur de ligne) :
+    //  - Berri = ramassage Montréal (bleu)
+    //  - Sainte-Dorothée = ramassage Laval (blanc)
+    //  - Livraison = livraison (jaune)
+    if (locationFilter !== "all") {
+      next = next.filter((order) => {
+        if (locationFilter === "livraison") return order.deliveryType === "delivery";
+        if (locationFilter === "berri")
+          return order.deliveryType === "pickup" && order.pickupLocation === "Montreal";
+        if (locationFilter === "stedorothee")
+          return order.deliveryType === "pickup" && order.pickupLocation === "Laval";
+        return true;
+      });
+    }
+
     if (selectedDate) {
       next = next.filter((order) => {
         // 1) Commandes en livraison : deliveryDate est déjà une chaîne "YYYY-MM-DD".
@@ -190,10 +210,10 @@ export function OrderManagement() {
     return next;
   };
 
-  // Filtrer par date + archivage (ramassées/terminées)
+  // Filtrer par date + archivage (ramassées/terminées) + catégorie
   useEffect(() => {
     setFilteredOrders(applyOrderFilters(orders));
-  }, [selectedDate, showArchived, orders]);
+  }, [selectedDate, showArchived, orders, locationFilter]);
 
   // Charger les commandes depuis l'API au montage
   useEffect(() => {
@@ -2472,6 +2492,34 @@ export function OrderManagement() {
           >
             {viewMode === "simple" ? "Vue complete" : "Vue simplifiee"}
           </Button>
+        </div>
+
+        {/* Filtre par catégorie (couleur de ligne) : Berri (bleu) /
+            Sainte-Dorothée (blanc) / Livraison (jaune). */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-xs text-gray-600 mr-1">Filtrer :</span>
+          {(
+            [
+              { key: "all", label: "Toutes", dot: "" },
+              { key: "berri", label: "Berri", dot: "bg-blue-500" },
+              { key: "stedorothee", label: "Sainte-Dorothée", dot: "bg-gray-300 border border-gray-400" },
+              { key: "livraison", label: "Livraison", dot: "bg-yellow-500" },
+            ] as const
+          ).map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setLocationFilter(f.key)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                locationFilter === f.key
+                  ? "bg-[#337957] text-white border-[#337957]"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              {f.dot && <span className={`w-2.5 h-2.5 rounded-full ${f.dot}`} />}
+              {f.label}
+            </button>
+          ))}
         </div>
 
         <DataTable
