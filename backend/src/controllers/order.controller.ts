@@ -267,99 +267,134 @@ export const createOrder = async (
         deletedAt: null,
       });
 
+      // Commande DÉJÀ PAYÉE : un souci de code promo ne doit JAMAIS refuser la
+      // commande (sinon l'argent est encaissé sans commande). Dans ce cas on
+      // abandonne simplement le promo (aucun rabais appliqué) et on continue ;
+      // le back office ajuste si besoin. Commande NON payée = comportement
+      // habituel (rejet 400).
+      const rejectOrSkipPromo = (
+        status: number,
+        error: string,
+      ): "reject" | "skip" => {
+        if (isPaidOrder) {
+          console.warn(
+            `[ORDER] Commande payée : promo "${promoCode}" ignoré (${error}) — commande conservée.`,
+          );
+          promoCode = undefined;
+          promoDoc = null;
+          return "skip";
+        }
+        res.status(status).json({ success: false, error });
+        return "reject";
+      };
+
+      let promoOk = true;
+
       if (!promoDoc) {
-        return res.status(400).json({
-          success: false,
-          error: "Code promo invalide",
+        if (rejectOrSkipPromo(400, "Code promo invalide") === "reject") return;
+        promoOk = false;
+      }
+
+      if (promoOk && promoDoc) {
+        const validity = isPromoCurrentlyValid(promoDoc, nowForPromo);
+        if (!validity.ok) {
+          if (rejectOrSkipPromo(400, validity.reason) === "reject") return;
+          promoOk = false;
+        }
+      }
+
+      if (promoOk && promoDoc) {
+        const discount = calculatePromoDiscount({
+          promo: promoDoc,
+          items: orderData.items,
+          subtotal,
         });
-      }
 
-      const validity = isPromoCurrentlyValid(promoDoc, nowForPromo);
-      if (!validity.ok) {
-        return res.status(400).json({
-          success: false,
-          error: validity.reason,
-        });
-      }
-
-      const discount = calculatePromoDiscount({
-        promo: promoDoc,
-        items: orderData.items,
-        subtotal,
-      });
-
-      if (discount.discountAmount <= 0) {
-        return res.status(400).json({
-          success: false,
-          error: "Ce code promo ne s'applique pas à votre panier.",
-        });
-      }
-
-      const perUserLimit =
-        promoDoc.usageLimitPerUser === undefined ? 1 : promoDoc.usageLimitPerUser;
-      
-      // Force per-user limit to at least 1 if not explicitly set to 0
-      // This ensures promo codes can't be reused infinitely
-      const effectivePerUserLimit = perUserLimit === 0 ? 1 : perUserLimit;
-      
-      if (effectivePerUserLimit > 0) {
-        const userId = req.user?.id;
-        const email = (orderData.clientInfo?.email || "").trim().toLowerCase();
-
-        // Get client IP address for additional tracking
-        const clientIP = req.headers['x-forwarded-for'] as string || 
-                        req.headers['x-real-ip'] as string || 
-                        req.ip || 
-                        'unknown';
-        const ipAddress = clientIP.split(',')[0].trim();
-
-        // Build filter to check usage - match by userId, email, OR IP
-        // This prevents users from simply changing email to reuse promo codes
-        const filterConditions: Record<string, any>[] = [];
-
-        if (userId) {
-          filterConditions.push({ userId });
-        }
-        if (email) {
-          filterConditions.push({ email });
-        }
-        // Also check by IP address (all IPs including localhost)
-        if (ipAddress && ipAddress !== 'unknown') {
-          filterConditions.push({ ipAddress });
+        if (discount.discountAmount <= 0) {
+          if (
+            rejectOrSkipPromo(
+              400,
+              "Ce code promo ne s'applique pas à votre panier.",
+            ) === "reject"
+          )
+            return;
+          promoOk = false;
         }
 
-        // Allow promo code usage even without login - we just track what we can
-        // No error is thrown if filterConditions is empty
+        if (promoOk) {
+          const perUserLimit =
+            promoDoc.usageLimitPerUser === undefined ? 1 : promoDoc.usageLimitPerUser;
 
-        // Count usages by this user/email/IP.
-        // We also check existing orders by promoCode+email as a safety net.
-        console.log("📋 [PROMO] Checking usage for email:", email, "userId:", userId, "IP:", ipAddress);
-        const [redemptionCount, orderCountByEmail] = await Promise.all([
-          PromoRedemption.countDocuments({
-            promoCodeId: promoDoc._id,
-            $or: filterConditions,
-          }),
-          email
-            ? Order.countDocuments({
-                promoCode,
-                "clientInfo.email": email,
-              })
-            : Promise.resolve(0),
-        ]);
-        
-        console.log("📋 [PROMO] redemptionCount:", redemptionCount, "orderCountByEmail:", orderCountByEmail, "perUserLimit:", effectivePerUserLimit);
+          // Force per-user limit to at least 1 if not explicitly set to 0
+          // This ensures promo codes can't be reused infinitely
+          const effectivePerUserLimit = perUserLimit === 0 ? 1 : perUserLimit;
 
-        if (Math.max(redemptionCount, orderCountByEmail) >= effectivePerUserLimit) {
-          return res.status(400).json({
-            success: false,
-            error: "Limite d'utilisation atteinte pour ce code promo.",
-          });
+          if (effectivePerUserLimit > 0) {
+            const userId = req.user?.id;
+            const email = (orderData.clientInfo?.email || "").trim().toLowerCase();
+
+            // Get client IP address for additional tracking
+            const clientIP = req.headers['x-forwarded-for'] as string ||
+                            req.headers['x-real-ip'] as string ||
+                            req.ip ||
+                            'unknown';
+            const ipAddress = clientIP.split(',')[0].trim();
+
+            // Build filter to check usage - match by userId, email, OR IP
+            // This prevents users from simply changing email to reuse promo codes
+            const filterConditions: Record<string, any>[] = [];
+
+            if (userId) {
+              filterConditions.push({ userId });
+            }
+            if (email) {
+              filterConditions.push({ email });
+            }
+            // Also check by IP address (all IPs including localhost)
+            if (ipAddress && ipAddress !== 'unknown') {
+              filterConditions.push({ ipAddress });
+            }
+
+            // Allow promo code usage even without login - we just track what we can
+            // No error is thrown if filterConditions is empty
+
+            // Count usages by this user/email/IP.
+            // We also check existing orders by promoCode+email as a safety net.
+            console.log("📋 [PROMO] Checking usage for email:", email, "userId:", userId, "IP:", ipAddress);
+            const [redemptionCount, orderCountByEmail] = await Promise.all([
+              PromoRedemption.countDocuments({
+                promoCodeId: promoDoc._id,
+                $or: filterConditions,
+              }),
+              email
+                ? Order.countDocuments({
+                    promoCode,
+                    "clientInfo.email": email,
+                  })
+                : Promise.resolve(0),
+            ]);
+
+            console.log("📋 [PROMO] redemptionCount:", redemptionCount, "orderCountByEmail:", orderCountByEmail, "perUserLimit:", effectivePerUserLimit);
+
+            if (Math.max(redemptionCount, orderCountByEmail) >= effectivePerUserLimit) {
+              if (
+                rejectOrSkipPromo(
+                  400,
+                  "Limite d'utilisation atteinte pour ce code promo.",
+                ) === "reject"
+              )
+                return;
+              promoOk = false;
+            }
+          }
+        }
+
+        if (promoOk && promoDoc) {
+          promoDiscountAmount = discount.discountAmount;
+          promoDiscountPercent = promoDoc.discountPercent;
+          promoAppliesToProductIds = promoDoc.appliesToProductIds || undefined;
         }
       }
-
-      promoDiscountAmount = discount.discountAmount;
-      promoDiscountPercent = promoDoc.discountPercent;
-      promoAppliesToProductIds = promoDoc.appliesToProductIds || undefined;
     }
 
     const taxAmount = await computeTaxAmount(orderData.items as any);
@@ -372,25 +407,32 @@ export const createOrder = async (
       );
 
       if (!deliveryInfo.isValid) {
-        return res.status(400).json({
-          success: false,
-          error: "Code postal non valide pour la livraison",
-        });
-      }
+        // Commande DÉJÀ PAYÉE : on ne refuse jamais. Frais 0 par défaut, le back
+        // office ajustera. Sinon (commande non payée) on bloque normalement.
+        if (!isPaidOrder) {
+          return res.status(400).json({
+            success: false,
+            error: "Code postal non valide pour la livraison",
+          });
+        }
+        console.warn(
+          `[ORDER] Commande payée : code postal "${orderData.deliveryAddress.postalCode}" invalide — frais de livraison à vérifier par le back office.`,
+        );
+      } else {
+        deliveryFee = deliveryInfo.fee;
 
-      deliveryFee = deliveryInfo.fee;
+        // Validate minimum order
+        const minimumValidation = validateMinimumOrder(
+          orderData.deliveryAddress.postalCode,
+          subtotal,
+        );
 
-      // Validate minimum order
-      const minimumValidation = validateMinimumOrder(
-        orderData.deliveryAddress.postalCode,
-        subtotal,
-      );
-
-      if (!minimumValidation.isValid) {
-        return res.status(400).json({
-          success: false,
-          error: `Montant minimum de commande non atteint. Minimum requis: ${minimumValidation.minimumOrder.toFixed(2)}$ pour ${minimumValidation.postalCode}. Il manque ${minimumValidation.shortfall.toFixed(2)}$.`,
-        });
+        if (!minimumValidation.isValid && !isPaidOrder) {
+          return res.status(400).json({
+            success: false,
+            error: `Montant minimum de commande non atteint. Minimum requis: ${minimumValidation.minimumOrder.toFixed(2)}$ pour ${minimumValidation.postalCode}. Il manque ${minimumValidation.shortfall.toFixed(2)}$.`,
+          });
+        }
       }
     }
 
@@ -642,14 +684,23 @@ export const createOrder = async (
         );
 
         if (!updated.modifiedCount) {
-          await order.deleteOne();
-          return res.status(400).json({
-            success: false,
-            error: "Ce code promo n'est plus disponible.",
-          });
-        }
-
-        await new PromoRedemption({
+          // Commande DÉJÀ PAYÉE : ne JAMAIS supprimer une commande payée pour un
+          // souci de code promo. On garde la commande telle quelle (le rabais
+          // reste appliqué, le back office peut ajuster) et on saute juste le
+          // suivi de redemption.
+          if (isPaidOrder) {
+            console.warn(
+              `[ORDER] Commande payée ${order.orderNumber} : promo "${promoCode}" non décrémenté (plus disponible) — commande conservée.`,
+            );
+          } else {
+            await order.deleteOne();
+            return res.status(400).json({
+              success: false,
+              error: "Ce code promo n'est plus disponible.",
+            });
+          }
+        } else {
+          await new PromoRedemption({
           promoCodeId: promoDoc._id,
           code: promoCode,
           orderId: order._id,
@@ -665,7 +716,8 @@ export const createOrder = async (
           })(),
           discountAmount: promoDiscountAmount,
           redeemedAt: new Date(),
-        }).save();
+          }).save();
+        }
       } catch (promoErr: any) {
         // Best-effort rollback
         try {
@@ -674,11 +726,20 @@ export const createOrder = async (
             { $inc: { timesUsed: -1 } },
           );
         } catch {}
-        await order.deleteOne();
-        return res.status(400).json({
-          success: false,
-          error: promoErr?.message || "Erreur lors de l'application du code promo.",
-        });
+        // Commande DÉJÀ PAYÉE : ne jamais supprimer / refuser pour un souci de
+        // promo. On garde la commande (le back office ajuste si nécessaire).
+        if (isPaidOrder) {
+          console.warn(
+            `[ORDER] Commande payée ${order.orderNumber} : erreur promo ignorée — commande conservée.`,
+            promoErr?.message,
+          );
+        } else {
+          await order.deleteOne();
+          return res.status(400).json({
+            success: false,
+            error: promoErr?.message || "Erreur lors de l'application du code promo.",
+          });
+        }
       }
     }
 
