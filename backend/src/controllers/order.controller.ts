@@ -584,6 +584,20 @@ export const createOrder = async (
       }
     }
 
+    // Filet de sécurité : un client représentant/gouvernement a une commande
+    // TOUJOURS créée IMPAYÉE (sauf s'il y a un vrai paiement Square), quel que
+    // soit le chemin de détection ci-dessus (profil client en base OU billingKind
+    // du formulaire). Sans ça, une commande représentant pouvait être enregistrée
+    // « payée » et envoyer un faux email « paiement complet effectué » sans créer
+    // de lien de paiement (cas Martine Mousseau, 4 juillet 2026).
+    if (
+      (billingKind === "representant" || billingKind === "gouvernement") &&
+      !orderData.squarePaymentId
+    ) {
+      depositPaid = false;
+      balancePaid = false;
+    }
+
     // Create order
     let pickupDate: Date | undefined;
     if (orderData.pickupDate) {
@@ -966,8 +980,15 @@ export const createOrder = async (
       //   would duplicate the email AND the first copy would have no link
       //   (the Square invoice hasn't been published yet at this point).
       const isGovernment = billingKind === "gouvernement";
+      const isRepresentant = billingKind === "representant";
+      // « Payé en magasin » réel = basé sur l'état FINAL du client (après forçage
+      // représentant/gouvernement), pas sur le depositPaid brut reçu. Empêche un
+      // reçu « paiement complet effectué » sur une commande représentant/
+      // gouvernement créée impayée (qui doit recevoir un lien, pas un reçu).
+      const effectivePaidInStore =
+        paidInStore && !isGovernment && !isRepresentant;
       const isPaymentLinkFlow =
-        !paidInStore && !orderData.squarePaymentId && !isGovernment;
+        !effectivePaidInStore && !orderData.squarePaymentId && !isGovernment;
 
       if (isPaymentLinkFlow) {
         console.log(
@@ -976,7 +997,7 @@ export const createOrder = async (
       } else if (!(orderData.clientInfo?.email || "").trim()) {
         console.log("📧 [ORDER] Pas d'email client — aucun reçu envoyé.");
       } else {
-        const receiptMode: "full" | "deposit" | "invoice" = paidInStore
+        const receiptMode: "full" | "deposit" | "invoice" = effectivePaidInStore
           ? "full"
           : isGovernment
             ? "invoice"
