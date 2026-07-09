@@ -1,9 +1,6 @@
 import { Request, Response } from "express";
 import Order from "../models/Order.js";
-import { 
-  sendPaymentReminderEmail,
-  sendPaymentOverdueEmail 
-} from "../utils/mail.js";
+import { resendInvoiceLinkForOrder } from "./payment.controller.js";
 
 interface OrderWithBilling {
   _id: import("mongoose").Types.ObjectId;
@@ -34,140 +31,138 @@ const BILLING_KIND_LABELS_ADMIN: Record<string, string> = {
 };
 
 /**
- * Process payment reminders and cancellations
- * This endpoint can be called via cron job or manually
+ * Date limite EFFECTIVE d'une commande impayée — ALIGNÉE sur l'affichage du
+ * tableau de bord (frontend getPaymentDueDateForOrder) pour que le retard vu à
+ * l'écran et le retard calculé ici soient identiques :
+ *   - représentant → date de ramassage / livraison (PAS le jour de création) ;
+ *   - gouvernement → paymentDueDate (ou +60 j) ;
+ *   - autres → paymentDueDate.
+ * Renvoie null si la commande est déjà payée.
  */
-export async function processPaymentReminders(req: Request, res: Response) {
+function getEffectiveDueDate(order: any): Date | null {
+  const isPaid = order?.paymentStatus === "paid" || order?.depositPaid === true;
+  if (isPaid) return null;
+
+  if (order?.billingKind === "representant") {
+    if (order.pickupDate) return new Date(order.pickupDate);
+    if (order.deliveryDate) return new Date(order.deliveryDate);
+    return new Date(order.orderDate || order.createdAt);
+  }
+  if (order?.billingKind === "gouvernement") {
+    if (order.paymentDueDate) return new Date(order.paymentDueDate);
+    const base = new Date(order.orderDate || order.createdAt);
+    const due = new Date(base);
+    due.setDate(due.getDate() + 60);
+    return due;
+  }
+  if (order?.paymentDueDate) return new Date(order.paymentDueDate);
+  return null;
+}
+
+/**
+ * Traite les rappels de paiement (bouton « Rappels » de l'admin).
+ *
+ * Comportement (refait le 2026-07-09) : pour chaque commande EN RETARD et
+ * IMPAYÉE, on RENVOIE le lien de paiement (facture Square) au client, avec le
+ * même email doux « Confirmation de commande » que le renvoi manuel.
+ *
+ * IMPORTANT : ce traitement n'ANNULE JAMAIS de commande et n'envoie plus le
+ * message brutal « votre commande sera annulée » (qui avait supprimé à tort la
+ * commande 0080 de Martine Mousseau). L'annulation reste une décision manuelle.
+ */
+export async function processPaymentReminders(_req: Request, res: Response) {
   try {
     console.log("\n" + "=".repeat(60));
-    console.log("🔔 PAYMENT REMINDERS PROCESSING STARTED");
+    console.log("🔔 RENVOI DES LIENS DE PAIEMENT (commandes en retard)");
     console.log("=".repeat(60));
-    
+
     const now = new Date();
-    
-    // Find unpaid orders for government and representative clients with payment due dates
+
+    // Toutes les commandes impayées, non annulées / non complétées — tous types
+    // de clients (représentant, gouvernement ET standard comme la 0088).
     const unpaidOrders = await Order.find({
-      billingKind: { $in: ["gouvernement", "representant"] },
       paymentStatus: { $in: ["unpaid", "deposit_paid"] },
-      paymentDueDate: { $exists: true, $ne: null },
-      status: { $nin: ["cancelled", "completed"] }
-    }).lean() as unknown as OrderWithBilling[];
+      status: { $nin: ["cancelled", "completed"] },
+    }).lean();
 
-    console.log(`📋 Found ${unpaidOrders.length} unpaid orders for government/representative clients`);
-
-    let remindersSentWeek = 0;
-    let remindersSent48h = 0;
-    let remindersSentOverdue = 0;
-    let ordersCancelled = 0;
-    let errors = 0;
+    let relancesEnvoyees = 0; // liens renvoyés avec succès
+    let relancesEnRetard = 0; // parmi les envois : échéance déjà passée
+    let relancesAvantEcheance = 0; // parmi les envois : rappel préventif (≤ 7 j)
+    let dejaPayees = 0; // la facture Square est déjà payée
+    let sansLien = 0; // à rappeler mais aucun lien à renvoyer (à traiter à la main)
+    let injoignables = 0; // pas d'email / pas de téléphone
+    let erreurs = 0;
+    const details: any[] = [];
 
     for (const order of unpaidOrders) {
-      const dueDate = order.paymentDueDate ? new Date(order.paymentDueDate) : null;
-      if (!dueDate) continue;
-      
-      const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      
-      console.log(`\n📦 Order ${order.orderNumber}:`);
-      console.log(`   - Billing type: ${order.billingKind}`);
-      console.log(`   - Due date: ${dueDate.toISOString().split('T')[0]}`);
-      console.log(`   - Days until due: ${daysUntilDue}`);
-      console.log(`   - Status: ${order.paymentStatus}`);
-
-      const fullName = `${order.clientInfo.firstName} ${order.clientInfo.lastName}`;
-      const billingKindLabel = BILLING_KIND_LABELS[order.billingKind] || "standard";
+      const due = getEffectiveDueDate(order);
+      if (!due) continue;
+      const daysUntilDue = Math.ceil(
+        (due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      // Fenêtre de rappel : commande EN RETARD (échéance passée) OU à moins de
+      // 7 jours de l'échéance (rappel préventif ~1 semaine + 48h avant). On
+      // renvoie le lien de paiement à chaque fois — rappel doux, JAMAIS
+      // d'annulation, pour TOUS les types (gouvernement, standard, représentant).
+      if (daysUntilDue > 7) continue;
+      const enRetard = daysUntilDue < 0;
 
       try {
-        // Check if order is overdue
-        if (daysUntilDue < 0) {
-          // Order is overdue - send final reminder
-          await sendPaymentOverdueEmail(
-            order.clientInfo.email,
-            fullName,
-            order.orderNumber,
-            order.total,
-            Math.abs(daysUntilDue),
-            billingKindLabel
-          );
-          remindersSentOverdue++;
-          
-          // Cancel the order
-          await Order.findByIdAndUpdate(order._id, {
-            status: "cancelled",
-            $push: {
-              changeHistory: {
-                changedAt: new Date(),
-                field: "status",
-                oldValue: order.status,
-                newValue: "cancelled",
-                changeType: "status_changed",
-                notes: "Commande annulée automatiquement - paiement en retard"
-              }
-            }
-          });
-          
-          console.log(`   ⚠️ Order CANCELLED - payment overdue by ${Math.abs(daysUntilDue)} days`);
-          ordersCancelled++;
-        }
-        // Check if 48 hours before due date
-        else if (daysUntilDue <= 2 && daysUntilDue > 0) {
-          await sendPaymentReminderEmail(
-            order.clientInfo.email,
-            fullName,
-            order.orderNumber,
-            order.total,
-            daysUntilDue,
-            billingKindLabel,
-            "48 heures"
-          );
-          remindersSent48h++;
-        }
-        // Check if 1 week before due date
-        else if (daysUntilDue <= 7 && daysUntilDue > 2) {
-          await sendPaymentReminderEmail(
-            order.clientInfo.email,
-            fullName,
-            order.orderNumber,
-            order.total,
-            daysUntilDue,
-            billingKindLabel,
-            "une semaine"
-          );
-          remindersSentWeek++;
+        const r = await resendInvoiceLinkForOrder(order);
+        if (r.success) {
+          relancesEnvoyees++;
+          if (enRetard) relancesEnRetard++;
+          else relancesAvantEcheance++;
+          details.push({ commande: order.orderNumber, envoye: r.channel, a: r.dest, enRetard });
+          console.log(`   ✅ ${order.orderNumber} → lien renvoyé (${r.channel} à ${r.dest})${enRetard ? " [EN RETARD]" : ""}`);
+        } else if (r.code === "ALREADY_PAID") {
+          dejaPayees++;
+        } else if (r.code === "NO_EMAIL" || r.code === "NO_PHONE") {
+          injoignables++;
+          details.push({ commande: order.orderNumber, ignore: "aucun contact" });
+        } else {
+          // NO_INVOICE / NO_URL / CANCELED → aucun lien Square à renvoyer
+          sansLien++;
+          details.push({ commande: order.orderNumber, ignore: "aucun lien de paiement" });
+          console.log(`   ⏭️ ${order.orderNumber} → à rappeler mais aucun lien (${r.code})`);
         }
       } catch (error) {
-        console.error(`   ❌ Error processing order ${order.orderNumber}:`, error);
-        errors++;
+        erreurs++;
+        console.error(`   ❌ Erreur sur ${order.orderNumber}:`, error);
       }
     }
 
     console.log("\n" + "=".repeat(60));
-    console.log("📊 SUMMARY");
-    console.log("=".repeat(60));
-    console.log(`📧 Rappels (1 semaine): ${remindersSentWeek}`);
-    console.log(`📧 Rappels (48h): ${remindersSent48h}`);
-    console.log(`📧 Rappels (en retard): ${remindersSentOverdue}`);
-    console.log(`⚠️ Commandes annulées: ${ordersCancelled}`);
-    console.log(`❌ Erreurs: ${errors}`);
+    console.log(`📧 Liens renvoyés: ${relancesEnvoyees} (en retard: ${relancesEnRetard}, avant échéance: ${relancesAvantEcheance})`);
+    console.log(`💰 Déjà payées: ${dejaPayees}`);
+    console.log(`⏭️ Sans lien (à traiter à la main): ${sansLien}`);
+    console.log(`📭 Injoignables: ${injoignables}`);
+    console.log(`❌ Erreurs: ${erreurs}`);
     console.log("=".repeat(60) + "\n");
 
     res.json({
       success: true,
-      message: "Payment reminders processed successfully",
+      message:
+        relancesEnvoyees > 0
+          ? `${relancesEnvoyees} lien(s) de paiement renvoyé(s) (${relancesEnRetard} en retard, ${relancesAvantEcheance} avant échéance).`
+          : "Aucun lien à renvoyer pour le moment.",
       summary: {
-        totalOrders: unpaidOrders.length,
-        remindersSentWeek,
-        remindersSent48h,
-        remindersSentOverdue,
-        ordersCancelled,
-        errors
-      }
+        relancesEnvoyees,
+        relancesEnRetard,
+        relancesAvantEcheance,
+        dejaPayees,
+        sansLien,
+        injoignables,
+        erreurs,
+      },
+      details,
     });
   } catch (error) {
-    console.error("❌ Error processing payment reminders:", error);
+    console.error("❌ Erreur lors du traitement des rappels:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to process payment reminders",
-      error: error instanceof Error ? error.message : "Unknown error"
+      message: "Échec du traitement des rappels de paiement",
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 }

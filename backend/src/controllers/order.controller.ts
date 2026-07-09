@@ -607,8 +607,12 @@ export const createOrder = async (
       pickupDate = new Date(`${orderData.deliveryDate}T${slot}:00`);
     }
 
-    // For representatives: payment due on pickup/delivery date (not 60 days like government)
-    if (billingKind === "representant" && !paymentDueDate) {
+    // For representatives: payment due on pickup/delivery date (not 60 days like government).
+    // On force TOUJOURS cette date (sans le garde !paymentDueDate) : sinon, quand
+    // le client est reconnu via son profil, la date limite avait déjà été fixée au
+    // jour de création (termes = 0), et le paiement était considéré en retard dès
+    // le départ → annulation auto erronée (cas Martine Mousseau 0080, 8 juillet).
+    if (billingKind === "representant") {
       if (pickupDate) {
         paymentDueDate = pickupDate;
         console.log("📋 [BILLING] Setting representative paymentDueDate to pickupDate:", paymentDueDate);
@@ -663,6 +667,7 @@ export const createOrder = async (
       billingKind,
       billingOrganization,
       billingEmail,
+      takenByInitials: (orderData as any).takenByInitials || undefined,
       paymentDueDate,
       squarePaymentId: orderData.squarePaymentId,
       notes: orderData.notes,
@@ -1956,6 +1961,11 @@ export const updateOrder = async (
     if (updateData.billingOrganization !== undefined) {
       order.billingOrganization =
         (updateData.billingOrganization || "").trim() || undefined;
+    }
+    if ((updateData as any).takenByInitials !== undefined) {
+      (order as any).takenByInitials =
+        String((updateData as any).takenByInitials || "").trim().toUpperCase() ||
+        undefined;
     }
 
     // Track and update assigned driver

@@ -160,6 +160,7 @@ export interface Order {
   billingKind?: "standard" | "representant" | "gouvernement";
   billingOrganization?: string;
   billingEmail?: string;
+  takenByInitials?: string;
   paymentDueDate?: string;
   squarePaymentId?: string;
   squareInvoiceId?: string;

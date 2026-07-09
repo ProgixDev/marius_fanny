@@ -84,6 +84,7 @@ export const createOrderSchema = z
     billingKind: z.enum(["standard", "representant", "gouvernement"]).optional(),
     billingEmail: z.string().email().optional().or(z.literal("")),
     billingOrganization: z.string().max(120).optional(),
+    takenByInitials: z.string().max(10).optional(),
   })
   .refine(
     (data) => {
@@ -144,6 +145,7 @@ export const updateOrderSchema = z.object({
   billingKind: z.enum(["standard", "representant", "gouvernement"]).optional(),
   billingEmail: z.string().email().optional().or(z.literal("")),
   billingOrganization: z.string().max(120).optional(),
+  takenByInitials: z.string().max(10).optional(),
 });
 
 // Validate delivery fee schema - for POST /api/orders/validate-delivery

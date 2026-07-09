@@ -1014,6 +1014,79 @@ export const createInvoice = async (req: Request, res: Response) => {
  * Renvoie { success:false, code:"NO_INVOICE" } si aucune facture n'existe encore
  * (le frontend en crée alors une).
  */
+/**
+ * Cœur réutilisable du renvoi de lien de paiement pour UNE commande.
+ * Récupère la facture Square, vérifie qu'elle n'est ni payée ni annulée, puis
+ * renvoie le lien public par email (ou SMS selon le canal). Renvoie un résultat
+ * structuré (jamais d'exception métier) : le endpoint HTTP ET le job de rappels
+ * de paiement l'utilisent, pour un comportement identique.
+ */
+export async function resendInvoiceLinkForOrder(order: any): Promise<{
+  success: boolean;
+  code?: string;
+  channel?: string;
+  dest?: string;
+  error?: string;
+}> {
+  if (!order.squareInvoiceId) {
+    return { success: false, code: "NO_INVOICE" };
+  }
+
+  const invoiceResponse = await squareClient.invoices.get({
+    invoiceId: order.squareInvoiceId,
+  });
+  const invoice = (invoiceResponse as any)?.invoice;
+  const publicUrl: string | undefined = invoice?.publicUrl;
+  const status: string | undefined = invoice?.status;
+
+  if (status === "PAID") return { success: false, code: "ALREADY_PAID" };
+  if (status === "CANCELED") return { success: false, code: "CANCELED" };
+  if (!publicUrl) return { success: false, code: "NO_URL" };
+
+  const channel = order.paymentLinkChannel || "email";
+  const shortNum = String(order.orderNumber || order._id).split("-").pop();
+
+  if (channel === "sms") {
+    const phone = (order.clientInfo?.phone || "").trim();
+    if (!phone) {
+      return { success: false, code: "NO_PHONE", error: "Aucun numéro de téléphone pour cette commande." };
+    }
+    await sendSms({
+      to: phone,
+      body: `Marius et Fanny: votre lien de paiement pour la commande #${shortNum}: ${publicUrl}`,
+    });
+    return { success: true, channel: "sms", dest: phone };
+  }
+
+  const email = (order.clientInfo?.email || "").trim();
+  if (!email) {
+    return { success: false, code: "NO_EMAIL", error: "Aucun courriel pour cette commande." };
+  }
+  const items = (order.items || []).map((it: any) => ({
+    productName: it.productName || (it.productId ? `Produit #${it.productId}` : "Article"),
+    quantity: it.quantity || 1,
+    amount: it.amount || (it.unitPrice || 0) * (it.quantity || 1),
+  }));
+  await sendInvoiceOrderConfirmation(
+    email,
+    `${order.clientInfo?.firstName || ""} ${order.clientInfo?.lastName || ""}`.trim(),
+    order.orderNumber || String(order._id),
+    items,
+    order.subtotal || 0,
+    order.taxAmount || 0,
+    order.deliveryFee || 0,
+    order.total || 0,
+    publicUrl,
+    new Date(),
+    order.pickupDate ? new Date(order.pickupDate) : undefined,
+    order.deliveryTimeSlot,
+    order.deliveryType,
+    order.notes,
+    String(order._id),
+  );
+  return { success: true, channel: "email", dest: email };
+}
+
 export const resendInvoiceLink = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.body as { orderId?: string };
@@ -1024,69 +1097,8 @@ export const resendInvoiceLink = async (req: Request, res: Response) => {
     if (!order) {
       return res.status(404).json({ success: false, error: "Commande introuvable" });
     }
-    if (!order.squareInvoiceId) {
-      return res.json({ success: false, code: "NO_INVOICE" });
-    }
-
-    const invoiceResponse = await squareClient.invoices.get({
-      invoiceId: order.squareInvoiceId,
-    });
-    const invoice = (invoiceResponse as any)?.invoice;
-    const publicUrl: string | undefined = invoice?.publicUrl;
-    const status: string | undefined = invoice?.status;
-
-    if (status === "PAID") {
-      return res.json({ success: false, code: "ALREADY_PAID" });
-    }
-    if (status === "CANCELED") {
-      return res.json({ success: false, code: "CANCELED" });
-    }
-    if (!publicUrl) {
-      return res.json({ success: false, code: "NO_URL" });
-    }
-
-    const channel = order.paymentLinkChannel || "email";
-    const shortNum = String(order.orderNumber || orderId).split("-").pop();
-
-    if (channel === "sms") {
-      const phone = (order.clientInfo?.phone || "").trim();
-      if (!phone) {
-        return res.json({ success: false, error: "Aucun numéro de téléphone pour cette commande." });
-      }
-      await sendSms({
-        to: phone,
-        body: `Marius et Fanny: votre lien de paiement pour la commande #${shortNum}: ${publicUrl}`,
-      });
-      return res.json({ success: true, channel: "sms", dest: phone });
-    }
-
-    const email = (order.clientInfo?.email || "").trim();
-    if (!email) {
-      return res.json({ success: false, error: "Aucun courriel pour cette commande." });
-    }
-    const items = (order.items || []).map((it: any) => ({
-      productName: it.productName || (it.productId ? `Produit #${it.productId}` : "Article"),
-      quantity: it.quantity || 1,
-      amount: it.amount || (it.unitPrice || 0) * (it.quantity || 1),
-    }));
-    await sendInvoiceOrderConfirmation(
-      email,
-      `${order.clientInfo?.firstName || ""} ${order.clientInfo?.lastName || ""}`.trim(),
-      order.orderNumber || String(orderId),
-      items,
-      order.subtotal || 0,
-      order.taxAmount || 0,
-      order.deliveryFee || 0,
-      order.total || 0,
-      publicUrl,
-      new Date(),
-      order.pickupDate ? new Date(order.pickupDate) : undefined,
-      order.deliveryTimeSlot,
-      order.deliveryType,
-      order.notes,
-      String(orderId),
-    );
-    return res.json({ success: true, channel: "email", dest: email });
+    const result = await resendInvoiceLinkForOrder(order);
+    return res.json(result);
   } catch (error: any) {
     console.error("resendInvoiceLink error:", error);
     return res

@@ -98,6 +98,8 @@ interface OrderFormData {
   billingKind?: "standard" | "representant" | "gouvernement";
   billingEmail?: string;
   billingOrganization?: string;
+  // Initiales de l'employé qui a pris la commande (optionnel).
+  takenByInitials?: string;
 }
 
 interface OrderFormItem {
@@ -176,6 +178,7 @@ export default function OrderForm({
       billingKind: initialData?.billingKind || "standard",
       billingEmail: initialData?.billingEmail || "",
       billingOrganization: initialData?.billingOrganization || "",
+      takenByInitials: initialData?.takenByInitials || "",
     };
   });
 
@@ -912,15 +915,16 @@ export default function OrderForm({
     if (!formData.lastName.trim()) {
       newErrors.lastName = "Le nom de famille est requis";
     }
-    // Phone only required when actually needed: sending the Square payment
-    // link via SMS. Otherwise we let it be empty (self-signup clients on the
-    // public site don't always have one).
-    const phoneNeededForSms =
-      formData.paymentMethod === "payment_link" &&
-      formData.paymentLinkChannel === "sms";
-    if (phoneNeededForSms && !formData.phone.trim()) {
-      newErrors.phone =
-        "Le téléphone est requis pour envoyer le lien de paiement par SMS";
+    // Le numéro de téléphone est OBLIGATOIRE pour toute prise de commande au
+    // back office (demande de Fanny, 9 juillet 2026). On garde un message plus
+    // précis quand il sert au lien de paiement par SMS.
+    if (!formData.phone.trim()) {
+      const phoneNeededForSms =
+        formData.paymentMethod === "payment_link" &&
+        formData.paymentLinkChannel === "sms";
+      newErrors.phone = phoneNeededForSms
+        ? "Le téléphone est requis pour envoyer le lien de paiement par SMS"
+        : "Le numéro de téléphone est requis";
     }
     // Email optionnel (ex. client âgé sans courriel). Requis UNIQUEMENT si on
     // envoie le lien de paiement par courriel (sinon on ne pourrait pas l'envoyer).
@@ -1251,7 +1255,7 @@ export default function OrderForm({
 
         <div>
           <Label htmlFor="phone" className="text-xs text-gray-600">
-            TÉL:
+            TÉL:<span className="text-red-500 ml-0.5">*</span>
           </Label>
           <div className="flex gap-2">
             <Input
@@ -2585,6 +2589,34 @@ export default function OrderForm({
             <span className="font-medium">${formData.balance.toFixed(2)}</span>
           </div>
         </div>
+      </div>
+
+      {/* Initiales de l'employé qui a pris la commande (optionnel) — sert à
+          savoir qui a saisi la commande. */}
+      <div className="flex items-center gap-3 border-t border-gray-200 pt-4">
+        <label
+          htmlFor="takenByInitials"
+          className="text-sm font-semibold text-gray-700"
+        >
+          Initiales
+          <span className="ml-1 font-normal text-gray-400">
+            (qui a pris la commande)
+          </span>
+        </label>
+        <input
+          id="takenByInitials"
+          type="text"
+          value={formData.takenByInitials || ""}
+          onChange={(e) =>
+            setFormData((prev) => ({
+              ...prev,
+              takenByInitials: e.target.value.toUpperCase().slice(0, 5),
+            }))
+          }
+          maxLength={5}
+          placeholder="MF"
+          className="w-16 h-12 text-center uppercase font-bold text-lg tracking-widest border-2 border-gray-300 rounded-md focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+        />
       </div>
     </form>
   );

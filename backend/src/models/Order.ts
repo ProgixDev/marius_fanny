@@ -70,6 +70,8 @@ export interface IOrder extends Document {
   billingKind?: "standard" | "representant" | "gouvernement";
   billingOrganization?: string;
   billingEmail?: string;
+  // Initiales de l'employé qui a pris/saisi la commande (back office, optionnel).
+  takenByInitials?: string;
   paymentReceiptEmailSent?: boolean;
   paymentDueDate?: Date;
   refunds?: Array<{
@@ -391,6 +393,12 @@ const OrderSchema = new Schema<IOrder>(
       type: String,
       trim: true,
       lowercase: true,
+    },
+    // Initiales de l'employé qui a pris la commande (back office, optionnel).
+    takenByInitials: {
+      type: String,
+      trim: true,
+      uppercase: true,
     },
     // Set once a payment-confirmation email has been sent for this order, so a
     // duplicate/repeated Square webhook does not email the customer twice.

@@ -145,12 +145,13 @@ export function OrderManagement() {
     success: boolean;
     message: string;
     summary?: {
-      totalOrders: number;
-      remindersSentWeek: number;
-      remindersSent48h: number;
-      remindersSentOverdue: number;
-      ordersCancelled: number;
-      errors: number;
+      relancesEnvoyees: number;
+      relancesEnRetard: number;
+      relancesAvantEcheance: number;
+      dejaPayees: number;
+      sansLien: number;
+      injoignables: number;
+      erreurs: number;
     };
   } | null>(null);
 
@@ -355,6 +356,7 @@ export function OrderManagement() {
               billingKind: o.billingKind,
               billingOrganization: o.billingOrganization,
               billingEmail: o.billingEmail,
+              takenByInitials: o.takenByInitials,
               paymentDueDate: o.paymentDueDate,
               status: o.status || "pending",
               source: mappedSource,
@@ -1804,8 +1806,19 @@ export function OrderManagement() {
       key: "client",
       label: "Client",
       sortable: true,
-      render: (order: OrderWithPacking) =>
-        `${order.client.firstName} ${order.client.lastName}`,
+      render: (order: OrderWithPacking) => (
+        <span className="flex items-center gap-2">
+          <span>{`${order.client.firstName} ${order.client.lastName}`}</span>
+          {order.takenByInitials && (
+            <span
+              title="Prise par"
+              className="px-1.5 py-0.5 rounded bg-stone-200 text-stone-700 text-[10px] font-bold uppercase tracking-wide shrink-0"
+            >
+              {order.takenByInitials}
+            </span>
+          )}
+        </span>
+      ),
     },
     {
       key: "serviceTime",
@@ -2423,13 +2436,17 @@ export function OrderManagement() {
                 </p>
                 {reminderResult.summary && (
                   <div className="text-sm text-green-800 bg-white p-3 rounded">
-                    <p><strong>Total commandes:</strong> {reminderResult.summary.totalOrders}</p>
-                    <p><strong>Rappels (1 semaine):</strong> {reminderResult.summary.remindersSentWeek}</p>
-                    <p><strong>Rappels (48h):</strong> {reminderResult.summary.remindersSent48h}</p>
-                    <p><strong>Rappels (en retard):</strong> {reminderResult.summary.remindersSentOverdue}</p>
-                    <p><strong>Commandes annulées:</strong> {reminderResult.summary.ordersCancelled}</p>
-                    {reminderResult.summary.errors > 0 && (
-                      <p className="text-red-600"><strong>Erreurs:</strong> {reminderResult.summary.errors}</p>
+                    <p><strong>Liens de paiement renvoyés:</strong> {reminderResult.summary.relancesEnvoyees}</p>
+                    <p className="text-xs text-green-700 ml-3">dont {reminderResult.summary.relancesEnRetard} en retard · {reminderResult.summary.relancesAvantEcheance} avant échéance</p>
+                    <p><strong>Déjà payées:</strong> {reminderResult.summary.dejaPayees}</p>
+                    {reminderResult.summary.sansLien > 0 && (
+                      <p className="text-amber-700"><strong>En retard sans lien (à traiter à la main):</strong> {reminderResult.summary.sansLien}</p>
+                    )}
+                    {reminderResult.summary.injoignables > 0 && (
+                      <p className="text-amber-700"><strong>Sans courriel/téléphone:</strong> {reminderResult.summary.injoignables}</p>
+                    )}
+                    {reminderResult.summary.erreurs > 0 && (
+                      <p className="text-red-600"><strong>Erreurs:</strong> {reminderResult.summary.erreurs}</p>
                     )}
                   </div>
                 )}
@@ -2832,6 +2849,19 @@ export function OrderManagement() {
                         Informations de commande
                       </h4>
                       <div className="space-y-3">
+                        {selectedOrder.takenByInitials && (
+                          <div className="flex items-center gap-3 p-3 bg-white rounded-lg">
+                            <UserCircle className="w-5 h-5 text-(--bakery-gold)" />
+                            <div>
+                              <p className="text-xs text-(--bakery-text-secondary)">
+                                Prise par
+                              </p>
+                              <p className="text-sm font-bold text-(--bakery-text) uppercase tracking-wide">
+                                {selectedOrder.takenByInitials}
+                              </p>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center gap-3 p-3 bg-white rounded-lg">
                           <Calendar className="w-5 h-5 text-(--bakery-gold)" />
                           <div>
@@ -3411,6 +3441,7 @@ export function OrderManagement() {
                 billingKind: formData.billingKind || "standard",
                 billingEmail: formData.billingEmail || undefined,
                 billingOrganization: formData.billingOrganization || undefined,
+                takenByInitials: formData.takenByInitials?.trim() || undefined,
               };
 
               if (formData.date) {
@@ -3634,6 +3665,7 @@ export function OrderManagement() {
                 billingKind: formData.billingKind || "standard",
                 billingEmail: formData.billingEmail || undefined,
                 billingOrganization: formData.billingOrganization || undefined,
+                takenByInitials: formData.takenByInitials?.trim() || undefined,
               };
 
               if (formData.date) {
@@ -3856,6 +3888,7 @@ export function OrderManagement() {
                   billingKind: (selectedOrder as any).billingKind || "standard",
                   billingEmail: (selectedOrder as any).billingEmail || "",
                   billingOrganization: (selectedOrder as any).billingOrganization || "",
+                  takenByInitials: (selectedOrder as any).takenByInitials || "",
                   deliveryFee: selectedOrder.deliveryFee,
                   deliveryAddress: selectedOrder.deliveryAddress
                     ? {
