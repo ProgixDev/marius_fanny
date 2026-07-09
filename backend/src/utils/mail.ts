@@ -19,6 +19,17 @@ const FROM_EMAIL = resend
 // Display name for outgoing emails
 const DISPLAY_FROM = `"Marius & Fanny" <${process.env.EMAIL_USER || FROM_EMAIL}>`;
 
+// Expéditeur "ne pas répondre" pour les courriels AUTOMATIQUES de commande
+// (confirmations, reçus, factures). Le courriel part toujours du compte SMTP,
+// mais l'affichage indique clairement de ne pas répondre.
+const DISPLAY_FROM_NOREPLY = `"Marius & Fanny (Ne pas répondre)" <${process.env.EMAIL_USER || FROM_EMAIL}>`;
+
+// Boîte de la boulangerie qui reçoit (1) les RÉPONSES éventuelles des clients
+// (Reply-To) et (2) une COPIE de chaque courriel de commande envoyé (BCC), pour
+// que Fanny voie tout sans accéder au compte d'envoi. Configurable via env.
+const ORDER_CONTACT_EMAIL =
+  (process.env.ORDER_CONTACT_EMAIL || "mariusetfanny@bellnet.ca").trim();
+
 // Public logo URL (hosted on Cloudinary)
 // Use f_jpg so the logo renders in every email client (AVIF is rejected by
 // Outlook, several webmails, and older Apple Mail versions).
@@ -98,12 +109,30 @@ async function sendEmail(opts: {
   to: string;
   subject: string;
   html: string;
+  replyTo?: string;
+  bcc?: string;
 }): Promise<void> {
   if (resend) {
-    const { error } = await resend.emails.send(opts);
+    const { error } = await resend.emails.send({
+      from: opts.from,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
+      ...(opts.bcc ? { bcc: opts.bcc } : {}),
+    });
     if (error) throw new Error(`Resend error: ${error.message}`);
   } else {
-    await transporter.sendMail({ ...opts, replyTo: opts.from });
+    await transporter.sendMail({
+      from: opts.from,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      // Par défaut les réponses reviennent à l'expéditeur ; les courriels de
+      // commande passent une adresse explicite (la boîte de Fanny).
+      replyTo: opts.replyTo || opts.from,
+      ...(opts.bcc ? { bcc: opts.bcc } : {}),
+    });
   }
 }
 
@@ -763,7 +792,9 @@ export async function sendFullPaymentReceipt(
       : "";
 
     const mailOptions = {
-      from: DISPLAY_FROM,
+      from: DISPLAY_FROM_NOREPLY,
+      replyTo: ORDER_CONTACT_EMAIL,
+      bcc: ORDER_CONTACT_EMAIL,
       to: email,
       subject: `✅ Confirmation de paiement - Commande ${paddedNumber}`,
       html: `
@@ -949,7 +980,9 @@ export async function sendDepositReceipt(
       : "";
 
     const mailOptions = {
-      from: DISPLAY_FROM,
+      from: DISPLAY_FROM_NOREPLY,
+      replyTo: ORDER_CONTACT_EMAIL,
+      bcc: ORDER_CONTACT_EMAIL,
       to: email,
       subject: `✅ Acompte reçu - Commande ${paddedNumber}`,
       html: `
@@ -1175,7 +1208,9 @@ export async function sendInvoiceOrderConfirmation(
             </div>`;
 
     const mailOptions = {
-      from: DISPLAY_FROM,
+      from: DISPLAY_FROM_NOREPLY,
+      replyTo: ORDER_CONTACT_EMAIL,
+      bcc: ORDER_CONTACT_EMAIL,
       to: email,
       subject: asFacture
         ? `🧾 Facture - Commande ${paddedNumber}`
@@ -1582,7 +1617,9 @@ export async function sendOrderBalanceEmail(data: {
     .join("");
 
   const mailOptions = {
-    from: DISPLAY_FROM,
+    from: DISPLAY_FROM_NOREPLY,
+    replyTo: ORDER_CONTACT_EMAIL,
+    bcc: ORDER_CONTACT_EMAIL,
     to: data.clientEmail,
     subject: isRefund
       ? `Crédit sur votre commande #${data.orderNumber} — Marius & Fanny`
@@ -1708,7 +1745,9 @@ export async function sendQuoteEmail(data: {
     .join("");
 
   const mailOptions = {
-    from: DISPLAY_FROM,
+    from: DISPLAY_FROM_NOREPLY,
+    replyTo: ORDER_CONTACT_EMAIL,
+    bcc: ORDER_CONTACT_EMAIL,
     to: data.to,
     subject: `Soumission ${data.quoteNumber} — Marius & Fanny`,
     html: `
