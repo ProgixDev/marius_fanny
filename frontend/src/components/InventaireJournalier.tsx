@@ -26,11 +26,11 @@ const PRODUITS_PAR_DEFAUT = [
   "Croissant", "Chocolatine", "Danoise framboises", "Danoise aux raisins",
   "Chausson aux pommes", "Abricotine", "Palmier", "Frangipane",
   "Croissant amandes", "Chocolatine aux amandes", "Croissant pistache", "Brioche aux sucres",
-  "Danoise cannelle", "Biscuit choco", "Croissant aux fromages", "Brioche suisse",
-  "Quiche jambon et fromage", "Qui. jambon grand", "Quiche épinard et fromage",
-  "Qui. épinard grand", "Quiche poireaux fromage de chèvre", "Qui. poireaux grand",
-  "Tropezienne", "Tropezienne fraise", "Tourte provençal", "Tourte gibier",
-  "Pizza", "Quiche saumon gr", "Quiche aux deux saumons", "Pâté au poulet",
+  "Danoise cannelle", "Biscuit chocolat", "Croissant aux fromages", "Brioche suisse",
+  "Quiche jambon et fromage", "Quiche jambon et fromage grande", "Quiche épinard et fromage",
+  "Quiche épinard grande", "Quiche poireaux fromage de chèvre", "Quiche poireaux fromage de chèvre grande",
+  "Tropezienne", "Tropézienne fraises", "Tourte provençal", "Tourte gibier",
+  "Pizza", "Quiche aux deux saumons grande", "Quiche aux deux saumons", "Pâté au poulet",
   "Pâté poulet grand", "Pâté au saumon", "Pâté saumon grand",
   "Tourtière", "Tourtière grand", "Croque monsieur", "Croque végé",
   "Plat cuisiné", "Soupe 1Litre", "Soupe", "SUPPLÉMENT :"
@@ -58,6 +58,14 @@ const RENAME_MAP: Record<string, string> = {
   "Pâté poulet petit": "Pâté au poulet",
   "Pâté saumon petit": "Pâté au saumon",
   "Tourtière petit": "Tourtière",
+  // Noms abrégés qui ne correspondaient pas au produit réel → comptage cassé
+  // (corrigé le 9 juillet 2026).
+  "Biscuit choco": "Biscuit chocolat",
+  "Qui. épinard grand": "Quiche épinard grande",
+  "Qui. jambon grand": "Quiche jambon et fromage grande",
+  "Qui. poireaux grand": "Quiche poireaux fromage de chèvre grande",
+  "Quiche saumon gr": "Quiche aux deux saumons grande",
+  "Tropezienne fraise": "Tropézienne fraises",
 };
 
 function migrateNames(list: string[]): string[] {

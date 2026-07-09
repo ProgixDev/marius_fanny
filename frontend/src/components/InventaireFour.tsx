@@ -19,7 +19,7 @@ import { dailyInventoryAPI } from "../lib/DailyInventoryAPI";
 const PRODUITS_FOUR_DEFAUT = [
   "Éclair chantilly", "Éclair chocolat", "Éclair pistache", "Mille-feuilles",
   "Tartelette aux fraise", "Tartelette fruits", "Crème brulée", "Tarte aux fraises",
-  "Tarte aux fruits", "Tropézienne", "Trop. fraise", "Mini pâtisserie",
+  "Tarte aux fruits", "Tropézienne", "Tropézienne fraises", "Mini pâtisserie",
 ];
 
 // Upgrades an existing saved list (localStorage / MongoDB sentinel) to the
@@ -31,6 +31,9 @@ const RENAME_MAP: Record<string, string> = {
   "Tartelette fraise": "Tartelette aux fraise",
   "Tarte fraise": "Tarte aux fraises",
   "Tarte fruits": "Tarte aux fruits",
+  // Nom abrégé qui ne correspondait pas au produit réel → ne comptait pas dans
+  // Frais (corrigé le 9 juillet 2026).
+  "Trop. fraise": "Tropézienne fraises",
 };
 
 function migrateNames(list: string[]): string[] {
