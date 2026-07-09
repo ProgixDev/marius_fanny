@@ -24,9 +24,10 @@ const DISPLAY_FROM = `"Marius & Fanny" <${process.env.EMAIL_USER || FROM_EMAIL}>
 // mais l'affichage indique clairement de ne pas répondre.
 const DISPLAY_FROM_NOREPLY = `"Marius & Fanny (Ne pas répondre)" <${process.env.EMAIL_USER || FROM_EMAIL}>`;
 
-// Boîte de la boulangerie qui reçoit (1) les RÉPONSES éventuelles des clients
-// (Reply-To) et (2) une COPIE de chaque courriel de commande envoyé (BCC), pour
-// que Fanny voie tout sans accéder au compte d'envoi. Configurable via env.
+// Boîte de la boulangerie qui reçoit les RÉPONSES des clients (Reply-To) quand
+// ils répondent à une confirmation — pour que Fanny voie ces messages sans
+// accéder au compte d'envoi. On N'envoie PAS de copie des confirmations
+// elles-mêmes (pas de BCC). Configurable via env.
 const ORDER_CONTACT_EMAIL =
   (process.env.ORDER_CONTACT_EMAIL || "mariusetfanny@bellnet.ca").trim();
 
@@ -794,7 +795,6 @@ export async function sendFullPaymentReceipt(
     const mailOptions = {
       from: DISPLAY_FROM_NOREPLY,
       replyTo: ORDER_CONTACT_EMAIL,
-      bcc: ORDER_CONTACT_EMAIL,
       to: email,
       subject: `✅ Confirmation de paiement - Commande ${paddedNumber}`,
       html: `
@@ -982,7 +982,6 @@ export async function sendDepositReceipt(
     const mailOptions = {
       from: DISPLAY_FROM_NOREPLY,
       replyTo: ORDER_CONTACT_EMAIL,
-      bcc: ORDER_CONTACT_EMAIL,
       to: email,
       subject: `✅ Acompte reçu - Commande ${paddedNumber}`,
       html: `
@@ -1210,7 +1209,6 @@ export async function sendInvoiceOrderConfirmation(
     const mailOptions = {
       from: DISPLAY_FROM_NOREPLY,
       replyTo: ORDER_CONTACT_EMAIL,
-      bcc: ORDER_CONTACT_EMAIL,
       to: email,
       subject: asFacture
         ? `🧾 Facture - Commande ${paddedNumber}`
@@ -1619,7 +1617,6 @@ export async function sendOrderBalanceEmail(data: {
   const mailOptions = {
     from: DISPLAY_FROM_NOREPLY,
     replyTo: ORDER_CONTACT_EMAIL,
-    bcc: ORDER_CONTACT_EMAIL,
     to: data.clientEmail,
     subject: isRefund
       ? `Crédit sur votre commande #${data.orderNumber} — Marius & Fanny`
@@ -1747,7 +1744,6 @@ export async function sendQuoteEmail(data: {
   const mailOptions = {
     from: DISPLAY_FROM_NOREPLY,
     replyTo: ORDER_CONTACT_EMAIL,
-    bcc: ORDER_CONTACT_EMAIL,
     to: data.to,
     subject: `Soumission ${data.quoteNumber} — Marius & Fanny`,
     html: `
