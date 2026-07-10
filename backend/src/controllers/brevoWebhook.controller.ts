@@ -13,13 +13,21 @@ import { sendEmailBounceAlert } from "../utils/mail.js";
  * Sécurité : un jeton dans l'URL (?token=…) comparé à BREVO_WEBHOOK_TOKEN.
  */
 
-// Événements Brevo (payload en snake_case) considérés comme un échec permanent.
-const FAILURE_EVENTS = new Set([
+// Échecs PERMANENTS explicites (adresse invalide / bloquée / plainte).
+const HARD_FAILURE_EVENTS = new Set([
   "hard_bounce",
   "blocked",
   "invalid_email",
   "spam",
 ]);
+
+// Un « soft bounce » est souvent temporaire (greylisting, boîte pleine, serveur
+// occupé) → on NE signale PAS. SAUF si la raison montre une boîte réellement
+// inexistante (ex. « 550 mailbox unavailable », « user unknown ») : beaucoup de
+// serveurs renvoient d'abord un soft bounce avant de passer en hard, et on veut
+// prévenir Fanny vite. Ce motif filtre les vrais « adresse invalide ».
+const PERMANENT_SOFT_REASON =
+  /mailbox unavailable|mailbox not found|user unknown|does ?n.?t exist|no such (user|mailbox|recipient)|recipient (address )?rejected|address rejected|unknown recipient|no mailbox|user not found|5\.1\.1|\b550\b/i;
 
 export async function handleBrevoWebhook(req: Request, res: Response) {
   // On répond 200 tout de suite : Brevo ré-essaie si on tarde ou on échoue.
@@ -39,9 +47,13 @@ export async function handleBrevoWebhook(req: Request, res: Response) {
       .replace(/[\s-]+/g, "_");
     const email = String(body.email || "").trim().toLowerCase();
 
-    if (!email || !FAILURE_EVENTS.has(event)) return;
-
     const reason = String(body.reason || body.event || event).slice(0, 300);
+
+    const isHardFailure = HARD_FAILURE_EVENTS.has(event);
+    const isPermanentSoftBounce =
+      (event === "soft_bounce" || event === "softbounce") &&
+      PERMANENT_SOFT_REASON.test(reason);
+    if (!email || !(isHardFailure || isPermanentSoftBounce)) return;
 
     // Commande la plus récente (non annulée) de ce client.
     const order = await Order.findOne({
