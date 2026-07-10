@@ -10,19 +10,28 @@ const resend =
     ? new Resend(process.env.RESEND_API_KEY)
     : null;
 
+// Adresse d'envoi AFFICHÉE (« From »), le domaine authentifié — découplée du
+// login SMTP. Avec Brevo, le login SMTP (EMAIL_USER) est « xxx@smtp-brevo.com »,
+// mais le « From » doit rester l'adresse du domaine authentifié → on la définit
+// via EMAIL_FROM_ADDRESS (ex. commandes@mariusetfanny.com).
+const FROM_ADDRESS = (
+  process.env.EMAIL_FROM_ADDRESS ||
+  process.env.EMAIL_USER ||
+  "commandes@mariusetfanny.com"
+).trim();
+
 // When using Resend, FROM must come from a verified domain (set RESEND_FROM_EMAIL).
-// When using Nodemailer (Gmail SMTP), FROM is EMAIL_USER.
 const FROM_EMAIL = resend
   ? (process.env.RESEND_FROM_EMAIL as string)
-  : (process.env.EMAIL_USER || "noreply@marius-fanny.com");
+  : FROM_ADDRESS;
 
 // Display name for outgoing emails
-const DISPLAY_FROM = `"Marius & Fanny" <${process.env.EMAIL_USER || FROM_EMAIL}>`;
+const DISPLAY_FROM = `"Marius & Fanny" <${FROM_ADDRESS}>`;
 
 // Expéditeur "ne pas répondre" pour les courriels AUTOMATIQUES de commande
 // (confirmations, reçus, factures). Le courriel part toujours du compte SMTP,
 // mais l'affichage indique clairement de ne pas répondre.
-const DISPLAY_FROM_NOREPLY = `"Marius & Fanny (Ne pas répondre)" <${process.env.EMAIL_USER || FROM_EMAIL}>`;
+const DISPLAY_FROM_NOREPLY = `"Marius & Fanny (Ne pas répondre)" <${FROM_ADDRESS}>`;
 
 // Boîte de la boulangerie qui reçoit les RÉPONSES des clients (Reply-To) quand
 // ils répondent à une confirmation — pour que Fanny voie ces messages sans
