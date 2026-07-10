@@ -55,10 +55,19 @@ export async function handleBrevoWebhook(req: Request, res: Response) {
     }
     if ((order as any).emailBounced) return; // déjà signalé
 
-    order.set("emailBounced", true);
-    order.set("emailBounceReason", reason);
-    order.set("emailBounceAt", new Date());
-    await order.save();
+    // updateOne (et non order.save()) : on ne modifie QUE ces 3 champs, sans
+    // re-valider tout le document (une vieille commande pourrait ne pas passer
+    // la validation actuelle du schéma).
+    await Order.updateOne(
+      { _id: order._id },
+      {
+        $set: {
+          emailBounced: true,
+          emailBounceReason: reason,
+          emailBounceAt: new Date(),
+        },
+      },
+    );
     console.log(`📭 [BREVO WEBHOOK] ${event} — commande ${order.orderNumber} marquée « email invalide » (${email}).`);
 
     try {
