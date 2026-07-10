@@ -97,9 +97,14 @@ function normalizeMatch(s: string): string {
 // interne de Fanny). Par défaut, "Comm Berri" n'entre PAS dans le total.
 // ⚠️ Doit rester synchronisé avec le backend (dailyInventory.controller.ts).
 const BERRI_DANS_TOTAL = new Set(
-  ["Frangipane", "Tropezienne", "Tropezienne fraise", "Croque végé", "Tourte provençal"].map(
-    normalizeMatch,
-  ),
+  [
+    "Frangipane",
+    "Tropezienne",
+    "Tropezienne fraise", // ancien nom (au cas où une liste non migrée)
+    "Tropézienne fraises", // nom actuel du produit → Comm Berri s'additionne aussi
+    "Croque végé",
+    "Tourte provençal",
+  ].map(normalizeMatch),
 );
 
 function calcTotal(e: RowState): number {

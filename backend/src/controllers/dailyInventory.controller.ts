@@ -165,9 +165,14 @@ export const saveDailyInventory = async (
       .trim()
       .replace(/\s+/g, " ");
   const BERRI_DANS_TOTAL_JOURNALIER = new Set(
-    ["Frangipane", "Tropezienne", "Tropezienne fraise", "Croque végé", "Tourte provençal"].map(
-      matchName,
-    ),
+    [
+      "Frangipane",
+      "Tropezienne",
+      "Tropezienne fraise", // ancien nom
+      "Tropézienne fraises", // nom actuel du produit
+      "Croque végé",
+      "Tourte provençal",
+    ].map(matchName),
   );
 
   const sanitizedEntries = (entries as any[]).map((entry) => {
