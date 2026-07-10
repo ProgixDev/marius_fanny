@@ -161,6 +161,8 @@ export interface Order {
   billingOrganization?: string;
   billingEmail?: string;
   takenByInitials?: string;
+  emailBounced?: boolean;
+  emailBounceReason?: string;
   paymentDueDate?: string;
   squarePaymentId?: string;
   squareInvoiceId?: string;

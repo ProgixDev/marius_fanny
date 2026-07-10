@@ -17,6 +17,7 @@ import settingsRoutes from "./settings.routes.js";
 import contactRoutes from "./contact.routes.js";
 import quoteRoutes from "./quote.routes.js";
 import visitRoutes from "./visit.routes.js";
+import notificationRoutes from "./notification.routes.js";
 
 const router = Router();
 
@@ -276,6 +277,7 @@ router.use("/inventory", inventoryRoutes);
 router.use("/daily-inventory", dailyInventoryRoutes);
 router.use("/partner-request", partnerRoutes);
 router.use("/promos", promoRoutes);
+router.use("/notifications", notificationRoutes);
 router.use("/payment-reminders", paymentReminderRoutes);
 router.use("/settings", settingsRoutes);
 router.use("/contact", contactRoutes);

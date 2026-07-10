@@ -72,6 +72,11 @@ export interface IOrder extends Document {
   billingEmail?: string;
   // Initiales de l'employé qui a pris/saisi la commande (back office, optionnel).
   takenByInitials?: string;
+  // Courriel du client invalide/rebondi (signalé par le webhook Brevo) → badge
+  // dans le back office pour que Fanny sache quel client rappeler.
+  emailBounced?: boolean;
+  emailBounceReason?: string;
+  emailBounceAt?: Date;
   paymentReceiptEmailSent?: boolean;
   paymentDueDate?: Date;
   refunds?: Array<{
@@ -400,6 +405,10 @@ const OrderSchema = new Schema<IOrder>(
       trim: true,
       uppercase: true,
     },
+    // Courriel client invalide/rebondi (webhook Brevo).
+    emailBounced: { type: Boolean, default: false },
+    emailBounceReason: { type: String, trim: true },
+    emailBounceAt: { type: Date },
     // Set once a payment-confirmation email has been sent for this order, so a
     // duplicate/repeated Square webhook does not email the customer twice.
     paymentReceiptEmailSent: {

@@ -1844,3 +1844,43 @@ export async function sendQuoteEmail(data: {
   await sendEmail(mailOptions);
   console.log(`✅ Soumission ${data.quoteNumber} envoyée à ${data.to}`);
 }
+
+/**
+ * Alerte envoyée à Fanny (bellnet) quand le courriel d'un client rebondit
+ * (adresse invalide) — pour qu'elle sache quelle commande / quel client
+ * rappeler. Déclenchée par le webhook Brevo.
+ */
+export async function sendEmailBounceAlert(data: {
+  orderNumber: string;
+  clientName: string;
+  email: string;
+  phone: string;
+  reason: string;
+}): Promise<void> {
+  const mailOptions = {
+    from: DISPLAY_FROM,
+    to: ORDER_CONTACT_EMAIL,
+    subject: `⚠️ Courriel client invalide — commande ${data.orderNumber}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #F9F7F2; border-radius: 10px;">
+        <div style="background-color: white; padding: 24px; border-radius: 10px;">
+          <div style="background-color: #FDECEA; padding: 16px 20px; border-radius: 8px; border-left: 4px solid #D9534F; margin-bottom: 20px;">
+            <p style="color: #2D2A26; margin: 0; font-weight: bold; font-size: 15px;">⚠️ Courriel non livré</p>
+            <p style="color: #555; margin: 8px 0 0 0; font-size: 14px; line-height: 1.6;">
+              Le courriel de confirmation n'a pas pu être livré au client. Son adresse est probablement invalide — pensez à le contacter par téléphone.
+            </p>
+          </div>
+          <table style="width: 100%; font-size: 14px; color: #2D2A26; border-collapse: collapse;">
+            <tr><td style="padding: 6px 0; color:#777;">Commande</td><td style="padding:6px 0; font-weight:bold;">${data.orderNumber}</td></tr>
+            <tr><td style="padding: 6px 0; color:#777;">Client</td><td style="padding:6px 0;">${data.clientName || "—"}</td></tr>
+            <tr><td style="padding: 6px 0; color:#777;">Courriel (invalide)</td><td style="padding:6px 0;">${data.email}</td></tr>
+            <tr><td style="padding: 6px 0; color:#777;">Téléphone</td><td style="padding:6px 0; font-weight:bold;">${data.phone || "—"}</td></tr>
+            <tr><td style="padding: 6px 0; color:#777;">Raison</td><td style="padding:6px 0; color:#999;">${data.reason || "—"}</td></tr>
+          </table>
+        </div>
+      </div>
+    `,
+  };
+  await sendEmail(mailOptions);
+  console.log(`📭 Alerte « email invalide » envoyée à ${ORDER_CONTACT_EMAIL} (commande ${data.orderNumber})`);
+}

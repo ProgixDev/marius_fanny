@@ -357,6 +357,8 @@ export function OrderManagement() {
               billingOrganization: o.billingOrganization,
               billingEmail: o.billingEmail,
               takenByInitials: o.takenByInitials,
+              emailBounced: o.emailBounced,
+              emailBounceReason: o.emailBounceReason,
               paymentDueDate: o.paymentDueDate,
               status: o.status || "pending",
               source: mappedSource,
@@ -1807,7 +1809,7 @@ export function OrderManagement() {
       label: "Client",
       sortable: true,
       render: (order: OrderWithPacking) => (
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-2 flex-wrap">
           <span>{`${order.client.firstName} ${order.client.lastName}`}</span>
           {order.takenByInitials && (
             <span
@@ -1815,6 +1817,14 @@ export function OrderManagement() {
               className="px-1.5 py-0.5 rounded bg-stone-200 text-stone-700 text-[10px] font-bold uppercase tracking-wide shrink-0"
             >
               {order.takenByInitials}
+            </span>
+          )}
+          {order.emailBounced && (
+            <span
+              title={`Courriel non livré (adresse invalide)${order.emailBounceReason ? " — " + order.emailBounceReason : ""}. Contactez le client par téléphone.`}
+              className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold shrink-0"
+            >
+              ✉️ invalide
             </span>
           )}
         </span>
@@ -2828,6 +2838,11 @@ export function OrderManagement() {
                             <p className="text-sm font-medium text-(--bakery-text)">
                               {selectedOrder.client.email}
                             </p>
+                            {(selectedOrder as any).emailBounced && (
+                              <p className="mt-1 text-xs font-bold text-red-600">
+                                ✉️ Courriel non livré (adresse invalide) — contactez le client par téléphone.
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-3 p-3 bg-white rounded-lg">
