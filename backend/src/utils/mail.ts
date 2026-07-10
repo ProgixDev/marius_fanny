@@ -28,10 +28,11 @@ const FROM_EMAIL = resend
 // Display name for outgoing emails
 const DISPLAY_FROM = `"Marius & Fanny" <${FROM_ADDRESS}>`;
 
-// Expéditeur "ne pas répondre" pour les courriels AUTOMATIQUES de commande
-// (confirmations, reçus, factures). Le courriel part toujours du compte SMTP,
-// mais l'affichage indique clairement de ne pas répondre.
-const DISPLAY_FROM_NOREPLY = `"Marius & Fanny (Ne pas répondre)" <${FROM_ADDRESS}>`;
+// Expéditeur des courriels AUTOMATIQUES de commande (confirmations, reçus,
+// factures). Le nom affiché reste « Marius & Fanny » ; la mention « ne pas
+// répondre » figure désormais EN BAS du courriel (voir buildNoReplyNotice),
+// pas dans le nom d'expéditeur.
+const DISPLAY_FROM_NOREPLY = `"Marius & Fanny" <${FROM_ADDRESS}>`;
 
 // Boîte de la boulangerie qui reçoit les RÉPONSES des clients (Reply-To) quand
 // ils répondent à une confirmation — pour que Fanny voie ces messages sans
@@ -108,6 +109,15 @@ const buildGoogleReviewSection = () => `
        style="display: inline-block; padding: 12px 22px; background-color: #C5A065; color: white; text-decoration: none; border-radius: 999px; font-weight: bold;">
       Laisser un avis Google
     </a>
+  </div>
+`;
+
+// Petite mention « courriel automatique — ne pas répondre », placée EN BAS des
+// courriels de commande (à la place de l'ancien « (Ne pas répondre) » dans le
+// nom d'expéditeur).
+const buildNoReplyNotice = () => `
+  <div style="text-align: center; margin-top: 12px; color: #9A968F; font-size: 12px; line-height: 1.5;">
+    <p style="margin: 0;">Ceci est un courriel automatique — merci de ne pas y répondre.</p>
   </div>
 `;
 
@@ -904,6 +914,7 @@ export async function sendFullPaymentReceipt(
             ${buildCancellationPolicySection()}
 
             ${buildGoogleReviewSection()}
+            ${buildNoReplyNotice()}
           </div>
 
           <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
@@ -1099,6 +1110,7 @@ export async function sendDepositReceipt(
             ${buildCancellationPolicySection()}
 
             ${buildGoogleReviewSection()}
+            ${buildNoReplyNotice()}
           </div>
 
           <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
@@ -1300,6 +1312,7 @@ export async function sendInvoiceOrderConfirmation(
             ${buildCancellationPolicySection()}
 
             ${buildGoogleReviewSection()}
+            ${buildNoReplyNotice()}
           </div>
 
           <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
