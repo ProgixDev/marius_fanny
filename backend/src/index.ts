@@ -209,4 +209,18 @@ if (!isVercel) {
       setInterval(run, 30 * 60 * 1000);
     })
     .catch((e) => console.error("[RECONCILE] init échouée:", e?.message || e));
+
+  // Surveillance de l'envoi de courriels : au démarrage (après ~2,5 min, donc à
+  // chaque déploiement) puis toutes les 24 h. Alerte par courriel en cas de
+  // panne d'envoi (adresse d'expédition cassée, SMTP KO, non-livraison…).
+  import("./utils/emailHealth.js")
+    .then(({ runEmailHealthCheck }) => {
+      const run = () =>
+        runEmailHealthCheck().catch((e) =>
+          console.error("[SANTÉ COURRIEL] erreur:", e?.message || e),
+        );
+      setTimeout(run, 150 * 1000);
+      setInterval(run, 24 * 60 * 60 * 1000);
+    })
+    .catch((e) => console.error("[SANTÉ COURRIEL] init échouée:", e?.message || e));
 }
