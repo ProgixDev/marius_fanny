@@ -915,6 +915,11 @@ export default function OrderForm({
     if (!formData.lastName.trim()) {
       newErrors.lastName = "Le nom de famille est requis";
     }
+    // Initiales de la personne qui prend la commande — OBLIGATOIRES
+    // (demande de Fanny, 13 juillet 2026).
+    if (!formData.takenByInitials || !formData.takenByInitials.trim()) {
+      newErrors.takenByInitials = "Les initiales sont obligatoires";
+    }
     // Le numéro de téléphone est OBLIGATOIRE pour toute prise de commande au
     // back office (demande de Fanny, 9 juillet 2026). On garde un message plus
     // précis quand il sert au lien de paiement par SMS.
@@ -2591,32 +2596,38 @@ export default function OrderForm({
         </div>
       </div>
 
-      {/* Initiales de l'employé qui a pris la commande (optionnel) — sert à
-          savoir qui a saisi la commande. */}
-      <div className="flex items-center gap-3 border-t border-gray-200 pt-4">
-        <label
-          htmlFor="takenByInitials"
-          className="text-sm font-semibold text-gray-700"
-        >
-          Initiales
-          <span className="ml-1 font-normal text-gray-400">
-            (qui a pris la commande)
-          </span>
-        </label>
-        <input
-          id="takenByInitials"
-          type="text"
-          value={formData.takenByInitials || ""}
-          onChange={(e) =>
-            setFormData((prev) => ({
-              ...prev,
-              takenByInitials: e.target.value.toUpperCase().slice(0, 5),
-            }))
-          }
-          maxLength={5}
-          placeholder="MF"
-          className="w-16 h-12 text-center uppercase font-bold text-lg tracking-widest border-2 border-gray-300 rounded-md focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-        />
+      {/* Initiales de l'employé qui a pris la commande — OBLIGATOIRES. */}
+      <div className="border-t border-gray-200 pt-4">
+        <div className="flex items-center gap-3">
+          <label
+            htmlFor="takenByInitials"
+            className="text-sm font-semibold text-gray-700"
+          >
+            Initiales<span className="text-red-500 ml-0.5">*</span>
+            <span className="ml-1 font-normal text-gray-400">
+              (qui a pris la commande)
+            </span>
+          </label>
+          <input
+            id="takenByInitials"
+            type="text"
+            value={formData.takenByInitials || ""}
+            onChange={(e) =>
+              setFormData((prev) => ({
+                ...prev,
+                takenByInitials: e.target.value.toUpperCase().slice(0, 5),
+              }))
+            }
+            maxLength={5}
+            placeholder="MF"
+            className={`w-16 h-12 text-center uppercase font-bold text-lg tracking-widest border-2 rounded-md focus:border-amber-500 focus:ring-1 focus:ring-amber-500 ${
+              errors.takenByInitials ? "border-red-400" : "border-gray-300"
+            }`}
+          />
+        </div>
+        {errors.takenByInitials && (
+          <p className="text-xs text-red-600 mt-1">{errors.takenByInitials}</p>
+        )}
       </div>
     </form>
   );
