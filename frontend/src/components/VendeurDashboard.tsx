@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ClipboardList, LogOut, Menu, Package, Users, X } from "lucide-react";
+import { ClipboardList, LogOut, Menu, Package, Users, X, Lock } from "lucide-react";
 import { authClient } from "../lib/AuthClient";
 import GoldenBackground from "./GoldenBackground";
 import { OrderManagement } from "./OrderManagement";
 import InventaireJournalier from "./InventaireJournalier";
 import InventaireFrais from "./InventaireFour";
+import Fermeture from "./Fermeture";
 import ClientManagement from "./ClientManagement";
 
-type ViewMode = "orders" | "inventaire" | "inventaire-frais" | "clients";
+type ViewMode = "orders" | "inventaire" | "inventaire-frais" | "clients" | "fermeture";
 
 interface NavItemProps {
   icon: React.ReactNode;
@@ -134,6 +135,15 @@ export default function VendeurDashboard() {
               setIsMobileMenuOpen(false);
             }}
           />
+          <NavItem
+            icon={<Lock size={20} />}
+            label="Fermeture"
+            active={viewMode === "fermeture"}
+            onClick={() => {
+              setViewMode("fermeture");
+              setIsMobileMenuOpen(false);
+            }}
+          />
         </nav>
 
         <div className="p-4 border-t border-stone-200">
@@ -162,6 +172,7 @@ export default function VendeurDashboard() {
         {viewMode === "inventaire" && <InventaireJournalier />}
         {viewMode === "inventaire-frais" && <InventaireFrais />}
         {viewMode === "clients" && <ClientManagement />}
+        {viewMode === "fermeture" && <Fermeture />}
       </main>
     </div>
   );

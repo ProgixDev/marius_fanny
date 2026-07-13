@@ -40,6 +40,7 @@ import { authClient } from "../lib/AuthClient";
 import GoldenBackground from "./GoldenBackground";
 import type { Product } from "../types";
 import InventaireFrais from "./InventaireFour";
+import Fermeture from "./Fermeture";
 
 interface Statistics {
   totalProducts: number;
@@ -86,7 +87,8 @@ type ViewMode =
   | "settings"
   | "production"
   | "inventaire"
-  | "inventaire-frais";
+  | "inventaire-frais"
+  | "fermeture";
 
 const CATEGORIES = [
   "Gâteaux",
@@ -312,6 +314,15 @@ export default function AdminDashboard() {
                 active={viewMode === "inventaire-frais"}
                 onClick={() => {
                   setViewMode("inventaire-frais");
+                  setIsMobileMenuOpen(false);
+                }}
+              />
+              <NavItem
+                icon={<ClipboardList size={20} />}
+                label="Fermeture"
+                active={viewMode === "fermeture"}
+                onClick={() => {
+                  setViewMode("fermeture");
                   setIsMobileMenuOpen(false);
                 }}
               />
@@ -584,7 +595,8 @@ export default function AdminDashboard() {
 
         {/* INVENTAIRE JOURNALIER */}
         {viewMode === "inventaire" && <InventaireJournalier />}
-        {viewMode === "inventaire-frais" && <InventaireFrais />} 
+        {viewMode === "inventaire-frais" && <InventaireFrais />}
+        {viewMode === "fermeture" && <Fermeture />} 
         {/* GESTION DU PERSONNEL */}
         {viewMode === "staff" && <StaffManagement />}
 
