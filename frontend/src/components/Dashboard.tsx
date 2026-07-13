@@ -24,6 +24,7 @@ import {
   TicketPercent,
   FileText,
   Eye,
+  Lock,
 } from "lucide-react";
 import StaffManagement from "./StaffManagement";
 import ClientManagement from "./ClientManagement";
@@ -318,7 +319,7 @@ export default function AdminDashboard() {
                 }}
               />
               <NavItem
-                icon={<ClipboardList size={20} />}
+                icon={<Lock size={20} />}
                 label="Fermeture"
                 active={viewMode === "fermeture"}
                 onClick={() => {
@@ -596,7 +597,7 @@ export default function AdminDashboard() {
         {/* INVENTAIRE JOURNALIER */}
         {viewMode === "inventaire" && <InventaireJournalier />}
         {viewMode === "inventaire-frais" && <InventaireFrais />}
-        {viewMode === "fermeture" && <Fermeture />} 
+        {viewMode === "fermeture" && <Fermeture reviewOnly />} 
         {/* GESTION DU PERSONNEL */}
         {viewMode === "staff" && <StaffManagement />}
 

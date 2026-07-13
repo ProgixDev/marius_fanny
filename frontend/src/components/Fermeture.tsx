@@ -41,7 +41,14 @@ function frDate(d: string): string {
   });
 }
 
-export default function Fermeture() {
+interface RecentClosing {
+  date: string;
+  completed: boolean;
+  completedBy?: string;
+  completedAt?: string;
+}
+
+export default function Fermeture({ reviewOnly = false }: { reviewOnly?: boolean }) {
   const TODAY = todayISO();
   const [date, setDate] = useState<string>(TODAY);
   const [closing, setClosing] = useState<Closing | null>(null);
@@ -50,16 +57,32 @@ export default function Fermeture() {
   const [initials, setInitials] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [recent, setRecent] = useState<RecentClosing[]>([]);
 
   const isToday = date === TODAY;
+
+  // En mode consultation (admin), on charge la liste des derniers jours.
+  useEffect(() => {
+    if (!reviewOnly) return;
+    fetch(`${normalizedApiUrl}/api/closing/recent?limit=30`, {
+      headers: authHeaders(),
+      credentials: "include",
+    })
+      .then((r) => r.json())
+      .then((j) => setRecent(j.data || []))
+      .catch(() => {});
+  }, [reviewOnly, closing?.completed]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const url = isToday
-        ? `${normalizedApiUrl}/api/closing/today`
-        : `${normalizedApiUrl}/api/closing/history?date=${date}`;
+      // Admin (consultation) → toujours l'historique (ne crée jamais de fiche).
+      // Vendeuse → la fiche du jour (créée si besoin) quand c'est aujourd'hui.
+      const url =
+        isToday && !reviewOnly
+          ? `${normalizedApiUrl}/api/closing/today`
+          : `${normalizedApiUrl}/api/closing/history?date=${date}`;
       const r = await fetch(url, { headers: authHeaders(), credentials: "include" });
       const j = await r.json();
       setClosing(j.data || null);
@@ -69,13 +92,13 @@ export default function Fermeture() {
     } finally {
       setLoading(false);
     }
-  }, [date, isToday]);
+  }, [date, isToday, reviewOnly]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const locked = !isToday || !!closing?.completed;
+  const locked = reviewOnly || !isToday || !!closing?.completed;
 
   const toggle = async (key: string, checked: boolean) => {
     if (locked || busy) return;
@@ -172,6 +195,44 @@ export default function Fermeture() {
         </button>
       )}
 
+      {/* Historique (mode consultation admin) : liste des derniers jours. */}
+      {reviewOnly && recent.length > 0 && (
+        <div className="mb-5 bg-stone-50 border border-stone-200 rounded-xl p-3">
+          <p className="text-xs uppercase tracking-wide text-stone-400 mb-2 px-1">
+            Derniers jours
+          </p>
+          <div className="max-h-52 overflow-y-auto space-y-1">
+            {recent.map((r) => (
+              <button
+                key={r.date}
+                onClick={() => setDate(r.date)}
+                className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                  r.date === date ? "bg-[#337957]/10 font-semibold" : "hover:bg-white"
+                }`}
+              >
+                <span className="text-stone-700">{frDate(r.date)}</span>
+                {r.completed ? (
+                  <span className="text-xs text-green-700 font-semibold shrink-0 ml-2">
+                    ✅ {r.completedBy}
+                    {r.completedAt &&
+                      " · " +
+                        new Date(r.completedAt).toLocaleTimeString("fr-CA", {
+                          timeZone: "America/Montreal",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                  </span>
+                ) : (
+                  <span className="text-xs text-amber-600 font-semibold shrink-0 ml-2">
+                    ⚠️ non terminée
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-center text-stone-400 py-10">Chargement…</p>
       ) : !exists && !isToday ? (
@@ -253,7 +314,7 @@ export default function Fermeture() {
           </div>
 
           {/* Zone de validation (seulement aujourd'hui, non terminé) */}
-          {isToday && !closing?.completed && (
+          {!reviewOnly && isToday && !closing?.completed && (
             <div className="mt-6 border-t border-stone-200 pt-5">
               <label className="block text-sm font-semibold text-stone-700 mb-2">
                 Initiales <span className="text-red-500">*</span>{" "}
