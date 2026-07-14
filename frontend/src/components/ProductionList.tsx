@@ -113,7 +113,10 @@ const getFulfillmentAccent = (item: Pick<ProductionItem, "deliveryType" | "picku
   if (item.deliveryType === "delivery") {
     return {
       borderClass: "border-l-4 border-l-yellow-400",
-      pillClass: "bg-yellow-100 text-yellow-900 border-yellow-200",
+      pillClass: "bg-yellow-200 text-yellow-900 border-yellow-300",
+      // Toute la case en jaune pour une livraison (demande de Fanny).
+      cardBgClass: "bg-yellow-100",
+      cardBorderClass: "border-yellow-300",
       label: "Livraison",
     };
   }
@@ -121,7 +124,10 @@ const getFulfillmentAccent = (item: Pick<ProductionItem, "deliveryType" | "picku
   if (isMontrealPickup(item)) {
     return {
       borderClass: "border-l-4 border-l-blue-400",
-      pillClass: "bg-blue-100 text-blue-900 border-blue-200",
+      pillClass: "bg-blue-200 text-blue-900 border-blue-300",
+      // Toute la case en bleu pour une cueillette à Montréal (demande de Fanny).
+      cardBgClass: "bg-blue-100",
+      cardBorderClass: "border-blue-300",
       label: "Cueillette Montréal",
     };
   }
@@ -457,8 +463,12 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
       const sample = group.items[0];
       const accent = sample ? getFulfillmentAccent(sample) : null;
 
+      const cardBg = accent?.cardBgClass || "bg-white";
+      const cardBorder = group.done
+        ? "border-green-300"
+        : accent?.cardBorderClass || "border-stone-200";
       return (
-      <div className={`bg-white rounded-xl border p-4 hover:shadow-md transition-all ${group.done ? 'border-green-200 opacity-70' : 'border-stone-200'} ${accent?.borderClass || ''}`}>
+      <div className={`rounded-xl border p-4 hover:shadow-md transition-all ${cardBg} ${cardBorder} ${group.done ? 'opacity-70' : ''} ${accent?.borderClass || ''}`}>
         <div className="flex items-start gap-3">
           <input
             type="checkbox"
