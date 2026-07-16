@@ -5,21 +5,30 @@ import Order from "../models/Order.js";
 import { sendQuoteEmail } from "../utils/mail.js";
 import { AuthRequest } from "../middleware/auth.js";
 import { createInvoiceForExistingOrder } from "./payment.controller.js";
-
-const TAX_RATE = 0.14975;
+import { computeTaxAmount } from "../utils/tax.js";
 
 /**
- * Compute totals from items (server-side to avoid tampering)
+ * Compute totals from items (server-side to avoid tampering).
+ *
+ * Les taxes passent par le calcul commun (utils/tax.ts) : il consulte le
+ * drapeau `hasTaxes` de la fiche produit et applique l'exonération des
+ * viennoiseries/pâtisseries. Auparavant, la soumission se fiait au seul champ
+ * `taxable` envoyé par le frontend — absent pour un vrai produit — et taxait
+ * donc les produits non taxables (ex. les mini pâtisseries).
  */
-function computeTotals(items: any[], deliveryFee = 0) {
+async function computeTotals(items: any[], deliveryFee = 0) {
   let subtotal = 0;
-  let taxableSubtotal = 0;
   for (const item of items) {
-    const amount = (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0);
-    subtotal += amount;
-    if (item.taxable !== false) taxableSubtotal += amount;
+    subtotal += (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0);
   }
-  const taxAmount = taxableSubtotal * TAX_RATE;
+  const taxAmount = await computeTaxAmount(
+    items.map((item: any) => ({
+      productId: Number(item.productId) || 0,
+      quantity: Number(item.quantity) || 0,
+      amount: (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0),
+      taxable: item.taxable,
+    })),
+  );
   const total = subtotal + taxAmount + (Number(deliveryFee) || 0);
   return {
     subtotal: Math.round(subtotal * 100) / 100,
@@ -80,7 +89,7 @@ export async function createQuote(req: AuthRequest, res: Response) {
       selectedOptions: it.selectedOptions,
     }));
 
-    const totals = computeTotals(normalizedItems, deliveryFee);
+    const totals = await computeTotals(normalizedItems, deliveryFee);
 
     // Create the client in DB if not exists
     const email = String(clientInfo.email).trim().toLowerCase();
@@ -267,10 +276,6 @@ export async function updateQuote(req: AuthRequest, res: Response) {
         notes: it.notes,
         selectedOptions: it.selectedOptions,
       }));
-      const totals = computeTotals(quote.items, deliveryFee ?? quote.deliveryFee);
-      quote.subtotal = totals.subtotal;
-      quote.taxAmount = totals.taxAmount;
-      quote.total = totals.total;
     }
     if (deliveryType) quote.deliveryType = deliveryType;
     if (deliveryDate !== undefined) quote.deliveryDate = deliveryDate || undefined;
@@ -289,7 +294,7 @@ export async function updateQuote(req: AuthRequest, res: Response) {
     }
 
     // Recompute totals after any change
-    const totals = computeTotals(quote.items, quote.deliveryFee);
+    const totals = await computeTotals(quote.items, quote.deliveryFee);
     quote.subtotal = totals.subtotal;
     quote.taxAmount = totals.taxAmount;
     quote.total = totals.total;

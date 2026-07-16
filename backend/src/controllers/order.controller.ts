@@ -29,58 +29,9 @@ import {
   normalizePromoCode,
 } from "../utils/promo.js";
 
-// Tax rate for Quebec (TPS + TVQ)
-const TAX_RATE = 0.14975;
-
-async function computeTaxAmount(
-  items: { productId: number; quantity: number; amount: number; taxable?: boolean }[],
-) {
-  const ids = Array.from(new Set(items.map((i) => i.productId).filter((id) => id > 0)));
-  const products = ids.length
-    ? await Product.find({ id: { $in: ids }, deletedAt: { $exists: false } }).select("id category productionType hasTaxes").lean()
-    : [];
-  const productMap = new Map<number, any>(products.map((p: any) => [p.id, p]));
-
-  const categoryText = (category: unknown) => {
-    if (Array.isArray(category)) return category.join(" ").toLowerCase();
-    return String(category || "").toLowerCase();
-  };
-
-  const viennoiseriesCount = items.reduce((sum, item) => {
-    const p = productMap.get(item.productId);
-    const category = categoryText(p?.category);
-    return category.includes("viennoiser") ? sum + (item.quantity || 0) : sum;
-  }, 0);
-
-  const patisseriesCount = items.reduce((sum, item) => {
-    const p = productMap.get(item.productId);
-    const category = categoryText(p?.category);
-    const isPatisserie = p?.productionType === "patisserie" || category.includes("patisser");
-    return isPatisserie ? sum + (item.quantity || 0) : sum;
-  }, 0);
-
-  const bakedGoodsExempt = viennoiseriesCount + patisseriesCount >= 6;
-
-  return items.reduce((sum, item) => {
-    if ((item.productId || 0) <= 0) {
-      const customItemTaxable = item.taxable !== undefined ? !!item.taxable : true;
-      if (!customItemTaxable) return sum;
-      return sum + (item.amount || 0) * TAX_RATE;
-    }
-
-    const p = productMap.get(item.productId);
-    const category = categoryText(p?.category);
-    const isViennoiserie = category.includes("viennoiser");
-    const isPatisserie = p?.productionType === "patisserie" || category.includes("patisser");
-    const isBakedGood = isViennoiserie || isPatisserie;
-
-    const hasTaxes = p?.hasTaxes !== undefined ? !!p.hasTaxes : true;
-    const itemIsTaxable = isBakedGood ? hasTaxes && !bakedGoodsExempt : hasTaxes;
-
-    if (!itemIsTaxable) return sum;
-    return sum + (item.amount || 0) * TAX_RATE;
-  }, 0);
-}
+// Calcul des taxes : source unique partagée avec les commandes pro et les
+// soumissions (voir utils/tax.ts).
+import { computeTaxAmount } from "../utils/tax.js";
 
 /**
  * Create a new order

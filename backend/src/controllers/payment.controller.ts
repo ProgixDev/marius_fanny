@@ -8,6 +8,7 @@ import { randomUUID, createHash } from "crypto";
 import { SquareError } from "square";
 import squareClient, { squareConfig } from "../config/square.js";
 import Order from "../models/Order.js";
+import { User } from "../models/User.js";
 import { sendSms } from "../utils/smsService.js";
 import { sendInvoiceOrderConfirmation } from "../utils/mail.js";
 import { sendOrderReceipt } from "../utils/emailService.js";
@@ -1427,14 +1428,37 @@ export const resendFacture = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: "Commande non trouvee" });
     }
     const isGov = order.billingKind === "gouvernement";
-    const dest = (
+    let dest = (
       isGov ? order.billingEmail || "" : order.clientInfo?.email || ""
     ).trim();
+
+    // Commande gouvernementale sans courriel de facturation : plutôt que
+    // d'échouer, on reprend celui enregistré dans la fiche client. Le cas
+    // typique est une commande créée AVANT que le 2e courriel soit ajouté à la
+    // fiche — la facture partait alors dans le vide.
+    if (isGov && !dest) {
+      const clientEmail = (order.clientInfo?.email || "").trim().toLowerCase();
+      if (clientEmail) {
+        const client = await User.findOne({ email: clientEmail })
+          .select("billing")
+          .lean();
+        const saved = ((client as any)?.billing?.invoiceEmail || "")
+          .trim()
+          .toLowerCase();
+        if (saved) {
+          dest = saved;
+          // On le fige sur la commande pour les prochains envois.
+          order.billingEmail = saved;
+          await order.save().catch(() => {});
+        }
+      }
+    }
+
     if (!dest) {
       return res.status(400).json({
         success: false,
         error: isGov
-          ? "Aucun courriel de facturation (ville) n'est défini sur cette commande."
+          ? "Aucun courriel de facturation (ville) n'est défini, ni sur cette commande ni dans la fiche du client. Ajoutez-le dans la fiche client (Type de paiement → Gouvernemental) ou directement sur la commande."
           : "Aucun courriel client sur cette commande.",
       });
     }

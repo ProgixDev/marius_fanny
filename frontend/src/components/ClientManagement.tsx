@@ -678,20 +678,28 @@ function ClientManagement() {
                   className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#C5A065]/50 outline-none text-sm"
                   placeholder="Ex: Ville de la Vallée, Commission scolaire de Laval"
                 />
-                <label className="text-sm font-medium text-gray-700">
-                  Courriel de facturation (ville)
-                </label>
-                <input
-                  type="email"
-                  value={formData.billingInvoiceEmail}
-                  onChange={(e) =>
-                    handleInputChange("billingInvoiceEmail", e.target.value)
-                  }
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#C5A065]/50 outline-none text-sm"
-                  placeholder="comptes@ville.ca — reçoit la facture"
-                />
               </div>
             )}
+            {/* Toujours visible : le 2e courriel était auparavant caché tant
+                que le type n'était pas « Gouvernemental », si bien qu'on ne
+                pouvait pas l'ajouter à une fiche restée « Standard ». */}
+            <div className="mt-3 space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                2e courriel — reçoit la facture{" "}
+                <span className="font-normal text-gray-400 text-xs">
+                  (facultatif)
+                </span>
+              </label>
+              <input
+                type="email"
+                value={formData.billingInvoiceEmail}
+                onChange={(e) =>
+                  handleInputChange("billingInvoiceEmail", e.target.value)
+                }
+                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#C5A065]/50 outline-none text-sm"
+                placeholder="comptes@ville.ca — reçoit la facture"
+              />
+            </div>
             <p className="text-xs text-gray-500">
               Représentant et Gouvernemental peuvent commander sans paiement immédiat.
             </p>
@@ -836,20 +844,28 @@ function ClientManagement() {
                   className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#C5A065]/50 outline-none text-sm"
                   placeholder="Ex: Ville de la Vallée, Commission scolaire de Laval"
                 />
-                <label className="text-sm font-medium text-gray-700">
-                  Courriel de facturation (ville)
-                </label>
-                <input
-                  type="email"
-                  value={formData.billingInvoiceEmail}
-                  onChange={(e) =>
-                    handleInputChange("billingInvoiceEmail", e.target.value)
-                  }
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#C5A065]/50 outline-none text-sm"
-                  placeholder="comptes@ville.ca — reçoit la facture"
-                />
               </div>
             )}
+            {/* Toujours visible : le 2e courriel était auparavant caché tant
+                que le type n'était pas « Gouvernemental », si bien qu'on ne
+                pouvait pas l'ajouter à une fiche restée « Standard ». */}
+            <div className="mt-3 space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                2e courriel — reçoit la facture{" "}
+                <span className="font-normal text-gray-400 text-xs">
+                  (facultatif)
+                </span>
+              </label>
+              <input
+                type="email"
+                value={formData.billingInvoiceEmail}
+                onChange={(e) =>
+                  handleInputChange("billingInvoiceEmail", e.target.value)
+                }
+                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#C5A065]/50 outline-none text-sm"
+                placeholder="comptes@ville.ca — reçoit la facture"
+              />
+            </div>
           </div>
 
           <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">

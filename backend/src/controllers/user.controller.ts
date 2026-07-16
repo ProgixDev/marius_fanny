@@ -676,7 +676,11 @@ export async function searchClients(req: AuthRequest, res: Response) {
       ],
     })
       .limit(10)
-      .select("id email name profile.phoneNumber");
+      // `billing` est nécessaire : le formulaire de commande y lit le type de
+      // client, l'organisation et le 2e courriel (facturation ville) pour les
+      // pré-remplir. Sans lui, une commande gouvernementale partait sans
+      // courriel de facturation et « Renvoyer la facture » échouait.
+      .select("id email name profile.phoneNumber billing");
 
     const clients = users.map((user) => {
       const numericId = user.id || parseInt(user._id.toString().slice(-8), 16);
@@ -686,6 +690,7 @@ export async function searchClients(req: AuthRequest, res: Response) {
         lastName: user.name.split(" ").slice(1).join(" "),
         email: user.email,
         phone: user.profile?.phoneNumber || "",
+        billing: (user as any).billing,
       };
     });
 

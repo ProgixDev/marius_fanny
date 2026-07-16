@@ -1,55 +1,14 @@
 import { Request, Response } from "express";
 import ProOrder from "../models/ProOrder.js";
-import { Product } from "../models/Product.js";
 import type { ApiResponse } from "../types.js";
 import type { CreateProOrderInput } from "../schemas/proOrder.schema.js";
 import type { AuthRequest } from "../middleware/auth.js";
 import { sendProOrderEmailToAdmin } from "../utils/mail.js";
+// Calcul des taxes : source unique partagée avec les commandes et les
+// soumissions (voir utils/tax.ts).
+import { computeTaxAmount } from "../utils/tax.js";
 
-const TAX_RATE = 0.14975;
 const PRO_DELIVERY_MINIMUM = 150;
-
-async function computeTaxAmount(items: { productId: number; quantity: number; amount: number }[]) {
-  const ids = Array.from(new Set(items.map((i) => i.productId).filter((id) => id > 0)));
-  const products = ids.length
-    ? await Product.find({ id: { $in: ids }, deletedAt: { $exists: false } }).select("id category productionType hasTaxes").lean()
-    : [];
-  const productMap = new Map<number, any>(products.map((p: any) => [p.id, p]));
-
-  const categoryText = (category: unknown) => {
-    if (Array.isArray(category)) return category.join(" ").toLowerCase();
-    return String(category || "").toLowerCase();
-  };
-
-  const viennoiseriesCount = items.reduce((sum, item) => {
-    const p = productMap.get(item.productId);
-    const category = categoryText(p?.category);
-    return category.includes("viennoiser") ? sum + (item.quantity || 0) : sum;
-  }, 0);
-
-  const patisseriesCount = items.reduce((sum, item) => {
-    const p = productMap.get(item.productId);
-    const category = categoryText(p?.category);
-    const isPatisserie = p?.productionType === "patisserie" || category.includes("patisser");
-    return isPatisserie ? sum + (item.quantity || 0) : sum;
-  }, 0);
-
-  const bakedGoodsExempt = viennoiseriesCount + patisseriesCount >= 6;
-
-  return items.reduce((sum, item) => {
-    const p = productMap.get(item.productId);
-    const category = categoryText(p?.category);
-    const isViennoiserie = category.includes("viennoiser");
-    const isPatisserie = p?.productionType === "patisserie" || category.includes("patisser");
-    const isBakedGood = isViennoiserie || isPatisserie;
-
-    const hasTaxes = p?.hasTaxes !== undefined ? !!p.hasTaxes : true;
-    const itemIsTaxable = isBakedGood ? hasTaxes && !bakedGoodsExempt : hasTaxes;
-
-    if (!itemIsTaxable) return sum;
-    return sum + (item.amount || 0) * TAX_RATE;
-  }, 0);
-}
 
 function formatYyyyMmDd(date: Date) {
   const yyyy = date.getFullYear();
