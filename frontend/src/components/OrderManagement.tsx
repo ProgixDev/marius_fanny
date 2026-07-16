@@ -1623,19 +1623,20 @@ export function OrderManagement() {
     ) {
       const isGov = order.billingKind === "gouvernement";
       const dest = isGov ? (order.billingEmail || "").trim() : order.client.email;
-      if (isGov && !dest) {
-        alert(
-          "Aucun courriel de facturation (ville) n'est défini sur cette commande. Ajoute-le dans la fiche client ou la commande.",
-        );
-        return;
-      }
-      if (!dest) {
+      // Commande gouvernementale sans courriel de facturation : on ne bloque
+      // PAS ici. Le serveur reprend celui enregistré dans la fiche client (et
+      // ne refuse que s'il n'y en a nulle part). Bloquer ici empêchait de
+      // renvoyer la facture d'une commande créée avant l'ajout du 2e courriel.
+      if (!isGov && !dest) {
         alert("Ce client n'a pas de courriel enregistré.");
         return;
       }
+      const destLabel = dest
+        ? `${dest}${isGov ? " (ville)" : ""}`
+        : "au courriel de facturation de la fiche client";
       if (
         !window.confirm(
-          `Renvoyer la facture de la commande ${formatOrderNumber(order.orderNumber)} à ${dest}${isGov ? " (ville)" : ""} ?`,
+          `Renvoyer la facture de la commande ${formatOrderNumber(order.orderNumber)} à ${destLabel} ?`,
         )
       ) {
         return;
