@@ -3683,6 +3683,20 @@ export function OrderManagement() {
                 takenByInitials: formData.takenByInitials?.trim() || undefined,
               };
 
+              // Moyen de paiement : envoyé UNIQUEMENT s'il a réellement été
+              // changé. La valeur initiale est DÉDUITE (le champ n'existe pas
+              // en base) et se trompe souvent — l'envoyer à chaque
+              // enregistrement toucherait au paiement de commandes modifiées
+              // pour une simple note.
+              const initialPaymentMethod =
+                selectedOrder.paymentMethod || "in_store";
+              if (
+                formData.paymentMethod &&
+                formData.paymentMethod !== initialPaymentMethod
+              ) {
+                payload.paymentMethod = formData.paymentMethod;
+              }
+
               if (formData.date) {
                 // Delivery time slot can be a range like "08:00 - 09:00";
                 // only the HH:MM prefix is valid inside an ISO datetime.

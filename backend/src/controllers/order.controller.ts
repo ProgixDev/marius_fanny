@@ -22,7 +22,10 @@ import {
 import { sendOrderReceipt } from "../utils/emailService.js";
 import { sendOrderBalanceEmail, sendInvoiceOrderConfirmation } from "../utils/mail.js";
 import { sendSms } from "../utils/smsService.js";
-import { cancelSquareInvoiceById } from "./payment.controller.js";
+import {
+  cancelSquareInvoiceById,
+  createInvoiceForExistingOrder,
+} from "./payment.controller.js";
 import {
   calculatePromoDiscount,
   isPromoCurrentlyValid,
@@ -2038,6 +2041,66 @@ export const updateOrder = async (
       });
     }
 
+    // ------------------------------------------------------------------
+    // Correction du moyen de paiement depuis « Modifier la commande ».
+    //
+    // Le moyen de paiement n'est pas un champ stocké : il se DÉDUIT des
+    // drapeaux de paiement et de la présence d'une facture Square. Le changer
+    // devait donc remettre ces drapeaux à l'endroit — sans quoi la commande
+    // restait « payée 🏠 » et aucun lien n'était envoyé.
+    // ------------------------------------------------------------------
+    const requestedPaymentMethod = (updateData as any).paymentMethod as
+      | "in_store"
+      | "payment_link"
+      | undefined;
+    let issuePaymentLinkAfterSave = false;
+
+    if (requestedPaymentMethod === "payment_link") {
+      // Garde-fou : on ne « dé-paie » JAMAIS un encaissement Square réel.
+      // Ce cas relève du remboursement, pas d'une correction de saisie.
+      if (order.squarePaymentId) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "Cette commande a été réellement payée via Square : passez par un remboursement plutôt que par un changement de moyen de paiement.",
+        });
+      }
+
+      // « Payé en magasin » avait été coché par erreur : la commande n'a
+      // jamais été encaissée, on la remet donc à « non payée ».
+      if (order.depositPaid || order.balancePaid || order.paymentStatus !== "unpaid") {
+        const oldStatus = order.paymentStatus;
+        order.depositPaid = false;
+        order.balancePaid = false;
+        order.depositPaidAt = undefined;
+        order.balancePaidAt = undefined;
+        order.amountPaid = 0;
+        order.paymentStatus = "unpaid";
+        changes.push({
+          changedAt: new Date(),
+          changedBy: userId,
+          field: "paymentStatus",
+          oldValue: oldStatus,
+          newValue: "unpaid",
+          changeType: "payment_updated",
+          notes:
+            "Moyen de paiement corrigé : « payé en magasin » retiré, envoi d'un lien de paiement",
+        });
+      }
+
+      // Pas encore de lien émis → on en crée un APRÈS l'enregistrement.
+      if (!order.squareInvoiceId) issuePaymentLinkAfterSave = true;
+    }
+
+    // NOTE — on ne traite VOLONTAIREMENT que le sens « → lien de paiement ».
+    // Le sens inverse (« → payé en magasin ») serait dangereux ici : le
+    // frontend ne reçoit pas de champ `paymentMethod` (il n'existe pas en
+    // base) et le déduit de `paymentType === "full"`, ce qui vaut "in_store"
+    // même pour une commande NON payée à régler par lien. Marquer payé sur
+    // cette base marquerait payée n'importe quelle commande simplement
+    // modifiée pour une note. Pour encaisser en boutique, le bouton
+    // « Marquer payé » reste la voie explicite.
+
     // Si cette mise à jour marque la commande PAYÉE (en magasin) alors qu'un
     // lien Square était encore OUVERT et NON payé, on annule ce lien pour éviter
     // un double paiement, et on retire sa référence → l'icône repasse en
@@ -2065,14 +2128,49 @@ export const updateOrder = async (
 
     console.log(`✅ Order ${order.orderNumber} updated with ${changes.length} changes`);
 
+    // Émission du lien de paiement APRÈS l'enregistrement : Square doit voir la
+    // commande à jour (montants, articles), et la facture y est créée puis
+    // envoyée au client par courriel ou SMS.
+    let paymentLinkWarning: string | undefined;
+    let responseOrder: any = order;
+    if (issuePaymentLinkAfterSave) {
+      try {
+        const { invoiceId } = await createInvoiceForExistingOrder(
+          order._id.toString(),
+          order.paymentLinkChannel === "sms" ? "sms" : "email",
+        );
+        console.log(
+          `✅ Lien de paiement émis pour ${order.orderNumber} (facture ${invoiceId})`,
+        );
+        // createInvoiceForExistingOrder pose squareInvoiceId sur la commande :
+        // on la relit pour que le frontend reçoive l'état à jour (icône lien).
+        const refreshed = await Order.findById(order._id);
+        if (refreshed) responseOrder = refreshed;
+      } catch (e: any) {
+        // La commande EST enregistrée et n'est plus marquée payée : on ne
+        // masque pas l'échec d'envoi, sinon personne ne saurait que le client
+        // n'a jamais reçu son lien.
+        paymentLinkWarning = `La commande est enregistrée et n'est plus marquée « payée », mais l'envoi du lien a échoué : ${e?.message}. Utilisez « Renvoyer le lien de paiement ».`;
+        console.error(
+          `⚠️ [MAJ COMMANDE] échec émission du lien pour ${order.orderNumber}:`,
+          e?.message,
+        );
+      }
+    }
+
     // NOTE: Balance email is no longer sent automatically here.
     // The admin explicitly chooses via the balance modal (email with link OR in-store).
     // This avoids duplicate emails and ensures the email has a proper payment link.
 
     res.json({
       success: true,
-      data: order,
-      message: "Commande mise à jour avec succès",
+      data: responseOrder,
+      message: paymentLinkWarning
+        ? paymentLinkWarning
+        : issuePaymentLinkAfterSave
+          ? "Commande mise à jour — lien de paiement envoyé au client."
+          : "Commande mise à jour avec succès",
+      ...(paymentLinkWarning ? { warning: paymentLinkWarning } : {}),
     });
   } catch (error: any) {
     console.error("Error updating order:", error);

@@ -136,6 +136,9 @@ export const updateOrderSchema = z.object({
   squarePaymentId: z.string().optional(),
   squareInvoiceId: z.string().optional(),
   paymentLinkChannel: z.enum(["email", "sms"]).optional(),
+  // Correction du moyen de paiement depuis « Modifier la commande » (ex.:
+  // « payé en magasin » coché par erreur → envoyer plutôt un lien).
+  paymentMethod: z.enum(["in_store", "payment_link"]).optional(),
   assignedDriver: z.object({
     id: z.string(),
     name: z.string(),
