@@ -480,7 +480,10 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
    
 
         {/* Liste des produits */}
-        <div ref={productsRef} className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 scroll-mt-24">
+        {/* 2 produits par ligne sur mobile (au lieu de 3) : à 3, chaque photo
+            faisait ~105 px de large sur un téléphone et le produit était
+            illisible. */}
+        <div ref={productsRef} className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 scroll-mt-24">
           {filteredProducts.map(product => {
             const prepBadge = product.preparationTimeHours ? getPreparationBadge(product.preparationTimeHours) : null;
             const hasDiscount = Number(product.discountPercentage) > 0;
@@ -494,13 +497,18 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
                 key={product.id}
                 onClick={() => handleProductClick(product)}
                 className="relative overflow-hidden rounded-2xl cursor-pointer shadow-md bg-stone-200"
-                style={{ aspectRatio: '3/4' }}
+                // Cadre CARRÉ : les photos produits sont toutes en 1000x1000.
+                // L'ancien cadre 3/4 (portrait) rognait ~25 % sur les côtés de
+                // chaque produit — d'où l'effet « très zoomé ».
+                style={{ aspectRatio: '1/1' }}
               >
                 <img
                   src={getImageUrl(product.image, '', 500)}
                   loading="lazy"
                   decoding="async"
-                  className="absolute inset-0 w-full h-full object-cover brightness-105 contrast-[1.03]"
+                  // object-contain : le produit est toujours visible en entier,
+                  // même si une photo n'est pas parfaitement carrée.
+                  className="absolute inset-0 w-full h-full object-contain brightness-105 contrast-[1.03]"
                   alt={product.name}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
@@ -562,12 +570,15 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
             </button>
 
             <div className="w-full md:w-1/2 shrink-0 flex flex-col">
-              <div className="relative flex-1 h-56 md:h-auto min-h-0">
+              {/* Plus de hauteur sur mobile (h-56 écrasait la photo carrée
+                  dans un cadre large) et object-contain pour voir le produit
+                  en entier plutôt qu'un gros plan recadré. */}
+              <div className="relative flex-1 h-72 sm:h-80 md:h-auto min-h-0 bg-stone-100">
                 <img
                   src={getImageUrl(modalMainImage || selectedProduct.image, '', 800)}
                   alt={selectedProduct.name}
                   decoding="async"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
                 
                 {/* Étiquette sur l'image de la modal */}
