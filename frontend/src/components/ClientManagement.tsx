@@ -40,9 +40,22 @@ function ClientManagement() {
   const fetchClients = async () => {
     try {
       setLoading(true);
-      const data = await clientAPI.getClients(1, 100);
-      console.log("Clients fetched successfully:", data);
-      setClients(data.clients || []);
+      // On charge TOUTES les pages, pas seulement la première. Avant, la liste
+      // s'arrêtait à 100 clients alors qu'il y en a davantage : les plus
+      // anciens (ex. Lyne Jean, Diane Giguère, et même Fanny) devenaient
+      // invisibles et « disparaissaient » à mesure que de nouveaux clients
+      // repoussaient les anciens au-delà de la 100e place. La recherche étant
+      // locale, elle ne les retrouvait pas non plus.
+      const pageSize = 200;
+      const first = await clientAPI.getClients(1, pageSize);
+      let all = first.clients || [];
+      const totalPages = first.pagination?.totalPages || 1;
+      for (let p = 2; p <= totalPages; p++) {
+        const next = await clientAPI.getClients(p, pageSize);
+        all = all.concat(next.clients || []);
+      }
+      console.log(`Clients fetched: ${all.length} (sur ${totalPages} page(s))`);
+      setClients(all);
       setError(null);
     } catch (err) {
       console.error("Failed to fetch clients - full error:", err);

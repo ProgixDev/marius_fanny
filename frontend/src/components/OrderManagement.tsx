@@ -387,8 +387,18 @@ export function OrderManagement() {
   const [clientsList, setClientsList] = useState<any[]>([]);
   const fetchClients = async () => {
     try {
-      const data = await clientAPI.getClients(1, 100);
-      setClientsList(data.clients);
+      // Charger TOUTES les pages : sinon le sélecteur de client à la prise de
+      // commande s'arrête aux 100 plus récents et les clients plus anciens
+      // sont introuvables (même cause que la liste « Clients »).
+      const pageSize = 200;
+      const first = await clientAPI.getClients(1, pageSize);
+      let all = first.clients || [];
+      const totalPages = first.pagination?.totalPages || 1;
+      for (let p = 2; p <= totalPages; p++) {
+        const next = await clientAPI.getClients(p, pageSize);
+        all = all.concat(next.clients || []);
+      }
+      setClientsList(all);
     } catch (err) {
       console.error("Failed to fetch clients:", err);
     }
