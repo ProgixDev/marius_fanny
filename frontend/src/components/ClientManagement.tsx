@@ -46,7 +46,10 @@ function ClientManagement() {
       // invisibles et « disparaissaient » à mesure que de nouveaux clients
       // repoussaient les anciens au-delà de la 100e place. La recherche étant
       // locale, elle ne les retrouvait pas non plus.
-      const pageSize = 200;
+      // Lot de 500 par requête : tout tient en un seul appel au rythme actuel.
+      // La boucle reste là par sécurité — s'il y a un jour plus de 500 clients,
+      // les pages suivantes sont chargées, donc AUCUN client n'est jamais coupé.
+      const pageSize = 500;
       const first = await clientAPI.getClients(1, pageSize);
       let all = first.clients || [];
       const totalPages = first.pagination?.totalPages || 1;

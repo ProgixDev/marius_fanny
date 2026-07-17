@@ -390,7 +390,9 @@ export function OrderManagement() {
       // Charger TOUTES les pages : sinon le sélecteur de client à la prise de
       // commande s'arrête aux 100 plus récents et les clients plus anciens
       // sont introuvables (même cause que la liste « Clients »).
-      const pageSize = 200;
+      // Lot de 500 par requête (voir ClientManagement) : la boucle garantit
+      // que tous les clients sont chargés même au-delà de 500.
+      const pageSize = 500;
       const first = await clientAPI.getClients(1, pageSize);
       let all = first.clients || [];
       const totalPages = first.pagination?.totalPages || 1;
