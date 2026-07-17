@@ -13,6 +13,7 @@ export interface CartItem {
   selectedOptions?: Record<string, string>;
   preparationTimeHours?: number;
   hasTaxes?: boolean;
+  taxMode?: "both" | "gst_only" | "none";
   category?: string;
   productionType?: string;
   availableDays?: number[];

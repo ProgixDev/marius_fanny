@@ -1634,18 +1634,26 @@ export function OrderManagement() {
       order.status === "cancelled"
     ) {
       const isGov = order.billingKind === "gouvernement";
-      const dest = isGov ? (order.billingEmail || "").trim() : order.client.email;
+      const clientEmail = (order.client.email || "").trim();
+      const cityEmail = (order.billingEmail || "").trim();
       // Commande gouvernementale sans courriel de facturation : on ne bloque
       // PAS ici. Le serveur reprend celui enregistré dans la fiche client (et
       // ne refuse que s'il n'y en a nulle part). Bloquer ici empêchait de
       // renvoyer la facture d'une commande créée avant l'ajout du 2e courriel.
-      if (!isGov && !dest) {
+      if (!isGov && !clientEmail) {
         alert("Ce client n'a pas de courriel enregistré.");
         return;
       }
-      const destLabel = dest
-        ? `${dest}${isGov ? " (ville)" : ""}`
-        : "au courriel de facturation de la fiche client";
+      // Gouvernemental : la facture part à la VILLE (comptes payables) ET à la
+      // cliente. Sinon : à la cliente seulement.
+      const destLabel = isGov
+        ? [
+            cityEmail ? `${cityEmail} (ville)` : "au courriel de facturation de la fiche client",
+            clientEmail ? `${clientEmail} (cliente)` : null,
+          ]
+            .filter(Boolean)
+            .join(" et ")
+        : clientEmail;
       if (
         !window.confirm(
           `Renvoyer la facture de la commande ${formatOrderNumber(order.orderNumber)} à ${destLabel} ?`,
@@ -1664,7 +1672,11 @@ export function OrderManagement() {
         if (!response.ok || !result.success) {
           throw new Error(result.error || "Échec de l'envoi de la facture");
         }
-        alert(`✅ Facture renvoyée à ${result.data?.email || dest}.`);
+        const failed: string[] = result.data?.failed || [];
+        alert(
+          `✅ Facture renvoyée à ${result.data?.email || clientEmail}.` +
+            (failed.length ? `\n⚠️ Échec vers : ${failed.join(", ")}` : ""),
+        );
       } catch (err) {
         alert(`Erreur lors de l'envoi de la facture : ${getErrorMessage(err)}`);
       }

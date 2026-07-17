@@ -62,6 +62,7 @@ type ProductFormState = {
   maxOrderQuantity: string;
   preparationTimeHours: string;
   hasTaxes: boolean;
+  taxMode: "both" | "gst_only" | "none";
   allergens: string;
   productionType: "patisserie" | "cuisinier" | "four";
   targetAudience: "clients" | "pro";
@@ -100,6 +101,7 @@ const createDefaultProductForm = (category: string[] = []): ProductFormState => 
   maxOrderQuantity: "10",
   preparationTimeHours: "",
   hasTaxes: true,
+  taxMode: "both",
   allergens: "",
   productionType: "patisserie",
   targetAudience: "clients",
@@ -359,6 +361,9 @@ export function ProductManagement() {
       maxOrderQuantity: product.maxOrderQuantity.toString(),
       preparationTimeHours: product.preparationTimeHours?.toString() || "",
       hasTaxes: product.hasTaxes ?? true,
+      taxMode:
+        ((product as any).taxMode as "both" | "gst_only" | "none") ||
+        (product.hasTaxes === false ? "none" : "both"),
       allergens: product.allergens || "",
       productionType: product.productionType,
       targetAudience: product.targetAudience,
@@ -406,7 +411,8 @@ export function ProductManagement() {
         preparationTimeHours: productForm.preparationTimeHours
           ? parseInt(productForm.preparationTimeHours)
           : undefined,
-        hasTaxes: productForm.hasTaxes,
+        taxMode: productForm.taxMode,
+        hasTaxes: productForm.taxMode !== "none",
         allergens: productForm.allergens || undefined,
         productionType: productForm.productionType,
         targetAudience: productForm.targetAudience,
@@ -449,7 +455,8 @@ export function ProductManagement() {
           productForm.preparationTimeHours === ""
             ? null
             : parseInt(productForm.preparationTimeHours),
-        hasTaxes: productForm.hasTaxes,
+        taxMode: productForm.taxMode,
+        hasTaxes: productForm.taxMode !== "none",
         allergens: productForm.allergens || undefined,
         productionType: productForm.productionType,
         targetAudience: productForm.targetAudience,
@@ -1193,22 +1200,24 @@ export function ProductManagement() {
             <div className="space-y-4 md:col-span-2 pt-4 border-t border-gray-100">
               <h4 className="font-semibold text-gray-900">Options supplémentaires</h4>
 
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="create-has-taxes"
-                  checked={productForm.hasTaxes}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Taxes
+                </label>
+                <select
+                  value={productForm.taxMode}
                   onChange={(e) =>
                     setProductForm({
                       ...productForm,
-                      hasTaxes: e.target.checked,
+                      taxMode: e.target.value as "both" | "gst_only" | "none",
                     })
                   }
-                  className="w-5 h-5 text-[#337957] border-gray-300 rounded focus:ring-[#337957]"
-                />
-                <label htmlFor="create-has-taxes" className="text-sm font-medium text-gray-700 cursor-pointer">
-                  Appliquer les taxes
-                </label>
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#337957]/50 outline-none"
+                >
+                  <option value="both">TPS + TVQ (14,975 %)</option>
+                  <option value="gst_only">TPS seulement (5 %)</option>
+                  <option value="none">Aucune taxe</option>
+                </select>
               </div>
 
               <div className="space-y-2">
@@ -1745,22 +1754,24 @@ export function ProductManagement() {
             <div className="space-y-4 md:col-span-2 pt-4 border-t border-gray-100">
               <h4 className="font-semibold text-gray-900">Options supplémentaires</h4>
 
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="edit-has-taxes"
-                  checked={productForm.hasTaxes}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Taxes
+                </label>
+                <select
+                  value={productForm.taxMode}
                   onChange={(e) =>
                     setProductForm({
                       ...productForm,
-                      hasTaxes: e.target.checked,
+                      taxMode: e.target.value as "both" | "gst_only" | "none",
                     })
                   }
-                  className="w-5 h-5 text-[#337957] border-gray-300 rounded focus:ring-[#337957]"
-                />
-                <label htmlFor="edit-has-taxes" className="text-sm font-medium text-gray-700 cursor-pointer">
-                  Appliquer les taxes
-                </label>
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#337957]/50 outline-none"
+                >
+                  <option value="both">TPS + TVQ (14,975 %)</option>
+                  <option value="gst_only">TPS seulement (5 %)</option>
+                  <option value="none">Aucune taxe</option>
+                </select>
               </div>
 
               <div className="space-y-2">
@@ -2145,7 +2156,16 @@ export function ProductManagement() {
                   Taxes
                 </label>
                 <p className="text-base text-[#2D2A26] mt-1">
-                  {selectedProduct.hasTaxes ? "Taxes applicables" : "Sans taxes"}
+                  {(() => {
+                    const m =
+                      (selectedProduct as any).taxMode ||
+                      (selectedProduct.hasTaxes === false ? "none" : "both");
+                    return m === "both"
+                      ? "TPS + TVQ (14,975 %)"
+                      : m === "gst_only"
+                        ? "TPS seulement (5 %)"
+                        : "Aucune taxe";
+                  })()}
                 </p>
               </div>
               <div>

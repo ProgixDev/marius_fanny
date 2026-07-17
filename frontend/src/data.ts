@@ -1,7 +1,29 @@
 import type { Staff, Client, Product } from "./types";
 
-// Constants
-export const TAX_RATE = 0.14975; // QC tax rate (TPS + TVQ)
+// Constants — taxes du Québec, calculées séparément (certains produits n'ont
+// que la TPS depuis la loi retirant la TVQ sur les pâtisseries/viennoiseries).
+export const TPS_RATE = 0.05; // Taxe fédérale (TPS)
+export const TVQ_RATE = 0.09975; // Taxe provinciale (TVQ)
+export const TAX_RATE = TPS_RATE + TVQ_RATE; // 0.14975 (combiné, pour l'affichage)
+
+/**
+ * Mode de taxe d'un produit, déduit de `taxMode` (both/gst_only/none) avec repli
+ * sur l'ancien booléen `hasTaxes`. Renvoie les taux TPS/TVQ à appliquer.
+ */
+export function itemTaxRates(item: { taxMode?: string; hasTaxes?: boolean }): {
+  tps: number;
+  tvq: number;
+} {
+  const mode =
+    item.taxMode === "both" || item.taxMode === "gst_only" || item.taxMode === "none"
+      ? item.taxMode
+      : item.hasTaxes === false
+        ? "none"
+        : "both";
+  if (mode === "both") return { tps: TPS_RATE, tvq: TVQ_RATE };
+  if (mode === "gst_only") return { tps: TPS_RATE, tvq: 0 };
+  return { tps: 0, tvq: 0 };
+}
 
 // ✅ CORRECTION: Staff IDs sont des numbers selon types.d.ts
 export const MOCK_STAFF: Staff[] = [

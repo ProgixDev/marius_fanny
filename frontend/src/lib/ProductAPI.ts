@@ -20,6 +20,7 @@ export interface CreateProductData {
   preparationTimeHours?: number;
   availableDays?: number[];
   hasTaxes?: boolean;
+  taxMode?: "both" | "gst_only" | "none";
   allergens?: string;
   productionType: "patisserie" | "cuisinier" | "four";
   targetAudience: "clients" | "pro";
@@ -45,6 +46,7 @@ export interface UpdateProductData {
   preparationTimeHours?: number | null;
   availableDays?: number[];
   hasTaxes?: boolean;
+  taxMode?: "both" | "gst_only" | "none";
   allergens?: string;
   productionType?: "patisserie" | "cuisinier" | "four";
   targetAudience?: "clients" | "pro";

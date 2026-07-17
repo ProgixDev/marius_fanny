@@ -104,6 +104,8 @@ export async function sendOrderReceipt(
     items: Array<{ productName: string; quantity: number; amount: number }>;
     subtotal: number;
     taxAmount: number;
+    tpsAmount?: number;
+    tvqAmount?: number;
     deliveryFee: number;
     total: number;
     depositAmount?: number;
@@ -140,6 +142,7 @@ export async function sendOrderReceipt(
           orderData.deliveryType,
           orderData.clientNote,
           orderData.orderId,
+          { tps: orderData.tpsAmount, tvq: orderData.tvqAmount },
         );
         console.log(
           `✅ [ORDER RECEIPT] Full payment receipt sent to ${orderData.email}`,
@@ -171,6 +174,7 @@ export async function sendOrderReceipt(
           orderData.deliveryType,
           orderData.clientNote,
           orderData.orderId,
+          { tps: orderData.tpsAmount, tvq: orderData.tvqAmount },
         );
         console.log(
           `✅ [ORDER RECEIPT] Deposit receipt sent to ${orderData.email}`,
@@ -194,6 +198,10 @@ export async function sendOrderReceipt(
           orderData.deliveryType,
           orderData.clientNote,
           orderData.orderId,
+          false, // asFacture
+          false, // hideBreakdown
+          undefined, // organization
+          { tps: orderData.tpsAmount, tvq: orderData.tvqAmount },
         );
         console.log(
           `✅ [ORDER RECEIPT] Invoice order confirmation sent to ${orderData.email}`,

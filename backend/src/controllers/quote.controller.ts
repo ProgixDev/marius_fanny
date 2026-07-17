@@ -5,7 +5,7 @@ import Order from "../models/Order.js";
 import { sendQuoteEmail } from "../utils/mail.js";
 import { AuthRequest } from "../middleware/auth.js";
 import { createInvoiceForExistingOrder } from "./payment.controller.js";
-import { computeTaxAmount } from "../utils/tax.js";
+import { computeTaxBreakdown } from "../utils/tax.js";
 
 /**
  * Compute totals from items (server-side to avoid tampering).
@@ -21,7 +21,7 @@ async function computeTotals(items: any[], deliveryFee = 0) {
   for (const item of items) {
     subtotal += (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0);
   }
-  const taxAmount = await computeTaxAmount(
+  const tax = await computeTaxBreakdown(
     items.map((item: any) => ({
       productId: Number(item.productId) || 0,
       quantity: Number(item.quantity) || 0,
@@ -29,10 +29,12 @@ async function computeTotals(items: any[], deliveryFee = 0) {
       taxable: item.taxable,
     })),
   );
-  const total = subtotal + taxAmount + (Number(deliveryFee) || 0);
+  const total = subtotal + tax.total + (Number(deliveryFee) || 0);
   return {
     subtotal: Math.round(subtotal * 100) / 100,
-    taxAmount: Math.round(taxAmount * 100) / 100,
+    taxAmount: tax.total,
+    tpsAmount: tax.tps,
+    tvqAmount: tax.tvq,
     total: Math.round(total * 100) / 100,
   };
 }
@@ -123,6 +125,8 @@ export async function createQuote(req: AuthRequest, res: Response) {
       items: normalizedItems,
       subtotal: totals.subtotal,
       taxAmount: totals.taxAmount,
+      tpsAmount: totals.tpsAmount,
+      tvqAmount: totals.tvqAmount,
       deliveryFee: Number(deliveryFee) || 0,
       total: totals.total,
       deliveryType,
@@ -156,6 +160,8 @@ export async function createQuote(req: AuthRequest, res: Response) {
         })),
         subtotal: totals.subtotal,
         taxAmount: totals.taxAmount,
+        tpsAmount: totals.tpsAmount,
+        tvqAmount: totals.tvqAmount,
         deliveryFee: Number(deliveryFee) || 0,
         total: totals.total,
         expiresAt,
@@ -297,6 +303,8 @@ export async function updateQuote(req: AuthRequest, res: Response) {
     const totals = await computeTotals(quote.items, quote.deliveryFee);
     quote.subtotal = totals.subtotal;
     quote.taxAmount = totals.taxAmount;
+    quote.tpsAmount = totals.tpsAmount;
+    quote.tvqAmount = totals.tvqAmount;
     quote.total = totals.total;
 
     await quote.save();
@@ -392,6 +400,8 @@ export async function acceptQuote(req: Request, res: Response) {
       })),
       subtotal: quote.subtotal,
       taxAmount: quote.taxAmount,
+      tpsAmount: (quote as any).tpsAmount,
+      tvqAmount: (quote as any).tvqAmount,
       deliveryFee: quote.deliveryFee,
       total: quote.total,
       depositAmount: quote.total,

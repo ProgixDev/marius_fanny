@@ -49,6 +49,7 @@ interface CartItem {
   selectedOptions?: Record<string, string>;
   availableDays?: number[];
   hasTaxes?: boolean;
+  taxMode?: "both" | "gst_only" | "none";
   category?: string;
   productionType?: string;
   preparationTimeHours?: number;

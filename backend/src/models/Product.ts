@@ -20,6 +20,9 @@ export interface IProduct {
   preparationTimeHours?: number;
   availableDays?: number[];
   hasTaxes?: boolean;
+  // Mode de taxe : "both" (TPS+TVQ) | "gst_only" (TPS seule) | "none" (aucune).
+  // Remplace l'ancienne case oui/non `hasTaxes` (conservée en miroir).
+  taxMode?: "both" | "gst_only" | "none";
   allergens?: string;
   productionType: "patisserie" | "cuisinier" | "four";
   targetAudience: "clients" | "pro";
@@ -69,6 +72,11 @@ const productSchema = new Schema<IProduct>({
   preparationTimeHours: { type: Number },
   availableDays: [{ type: Number, min: 0, max: 6 }],
   hasTaxes: { type: Boolean, default: true },
+  taxMode: {
+    type: String,
+    enum: ["both", "gst_only", "none"],
+    default: "both",
+  },
   allergens: { type: String },
   productionType: { type: String, enum: ['patisserie', 'cuisinier', 'four'], required: true },
   targetAudience: { type: String, enum: ['clients', 'pro'], required: true },

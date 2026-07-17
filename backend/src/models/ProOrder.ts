@@ -41,6 +41,8 @@ export interface IProOrder extends Document {
   items: IProOrderItem[];
   subtotal: number;
   taxAmount: number;
+  tpsAmount?: number;
+  tvqAmount?: number;
   deliveryFee: number;
   total: number;
   notes?: string;
@@ -110,6 +112,8 @@ const ProOrderSchema = new Schema<IProOrder>(
     items: { type: [ProOrderItemSchema], required: true },
     subtotal: { type: Number, required: true, min: 0 },
     taxAmount: { type: Number, required: true, min: 0 },
+    tpsAmount: { type: Number, default: 0, min: 0 },
+    tvqAmount: { type: Number, default: 0, min: 0 },
     deliveryFee: { type: Number, required: true, min: 0 },
     total: { type: Number, required: true, min: 0 },
     notes: { type: String, trim: true },

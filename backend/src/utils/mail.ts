@@ -4,6 +4,36 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+// Taux de taxe du Québec, pour l'affichage des factures/reçus.
+const TPS_RATE = 0.05;
+const TVQ_RATE = 0.09975;
+const COMBINED_RATE = TPS_RATE + TVQ_RATE; // 0.14975
+
+/**
+ * Renvoie les montants TPS et TVQ à afficher.
+ * - Si un découpage réel est fourni (breakdown.tps/tvq stockés sur la commande),
+ *   on l'utilise tel quel — indispensable depuis que certains produits n'ont que
+ *   la TPS (sinon on surestime la TVQ).
+ * - Sinon (anciennes commandes sans découpage), on retombe sur l'ancien calcul
+ *   par proportion du montant total.
+ */
+function taxParts(
+  taxAmount: number,
+  breakdown?: { tps?: number | null; tvq?: number | null } | null,
+): { tps: number; tvq: number } {
+  const hasReal =
+    breakdown &&
+    (typeof breakdown.tps === "number" || typeof breakdown.tvq === "number") &&
+    ((breakdown.tps || 0) + (breakdown.tvq || 0)) > 0;
+  if (hasReal) {
+    return { tps: breakdown!.tps || 0, tvq: breakdown!.tvq || 0 };
+  }
+  return {
+    tps: taxAmount * (TPS_RATE / COMBINED_RATE),
+    tvq: taxAmount * (TVQ_RATE / COMBINED_RATE),
+  };
+}
+
 // Resend client — only used when RESEND_FROM_EMAIL is also set (Resend requires a verified domain)
 const resend =
   process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL
@@ -775,8 +805,10 @@ export async function sendFullPaymentReceipt(
   deliveryType?: "pickup" | "delivery",
   clientNote?: string,
   orderId?: string,
+  taxBreakdown?: { tps?: number; tvq?: number },
 ): Promise<void> {
   try {
+    const { tps: tpsAmount, tvq: tvqAmount } = taxParts(taxAmount, taxBreakdown);
     const itemsHtml = items
       .map(
         (item) => `
@@ -870,11 +902,11 @@ export async function sendFullPaymentReceipt(
               </p>
               <p style="color: #555; margin: 5px 0;">
                 <span style="display: inline-block; width: 150px;">TPS (5 %):</span>
-                <strong>${(taxAmount * (0.05 / 0.14975)).toFixed(2)}$</strong>
+                <strong>${tpsAmount.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
                 <span style="display: inline-block; width: 150px;">TVQ (9,975 %):</span>
-                <strong>${(taxAmount * (0.09975 / 0.14975)).toFixed(2)}$</strong>
+                <strong>${tvqAmount.toFixed(2)}$</strong>
               </p>
               <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;">
                 <span style="display: inline-block; width: 150px;">&nbsp;</span>
@@ -953,8 +985,10 @@ export async function sendDepositReceipt(
   deliveryType?: "pickup" | "delivery",
   clientNote?: string,
   orderId?: string,
+  taxBreakdown?: { tps?: number; tvq?: number },
 ): Promise<void> {
   try {
+    const { tps: tpsAmount, tvq: tvqAmount } = taxParts(taxAmount, taxBreakdown);
     const itemsHtml = items
       .map(
         (item) => `
@@ -1058,11 +1092,11 @@ export async function sendDepositReceipt(
               </p>
               <p style="color: #555; margin: 5px 0;">
                 <span style="display: inline-block; width: 180px;">TPS (5 %):</span>
-                <strong>${(taxAmount * (0.05 / 0.14975)).toFixed(2)}$</strong>
+                <strong>${tpsAmount.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
                 <span style="display: inline-block; width: 180px;">TVQ (9,975 %):</span>
-                <strong>${(taxAmount * (0.09975 / 0.14975)).toFixed(2)}$</strong>
+                <strong>${tvqAmount.toFixed(2)}$</strong>
               </p>
               <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;">
                 <span style="display: inline-block; width: 180px;">&nbsp;</span>
@@ -1150,8 +1184,10 @@ export async function sendInvoiceOrderConfirmation(
   asFacture: boolean = false,
   hideBreakdown: boolean = false,
   organization?: string,
+  taxBreakdown?: { tps?: number; tvq?: number },
 ): Promise<void> {
   try {
+    const { tps: tpsAmount, tvq: tvqAmount } = taxParts(taxAmount, taxBreakdown);
     const itemsHtml = items
       .map(
         (item) => `
@@ -1210,11 +1246,11 @@ export async function sendInvoiceOrderConfirmation(
               </p>
               <p style="color: #555; margin: 5px 0;">
                 <span style="display: inline-block; width: 150px;">TPS (5 %):</span>
-                <strong>${(taxAmount * (0.05 / 0.14975)).toFixed(2)}$</strong>
+                <strong>${tpsAmount.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
                 <span style="display: inline-block; width: 150px;">TVQ (9,975 %):</span>
-                <strong>${(taxAmount * (0.09975 / 0.14975)).toFixed(2)}$</strong>
+                <strong>${tvqAmount.toFixed(2)}$</strong>
               </p>
               <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;">
                 <span style="display: inline-block; width: 150px;">&nbsp;</span>
@@ -1739,6 +1775,8 @@ export async function sendQuoteEmail(data: {
   items: Array<{ productName: string; quantity: number; unitPrice: number; amount: number }>;
   subtotal: number;
   taxAmount: number;
+  tpsAmount?: number;
+  tvqAmount?: number;
   deliveryFee: number;
   total: number;
   expiresAt: Date;
@@ -1810,8 +1848,8 @@ export async function sendQuoteEmail(data: {
 
           <div style="text-align: right; margin-top: 20px;">
             <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">Sous-total:</span> <strong>${data.subtotal.toFixed(2)}$</strong></p>
-            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">TPS (5 %):</span> <strong>${(data.taxAmount * (0.05 / 0.14975)).toFixed(2)}$</strong></p>
-            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">TVQ (9,975 %):</span> <strong>${(data.taxAmount * (0.09975 / 0.14975)).toFixed(2)}$</strong></p>
+            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">TPS (5 %):</span> <strong>${taxParts(data.taxAmount, { tps: data.tpsAmount, tvq: data.tvqAmount }).tps.toFixed(2)}$</strong></p>
+            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">TVQ (9,975 %):</span> <strong>${taxParts(data.taxAmount, { tps: data.tpsAmount, tvq: data.tvqAmount }).tvq.toFixed(2)}$</strong></p>
             <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;"><span style="display:inline-block;width:150px;">&nbsp;</span>TPS: 144652641RT001 &nbsp; TVQ: 1201862732TQ0001</p>
             ${data.deliveryFee > 0 ? `<p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">Livraison:</span> <strong>${data.deliveryFee.toFixed(2)}$</strong></p>` : ""}
             <p style="color: #C5A065; font-size: 20px; margin: 15px 0 0 0; padding-top: 10px; border-top: 2px solid #C5A065;">

@@ -37,6 +37,7 @@ export interface Product {
   preparationTimeHours?: number; // Hours required to prepare the product
   availableDays?: number[]; // 0-6 (Sunday-Saturday)
   hasTaxes?: boolean;
+  taxMode?: "both" | "gst_only" | "none";
   allergens?: string;
   productionType: "patisserie" | "cuisinier" | "four";
   targetAudience: "clients" | "pro";

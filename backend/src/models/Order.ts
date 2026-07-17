@@ -56,6 +56,8 @@ export interface IOrder extends Document {
   promoDiscountAmount?: number;
   promoAppliesToProductIds?: number[];
   taxAmount: number;
+  tpsAmount?: number; // TPS (5 %) — part fédérale, stockée séparément
+  tvqAmount?: number; // TVQ (9,975 %) — part provinciale, stockée séparément
   deliveryFee: number;
   total: number;
   depositAmount: number;
@@ -330,6 +332,8 @@ const OrderSchema = new Schema<IOrder>(
       required: true,
       min: 0,
     },
+    tpsAmount: { type: Number, default: 0, min: 0 },
+    tvqAmount: { type: Number, default: 0, min: 0 },
     deliveryFee: {
       type: Number,
       required: true,

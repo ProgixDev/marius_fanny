@@ -674,17 +674,37 @@ export const createInvoice = async (req: Request, res: Response) => {
       },
     }));
 
-    // Add tax as a line item (instead of using Square's tax system which applies to all items)
+    // Taxes en DEUX lignes distinctes (TPS / TVQ). On lit le découpage réel
+    // stocké sur la commande ; à défaut, on répartit le total par proportion.
     if (taxAmount > 0) {
-      lineItems.push({
-        name: "TPS + TVQ",
-        quantity: "1",
-        itemType: "ITEM",
-        basePriceMoney: {
-          amount: BigInt(Math.round(taxAmount * 100)),
-          currency: "CAD",
-        },
-      });
+      const invOrder = await Order.findById(orderId)
+        .select("tpsAmount tvqAmount")
+        .lean()
+        .catch(() => null);
+      const tvq =
+        (invOrder as any)?.tvqAmount != null
+          ? (invOrder as any).tvqAmount
+          : taxAmount * (0.09975 / 0.14975);
+      const tps =
+        (invOrder as any)?.tpsAmount != null
+          ? (invOrder as any).tpsAmount
+          : taxAmount - tvq;
+      if (tps > 0) {
+        lineItems.push({
+          name: "TPS (5 %)",
+          quantity: "1",
+          itemType: "ITEM",
+          basePriceMoney: { amount: BigInt(Math.round(tps * 100)), currency: "CAD" },
+        });
+      }
+      if (tvq > 0) {
+        lineItems.push({
+          name: "TVQ (9,975 %)",
+          quantity: "1",
+          itemType: "ITEM",
+          basePriceMoney: { amount: BigInt(Math.round(tvq * 100)), currency: "CAD" },
+        });
+      }
     }
 
     // Add delivery fee as a line item if applicable
@@ -881,6 +901,15 @@ export const createInvoice = async (req: Request, res: Response) => {
             orderDeliveryType,
             balanceNote || orderClientNote,
             orderId,
+            false, // asFacture
+            false, // hideBreakdown
+            undefined, // organization
+            // Découpage réel TPS/TVQ pour une facture complète ; pour une
+            // facture de SOLDE, on laisse le calcul par proportion (le split
+            // du seul solde n'est pas stocké).
+            isBalanceInvoice
+              ? undefined
+              : { tps: (orderDoc as any)?.tpsAmount, tvq: (orderDoc as any)?.tvqAmount },
           );
           console.log(`✅ [INVOICE] Invoice published and branded email sent${isBalanceInvoice ? " (balance-only)" : ""}`);
         }
@@ -925,6 +954,10 @@ export const createInvoice = async (req: Request, res: Response) => {
                 orderDeliveryType2,
                 orderClientNote2,
                 orderId,
+                false, // asFacture
+                false, // hideBreakdown
+                undefined, // organization
+                { tps: (orderDoc2 as any)?.tpsAmount, tvq: (orderDoc2 as any)?.tvqAmount },
               );
               console.log(`✅ [INVOICE] Fallback email sent after SMS failure`);
             } catch (fallbackEmailError: any) {
@@ -1084,6 +1117,10 @@ export async function resendInvoiceLinkForOrder(order: any): Promise<{
     order.deliveryType,
     order.notes,
     String(order._id),
+    false, // asFacture
+    false, // hideBreakdown
+    undefined, // organization
+    { tps: (order as any).tpsAmount, tvq: (order as any).tvqAmount },
   );
   return { success: true, channel: "email", dest: email };
 }
@@ -1428,68 +1465,101 @@ export const resendFacture = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: "Commande non trouvee" });
     }
     const isGov = order.billingKind === "gouvernement";
-    let dest = (
-      isGov ? order.billingEmail || "" : order.clientInfo?.email || ""
-    ).trim();
+    const clientEmail = (order.clientInfo?.email || "").trim().toLowerCase();
+    let cityEmail = (order.billingEmail || "").trim().toLowerCase();
 
     // Commande gouvernementale sans courriel de facturation : plutôt que
     // d'échouer, on reprend celui enregistré dans la fiche client. Le cas
     // typique est une commande créée AVANT que le 2e courriel soit ajouté à la
     // fiche — la facture partait alors dans le vide.
-    if (isGov && !dest) {
-      const clientEmail = (order.clientInfo?.email || "").trim().toLowerCase();
-      if (clientEmail) {
-        const client = await User.findOne({ email: clientEmail })
-          .select("billing")
-          .lean();
-        const saved = ((client as any)?.billing?.invoiceEmail || "")
-          .trim()
-          .toLowerCase();
-        if (saved) {
-          dest = saved;
-          // On le fige sur la commande pour les prochains envois.
-          order.billingEmail = saved;
-          await order.save().catch(() => {});
-        }
+    if (isGov && !cityEmail && clientEmail) {
+      const client = await User.findOne({ email: clientEmail })
+        .select("billing")
+        .lean();
+      const saved = ((client as any)?.billing?.invoiceEmail || "")
+        .trim()
+        .toLowerCase();
+      if (saved) {
+        cityEmail = saved;
+        // On le fige sur la commande pour les prochains envois.
+        order.billingEmail = saved;
+        await order.save().catch(() => {});
       }
     }
 
-    if (!dest) {
+    // Destinataires de la facture :
+    // - Gouvernemental → la VILLE (comptes payables) ET la CLIENTE, les deux
+    //   (demande de Fanny). Doublons retirés.
+    // - Autre → la cliente seulement.
+    const recipients = isGov
+      ? Array.from(new Set([cityEmail, clientEmail].filter(Boolean)))
+      : [clientEmail].filter(Boolean);
+
+    if (recipients.length === 0) {
       return res.status(400).json({
         success: false,
         error: isGov
-          ? "Aucun courriel de facturation (ville) n'est défini, ni sur cette commande ni dans la fiche du client. Ajoutez-le dans la fiche client (Type de paiement → Gouvernemental) ou directement sur la commande."
+          ? "Aucun courriel disponible pour cette commande : ni courriel de facturation (ville), ni courriel de la cliente. Ajoutez-en un dans la fiche client ou sur la commande."
           : "Aucun courriel client sur cette commande.",
       });
     }
 
-    await sendInvoiceOrderConfirmation(
-      dest,
-      `${order.clientInfo.firstName} ${order.clientInfo.lastName}`.trim(),
-      order.orderNumber,
-      (order.items || []).map((it: any) => ({
-        productName: it.productName,
-        quantity: it.quantity,
-        amount: it.amount ?? (it.unitPrice || 0) * (it.quantity || 1),
-      })),
-      order.subtotal,
-      order.taxAmount,
-      order.deliveryFee,
-      order.total,
-      undefined,
-      order.orderDate,
-      order.pickupDate ||
-        (order.deliveryDate ? new Date(order.deliveryDate) : undefined),
-      order.deliveryTimeSlot || undefined,
-      order.deliveryType,
-      order.notes,
-      order._id.toString(),
-      true,  // asFacture
-      false, // hideBreakdown
-      order.billingOrganization || undefined, // organization on the facture
-    );
+    const items = (order.items || []).map((it: any) => ({
+      productName: it.productName,
+      quantity: it.quantity,
+      amount: it.amount ?? (it.unitPrice || 0) * (it.quantity || 1),
+    }));
 
-    res.json({ success: true, data: { email: dest } });
+    // Envoi à chaque destinataire. On n'échoue globalement que si AUCUN envoi
+    // ne passe ; les échecs partiels sont remontés dans la réponse.
+    const sent: string[] = [];
+    const failed: string[] = [];
+    for (const dest of recipients) {
+      try {
+        await sendInvoiceOrderConfirmation(
+          dest,
+          `${order.clientInfo.firstName} ${order.clientInfo.lastName}`.trim(),
+          order.orderNumber,
+          items,
+          order.subtotal,
+          order.taxAmount,
+          order.deliveryFee,
+          order.total,
+          undefined,
+          order.orderDate,
+          order.pickupDate ||
+            (order.deliveryDate ? new Date(order.deliveryDate) : undefined),
+          order.deliveryTimeSlot || undefined,
+          order.deliveryType,
+          order.notes,
+          order._id.toString(),
+          true,  // asFacture
+          false, // hideBreakdown
+          order.billingOrganization || undefined, // organization on the facture
+          { tps: (order as any).tpsAmount, tvq: (order as any).tvqAmount },
+        );
+        sent.push(dest);
+      } catch (e: any) {
+        console.error(`⚠️ [RESEND-FACTURE] échec vers ${dest}:`, e?.message || e);
+        failed.push(dest);
+      }
+    }
+
+    if (sent.length === 0) {
+      return res.status(500).json({
+        success: false,
+        error: `L'envoi de la facture a échoué (${failed.join(", ")}).`,
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        email: sent.join(", "),
+        sent,
+        failed,
+      },
+    });
   } catch (error: any) {
     console.error("❌ [RESEND-FACTURE] Error:", error);
     res.status(500).json({
@@ -2123,13 +2193,34 @@ export async function createInvoiceForExistingOrder(
       currency: "CAD",
     },
   }));
-  if (taxAmount > 0) {
-    lineItems.push({
-      name: "TPS + TVQ",
-      quantity: "1",
-      itemType: "ITEM",
-      basePriceMoney: { amount: BigInt(Math.round(taxAmount * 100)), currency: "CAD" },
-    });
+  // TPS et TVQ en DEUX lignes distinctes (certains produits n'ont que la TPS).
+  // On utilise le découpage réel stocké sur la commande ; à défaut (anciennes
+  // commandes), on répartit le total par proportion.
+  {
+    const tvq =
+      (order as any).tvqAmount != null
+        ? (order as any).tvqAmount
+        : taxAmount * (0.09975 / 0.14975);
+    const tps =
+      (order as any).tpsAmount != null
+        ? (order as any).tpsAmount
+        : taxAmount - tvq;
+    if (tps > 0) {
+      lineItems.push({
+        name: "TPS (5 %)",
+        quantity: "1",
+        itemType: "ITEM",
+        basePriceMoney: { amount: BigInt(Math.round(tps * 100)), currency: "CAD" },
+      });
+    }
+    if (tvq > 0) {
+      lineItems.push({
+        name: "TVQ (9,975 %)",
+        quantity: "1",
+        itemType: "ITEM",
+        basePriceMoney: { amount: BigInt(Math.round(tvq * 100)), currency: "CAD" },
+      });
+    }
   }
   if (deliveryFee > 0) {
     lineItems.push({
@@ -2226,6 +2317,10 @@ export async function createInvoiceForExistingOrder(
       order.deliveryType,
       order.notes,
       orderId,
+      false, // asFacture
+      false, // hideBreakdown
+      undefined, // organization
+      { tps: (order as any).tpsAmount, tvq: (order as any).tvqAmount },
     );
   }
 

@@ -20,7 +20,7 @@ import {
 import { authClient } from "../lib/AuthClient";
 import { getSessionUniversal } from "../utils/getSession";
 import { promoAPI } from "../lib/PromoAPI";
-import { TAX_RATE } from "../data";
+import { itemTaxRates } from "../data";
 import { getImageUrl } from "../utils/api";
 
 interface CartItem {
@@ -32,6 +32,7 @@ interface CartItem {
   cartItemKey?: string;
   selectedOptions?: Record<string, string>;
   hasTaxes?: boolean;
+  taxMode?: "both" | "gst_only" | "none";
   category?: string;
   productionType?: string;
   availableDays?: number[];
@@ -197,28 +198,29 @@ const CartDrawer: React.FC<CartProps> = ({
   const viennoiseriesAndPatisseriesCount = viennoiseriesCount + patisseriesCount;
   const bakedGoodsExempt = viennoiseriesAndPatisseriesCount >= 6;
 
-  const taxes = items.reduce((sum, item) => {
-    const category = categoryText(item);
-    const isViennoiserie = category.includes("viennoiser");
-    const isPatisserie =
-      item.productionType === "patisserie" ||
-      category.includes("patisser");
-    const isBakedGood = isViennoiserie || isPatisserie;
+  // TPS et TVQ calculées séparément (certains produits n'ont que la TPS).
+  const taxSplit = items.reduce(
+    (acc, item) => {
+      const category = categoryText(item);
+      const isViennoiserie = category.includes("viennoiser");
+      const isPatisserie =
+        item.productionType === "patisserie" || category.includes("patisser");
+      const isBakedGood = isViennoiserie || isPatisserie;
 
-    let itemIsTaxable: boolean;
-    if (isBakedGood) {
-      // Baked goods: taxable only if hasTaxes=true AND exemption threshold not reached
-      itemIsTaxable = !!item.hasTaxes && !bakedGoodsExempt;
-    } else {
-      // Other products: taxable based solely on hasTaxes flag
-      itemIsTaxable = !!item.hasTaxes;
-    }
+      // Règle des 6 : viennoiseries/pâtisseries exonérées à 6 unités et plus.
+      if (isBakedGood && bakedGoodsExempt) return acc;
 
-    if (itemIsTaxable) {
-      return sum + item.price * item.quantity * TAX_RATE;
-    }
-    return sum;
-  }, 0);
+      const rates = itemTaxRates(item);
+      const base = item.price * item.quantity;
+      acc.tps += base * rates.tps;
+      acc.tvq += base * rates.tvq;
+      return acc;
+    },
+    { tps: 0, tvq: 0 },
+  );
+  const tpsAmount = Math.round(taxSplit.tps * 100) / 100;
+  const tvqAmount = Math.round(taxSplit.tvq * 100) / 100;
+  const taxes = Math.round((tpsAmount + tvqAmount) * 100) / 100;
 
   const proDeliveryFee =
     deliveryType === "delivery" ? (proDistanceTier === "gt20" ? 30 : 15) : 0;
@@ -920,10 +922,16 @@ const CartDrawer: React.FC<CartProps> = ({
                   </div>
                 )}
 
-                {taxes > 0 && (
+                {tpsAmount > 0 && (
                   <div className="flex justify-between text-sm text-stone-500 font-light">
-                    <span>Taxes</span>
-                    <span>{taxes.toFixed(2)} $</span>
+                    <span>TPS (5 %)</span>
+                    <span>{tpsAmount.toFixed(2)} $</span>
+                  </div>
+                )}
+                {tvqAmount > 0 && (
+                  <div className="flex justify-between text-sm text-stone-500 font-light">
+                    <span>TVQ (9,975 %)</span>
+                    <span>{tvqAmount.toFixed(2)} $</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm text-stone-500 font-light">

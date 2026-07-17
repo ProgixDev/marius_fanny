@@ -83,6 +83,7 @@ export async function createProduct(req: AuthRequest, res: Response) {
       preparationTimeHours,
       availableDays,
       hasTaxes,
+      taxMode,
       allergens,
       customOptions,
       productionType,
@@ -93,6 +94,15 @@ export async function createProduct(req: AuthRequest, res: Response) {
     // Get the next ID
     const lastProduct = await Product.findOne().sort({ id: -1 });
     const nextId = lastProduct ? lastProduct.id + 1 : 1;
+
+    // taxMode est la source de vérité ; hasTaxes reste en miroir pour l'ancien
+    // code. Si seul hasTaxes est fourni (ancien client), on en déduit le mode.
+    const resolvedTaxMode: "both" | "gst_only" | "none" =
+      taxMode === "both" || taxMode === "gst_only" || taxMode === "none"
+        ? taxMode
+        : hasTaxes === false
+          ? "none"
+          : "both";
 
     const product = new Product({
       id: nextId,
@@ -108,7 +118,8 @@ export async function createProduct(req: AuthRequest, res: Response) {
       images,
       preparationTimeHours,
       availableDays,
-      hasTaxes,
+      taxMode: resolvedTaxMode,
+      hasTaxes: resolvedTaxMode !== "none",
       allergens,
       customOptions,
       productionType,
@@ -148,7 +159,7 @@ export async function updateProduct(req: AuthRequest, res: Response) {
     const allowedFields = [
       "name", "category", "price", "discountPercentage", "available",
       "minOrderQuantity", "maxOrderQuantity", "description", "image", "images",
-      "preparationTimeHours", "availableDays", "hasTaxes", "allergens",
+      "preparationTimeHours", "availableDays", "hasTaxes", "taxMode", "allergens",
       "productionType", "targetAudience", "customOptions", "recommendations",
       "displayOrder",
     ] as const;
@@ -157,6 +168,15 @@ export async function updateProduct(req: AuthRequest, res: Response) {
       if (Object.prototype.hasOwnProperty.call(updateData, field)) {
         (product as any)[field] = updateData[field];
       }
+    }
+    // taxMode et hasTaxes doivent rester cohérents, quel que soit celui envoyé.
+    if (Object.prototype.hasOwnProperty.call(updateData, "taxMode")) {
+      (product as any).hasTaxes = updateData.taxMode !== "none";
+    } else if (Object.prototype.hasOwnProperty.call(updateData, "hasTaxes")) {
+      // Ancien client n'envoyant que hasTaxes : ne pas écraser un gst_only
+      // existant quand on repasse à "taxé".
+      if (updateData.hasTaxes === false) (product as any).taxMode = "none";
+      else if ((product as any).taxMode === "none") (product as any).taxMode = "both";
     }
     // Mongoose's change tracking on documentArrays of nested objects sometimes
     // misses replacements (only the first element ends up persisted). Force

@@ -31,7 +31,7 @@ import {
 import { Checkbox } from "./ui/checkbox";
 import { productAPI } from "../lib/ProductAPI";
 import type { Client, Address, Product } from "../types";
-import { TAX_RATE } from "../data";
+import { TPS_RATE, TVQ_RATE, itemTaxRates } from "../data";
 import {
   calculateDeliveryFee,
   validateMinimumOrder,
@@ -325,27 +325,38 @@ export default function OrderForm({
     }, 0);
     const bakedGoodsExempt = bakedGoodsCount >= 6;
 
-    const taxableSubtotal = formData.items.reduce((sum, item) => {
-      if (item.isCustom) {
-        return sum + (item.taxable === false ? 0 : item.amount);
-      }
-      const product = products.find((p) => p.id === item.productId);
-      const hasTaxes = product?.hasTaxes !== undefined ? product.hasTaxes : true;
-      if (!hasTaxes) return sum;
+    // TPS et TVQ séparées (certains produits n'ont que la TPS).
+    const taxSplit = formData.items.reduce(
+      (acc, item) => {
+        if (item.isCustom) {
+          if (item.taxable !== false) {
+            acc.tps += item.amount * TPS_RATE;
+            acc.tvq += item.amount * TVQ_RATE;
+          }
+          return acc;
+        }
+        const product = products.find((p) => p.id === item.productId);
 
-      // Check if this is a baked good (viennoiserie or pâtisserie)
-      const cat = categoryText(product);
-      const isViennoiserie = cat.includes("viennoiser");
-      const isPatisserie =
-        (product as any)?.productionType === "patisserie" || cat.includes("patisser");
-      const isBakedGood = isViennoiserie || isPatisserie;
+        // Check if this is a baked good (viennoiserie or pâtisserie)
+        const cat = categoryText(product);
+        const isViennoiserie = cat.includes("viennoiser");
+        const isPatisserie =
+          (product as any)?.productionType === "patisserie" || cat.includes("patisser");
+        const isBakedGood = isViennoiserie || isPatisserie;
 
-      // Baked goods are tax-exempt when 6+ of them are ordered (any mix)
-      if (isBakedGood && bakedGoodsExempt) return sum;
+        // Baked goods are tax-exempt when 6+ of them are ordered (any mix)
+        if (isBakedGood && bakedGoodsExempt) return acc;
 
-      return sum + item.amount;
-    }, 0);
-    const taxAmount = taxableSubtotal * TAX_RATE;
+        const rates = itemTaxRates((product || {}) as any);
+        acc.tps += item.amount * rates.tps;
+        acc.tvq += item.amount * rates.tvq;
+        return acc;
+      },
+      { tps: 0, tvq: 0 },
+    );
+    const tpsAmount = Math.round(taxSplit.tps * 100) / 100;
+    const tvqAmount = Math.round(taxSplit.tvq * 100) / 100;
+    const taxAmount = Math.round((tpsAmount + tvqAmount) * 100) / 100;
     const total = subtotal + taxAmount + formData.deliveryFee;
     const depositAmount = total;
     const balance = total - depositAmount;

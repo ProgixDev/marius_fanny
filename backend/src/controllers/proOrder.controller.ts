@@ -6,7 +6,7 @@ import type { AuthRequest } from "../middleware/auth.js";
 import { sendProOrderEmailToAdmin } from "../utils/mail.js";
 // Calcul des taxes : source unique partagée avec les commandes et les
 // soumissions (voir utils/tax.ts).
-import { computeTaxAmount } from "../utils/tax.js";
+import { computeTaxBreakdown } from "../utils/tax.js";
 
 const PRO_DELIVERY_MINIMUM = 150;
 
@@ -102,9 +102,10 @@ export const createProOrder = async (
           : 15
         : 0;
 
-    const taxAmount = await computeTaxAmount(
+    const taxBreakdown = await computeTaxBreakdown(
       items.map((i) => ({ productId: i.productId, quantity: i.quantity, amount: i.amount })),
     );
+    const taxAmount = taxBreakdown.total;
 
     const total = subtotal + taxAmount + deliveryFee;
 
@@ -124,6 +125,8 @@ export const createProOrder = async (
       items,
       subtotal,
       taxAmount,
+      tpsAmount: taxBreakdown.tps,
+      tvqAmount: taxBreakdown.tvq,
       deliveryFee,
       total,
       notes: body.notes || undefined,

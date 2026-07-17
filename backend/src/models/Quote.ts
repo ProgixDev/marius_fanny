@@ -22,6 +22,8 @@ export interface IQuote extends Document {
   items: IQuoteItem[];
   subtotal: number;
   taxAmount: number;
+  tpsAmount?: number;
+  tvqAmount?: number;
   deliveryFee: number;
   total: number;
   deliveryType: "pickup" | "delivery";
@@ -78,6 +80,8 @@ const QuoteSchema = new Schema<IQuote>(
     items: { type: [QuoteItemSchema], default: [] },
     subtotal: { type: Number, required: true, min: 0, default: 0 },
     taxAmount: { type: Number, required: true, min: 0, default: 0 },
+    tpsAmount: { type: Number, default: 0, min: 0 },
+    tvqAmount: { type: Number, default: 0, min: 0 },
     deliveryFee: { type: Number, default: 0 },
     total: { type: Number, required: true, min: 0, default: 0 },
     deliveryType: {

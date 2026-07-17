@@ -34,7 +34,7 @@ import {
 
 // Calcul des taxes : source unique partagée avec les commandes pro et les
 // soumissions (voir utils/tax.ts).
-import { computeTaxAmount } from "../utils/tax.js";
+import { computeTaxBreakdown } from "../utils/tax.js";
 
 /**
  * Create a new order
@@ -351,7 +351,8 @@ export const createOrder = async (
       }
     }
 
-    const taxAmount = await computeTaxAmount(orderData.items as any);
+    const taxBreakdown = await computeTaxBreakdown(orderData.items as any);
+    const taxAmount = taxBreakdown.total;
     let deliveryFee = 0;
 
     // If delivery, calculate and validate delivery fee
@@ -610,6 +611,8 @@ export const createOrder = async (
       promoDiscountAmount,
       promoAppliesToProductIds,
       taxAmount,
+      tpsAmount: taxBreakdown.tps,
+      tvqAmount: taxBreakdown.tvq,
       deliveryFee,
       total,
       depositAmount,
@@ -975,6 +978,8 @@ export const createOrder = async (
           })),
           subtotal,
           taxAmount,
+          tpsAmount: taxBreakdown.tps,
+          tvqAmount: taxBreakdown.tvq,
           deliveryFee,
           total,
           depositAmount: depositPaid ? depositAmount : undefined,
@@ -1011,6 +1016,7 @@ export const createOrder = async (
             false, // asFacture → stays a "Confirmation"
             true,  // hideBreakdown → no facture for the contact
             billingOrganization, // organization shown in the header
+            { tps: receiptPayload.tpsAmount, tvq: receiptPayload.tvqAmount },
           );
         } else {
           await sendOrderReceipt(receiptMode, receiptPayload);
@@ -1052,6 +1058,7 @@ export const createOrder = async (
               true,  // asFacture
               false, // hideBreakdown
               billingOrganization, // organization shown on the facture
+              { tps: receiptPayload.tpsAmount, tvq: receiptPayload.tvqAmount },
             );
             console.log(`✅ Facture sent to billing email ${billingEmail}`);
           } catch (e: any) {
@@ -1763,7 +1770,8 @@ export const updateOrder = async (
         order.promoDiscountAmount = promoDiscountAmount;
       }
 
-      const taxAmount = await computeTaxAmount(updateData.items as any);
+      const taxBreakdown = await computeTaxBreakdown(updateData.items as any);
+      const taxAmount = taxBreakdown.total;
       let deliveryFee = order.deliveryFee;
 
       // Recalculate delivery fee if needed
@@ -1817,6 +1825,8 @@ export const updateOrder = async (
 
       order.subtotal = subtotal;
       order.taxAmount = taxAmount;
+      order.tpsAmount = taxBreakdown.tps;
+      order.tvqAmount = taxBreakdown.tvq;
       order.deliveryFee = deliveryFee;
       order.total = total;
       order.depositAmount = depositAmount;
