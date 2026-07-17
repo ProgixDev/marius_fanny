@@ -506,9 +506,11 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
                   src={getImageUrl(product.image, '', 500)}
                   loading="lazy"
                   decoding="async"
-                  // object-contain : le produit est toujours visible en entier,
-                  // même si une photo n'est pas parfaitement carrée.
-                  className="absolute inset-0 w-full h-full object-contain brightness-105 contrast-[1.03]"
+                  // object-cover sur un cadre CARRÉ : les 189 photos carrées
+                  // remplissent pile (aucun rognage), et les ~9 photos non
+                  // carrées sont zoomées pour remplir plutôt que d'afficher une
+                  // bande — choix demandé par Fanny.
+                  className="absolute inset-0 w-full h-full object-cover brightness-105 contrast-[1.03]"
                   alt={product.name}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />

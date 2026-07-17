@@ -17,6 +17,7 @@ import {
   DollarSign,
   Edit2,
   Download,
+  Users,
 } from "lucide-react";
 import { DataTable } from "./ui/DataTable";
 import { Modal } from "./ui/modal";
@@ -533,6 +534,26 @@ function ClientManagement() {
             <p className="text-[9px] font-black uppercase tracking-[0.3em] text-stone-500">
               Gérer les clients et les placeholders
             </p>
+            {/* Stat demandée par Fanny : combien de clients au total sur le
+                site (chargés depuis la base, pas une estimation). */}
+            {!loading && (
+              <div className="mt-3 inline-flex items-center gap-2 bg-[#C5A065]/10 text-[#8a6d3b] rounded-full px-4 py-1.5">
+                <Users size={16} className="shrink-0" />
+                <span className="text-sm font-bold">
+                  {clients.length} client{clients.length > 1 ? "s" : ""}
+                </span>
+                {clients.filter((c) => c.status === "active").length !==
+                  clients.length && (
+                  <span className="text-xs text-stone-500">
+                    ({clients.filter((c) => c.status === "active").length} actif
+                    {clients.filter((c) => c.status === "active").length > 1
+                      ? "s"
+                      : ""}
+                    )
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-3">
           <button
