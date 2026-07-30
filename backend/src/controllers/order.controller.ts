@@ -1027,6 +1027,7 @@ export const createOrder = async (
               subtotal,
               tpsAmount: taxBreakdown.tps,
               tvqAmount: taxBreakdown.tvq,
+              taxAmount,
               deliveryFee,
               total,
               amountPaid: (order as any).amountPaid || 0,

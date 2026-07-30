@@ -64,8 +64,11 @@ export interface InvoicePdfData {
   timeSlot?: string;
   items: InvoicePdfItem[];
   subtotal: number;
-  tpsAmount: number;
-  tvqAmount: number;
+  /** Découpage réel stocké sur la commande. Absent = anciennes commandes. */
+  tpsAmount?: number | null;
+  tvqAmount?: number | null;
+  /** Total des taxes — sert de repli quand le découpage n'est pas stocké. */
+  taxAmount?: number;
   deliveryFee?: number;
   total: number;
   amountPaid?: number;
@@ -73,6 +76,27 @@ export interface InvoicePdfData {
 }
 
 const money = (n: number) => `${(Number(n) || 0).toFixed(2)} $`;
+
+const TPS_RATE = 0.05;
+const TVQ_RATE = 0.09975;
+const COMBINED_RATE = TPS_RATE + TVQ_RATE;
+
+/**
+ * Montants TPS/TVQ à imprimer. Même règle que les courriels : on utilise le
+ * découpage réel stocké sur la commande (indispensable depuis que certains
+ * produits n'ont que la TPS) et, à défaut, on répartit le total par proportion.
+ */
+function taxParts(data: InvoicePdfData): { tps: number; tvq: number } {
+  const tps = data.tpsAmount || 0;
+  const tvq = data.tvqAmount || 0;
+  if (tps + tvq > 0) return { tps, tvq };
+
+  const taxAmount = data.taxAmount || 0;
+  return {
+    tps: taxAmount * (TPS_RATE / COMBINED_RATE),
+    tvq: taxAmount * (TVQ_RATE / COMBINED_RATE),
+  };
+}
 
 const formatDate = (value?: Date | string | null) => {
   if (!value) return "";
@@ -94,6 +118,7 @@ export function invoicePdfFilename(orderNumber: string): string {
 
 export async function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
   const logo = await fetchLogo();
+  const { tps: tpsAmount, tvq: tvqAmount } = taxParts(data);
 
   return new Promise<Buffer>((resolve, reject) => {
     try {
@@ -247,8 +272,8 @@ export async function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
       };
 
       totalLine("Sous-total :", money(data.subtotal));
-      totalLine("TPS (5 %) :", money(data.tpsAmount));
-      totalLine("TVQ (9,975 %) :", money(data.tvqAmount));
+      totalLine("TPS (5 %) :", money(tpsAmount));
+      totalLine("TVQ (9,975 %) :", money(tvqAmount));
 
       doc.font("Helvetica").fontSize(7).fillColor(GREY);
       doc.text("TPS: 144652641RT001    TVQ: 1201862732TQ0001", totalsX, y, { width: 240 });

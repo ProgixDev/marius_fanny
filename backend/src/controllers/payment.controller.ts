@@ -11,6 +11,8 @@ import Order from "../models/Order.js";
 import { User } from "../models/User.js";
 import { sendSms } from "../utils/smsService.js";
 import { sendInvoiceOrderConfirmation } from "../utils/mail.js";
+import type { MailAttachment } from "../utils/mail.js";
+import { buildInvoicePdf, invoicePdfFilename } from "../utils/invoicePdf.js";
 import { sendOrderReceipt } from "../utils/emailService.js";
 
 /**
@@ -1510,6 +1512,56 @@ export const resendFacture = async (req: Request, res: Response) => {
       amount: it.amount ?? (it.unitPrice || 0) * (it.quantity || 1),
     }));
 
+    // La facture part EN PIÈCE JOINTE (PDF) : les comptes payables d'une ville
+    // doivent archiver un fichier, pas suivre un lien. Un échec de génération
+    // ne doit jamais empêcher l'envoi du courriel.
+    let invoiceAttachments: MailAttachment[] | undefined;
+    try {
+      const pdf = await buildInvoicePdf({
+        orderNumber: order.orderNumber,
+        orderDate: order.orderDate,
+        clientName: `${order.clientInfo.firstName} ${order.clientInfo.lastName}`.trim(),
+        clientEmail: order.clientInfo?.email,
+        clientPhone: order.clientInfo?.phone,
+        organization: order.billingOrganization || undefined,
+        deliveryType: order.deliveryType,
+        pickupLocation: (order as any).pickupLocation,
+        deliveryAddress: (order as any).deliveryAddress,
+        serviceDate:
+          order.pickupDate ||
+          (order.deliveryDate ? new Date(order.deliveryDate) : null),
+        timeSlot: order.deliveryTimeSlot || undefined,
+        items: (order.items || []).map((it: any) => ({
+          productName: it.productName,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          amount: it.amount ?? (it.unitPrice || 0) * (it.quantity || 1),
+          notes: it.notes,
+          selectedOptions: it.selectedOptions,
+        })),
+        subtotal: order.subtotal,
+        tpsAmount: (order as any).tpsAmount,
+        tvqAmount: (order as any).tvqAmount,
+        taxAmount: order.taxAmount,
+        deliveryFee: order.deliveryFee,
+        total: order.total,
+        amountPaid: (order as any).amountPaid || 0,
+        notes: order.notes,
+      });
+      invoiceAttachments = [
+        {
+          filename: invoicePdfFilename(order.orderNumber),
+          content: pdf,
+          contentType: "application/pdf",
+        },
+      ];
+    } catch (pdfError: any) {
+      console.error(
+        "⚠️ [RESEND-FACTURE] Génération du PDF impossible:",
+        pdfError?.message || pdfError,
+      );
+    }
+
     // Envoi à chaque destinataire. On n'échoue globalement que si AUCUN envoi
     // ne passe ; les échecs partiels sont remontés dans la réponse.
     const sent: string[] = [];
@@ -1537,6 +1589,7 @@ export const resendFacture = async (req: Request, res: Response) => {
           false, // hideBreakdown
           order.billingOrganization || undefined, // organization on the facture
           { tps: (order as any).tpsAmount, tvq: (order as any).tvqAmount },
+          invoiceAttachments, // facture PDF en pièce jointe
         );
         sent.push(dest);
       } catch (e: any) {

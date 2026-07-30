@@ -2259,7 +2259,9 @@ export default function OrderForm({
                           </div>
                         ) : (
                         <div className="space-y-1">
-                          {item.productId && product && (
+                          {/* !! obligatoire : avec productId = 0, `0 && ...`
+                              renvoie 0 et React affiche un « 0 » parasite. */}
+                          {!!item.productId && !!product && (
                             <>
                               <div className="flex items-center justify-between gap-2 rounded-md border border-green-200 bg-green-50 px-2 py-1">
                                 <div className="min-w-0 flex items-center gap-2">
@@ -2484,7 +2486,7 @@ export default function OrderForm({
                         </div>
                       </TableCell>
                     </TableRow>
-                    {(item.productId || item.isCustom) && (() => {
+                    {(!!item.productId || !!item.isCustom) && (() => {
                       const noteOptions = (product?.customOptions || []).filter(
                         (option) =>
                           option.type === "text" ||
