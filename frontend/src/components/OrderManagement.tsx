@@ -287,6 +287,9 @@ export function OrderManagement() {
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
                 subtotal: item.amount || (item.quantity * item.unitPrice),
+                // Sans ça, un item personnalisé non taxable redevenait taxable
+                // dès qu'on rouvrait la commande pour la modifier.
+                taxable: item.taxable,
                 productionStatus: item.productionStatus || "pending",
                 notes: item.notes,
                 selectedOptions:
@@ -3953,18 +3956,27 @@ export function OrderManagement() {
                         details: (selectedOrder.deliveryAddress as any).details || "",
                       }
                     : undefined,
-                  items: selectedOrder.items.map(item => ({
-                    id: `edit-${item.id}`,
-                    productId: item.productId,
-                    productName: item.product?.name || `Produit #${item.productId}`,
-                    quantity: item.quantity,
-                    unitPrice: item.unitPrice,
-                    amount: item.subtotal,
-                    taxable: item.taxable,
-                    notes: item.notes || "",
-                    selectedOptions: (item as any).selectedOptions || undefined,
-                    isPacked: item.productionStatus === "ready"
-                  }))
+                  items: selectedOrder.items.map(item => {
+                    // productId 0/absent = item personnalisé (pas de fiche
+                    // produit). On le signale au formulaire pour qu'il
+                    // réaffiche le nom, le prix et la description saisis.
+                    const isCustom = !item.productId;
+                    return {
+                      id: `edit-${item.id}`,
+                      productId: item.productId,
+                      productName: isCustom
+                        ? (item.product?.name || "").replace(/^Produit #\d+$/, "")
+                        : item.product?.name || `Produit #${item.productId}`,
+                      quantity: item.quantity,
+                      unitPrice: item.unitPrice,
+                      amount: item.subtotal,
+                      taxable: item.taxable,
+                      notes: item.notes || "",
+                      selectedOptions: (item as any).selectedOptions || undefined,
+                      isCustom,
+                      isPacked: item.productionStatus === "ready"
+                    };
+                  })
                 }
               : undefined
           }

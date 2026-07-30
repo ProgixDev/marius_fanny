@@ -3,6 +3,7 @@ import { Plus, Trash2, Check, ChevronsUpDown, Package, StickyNote, Lock } from "
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import {
   Table,
@@ -45,6 +46,17 @@ import { getImageUrl } from "../utils/api";
 // Défini au niveau MODULE pour éviter tout problème d'ordre d'initialisation
 // (validatePreparationTime est appelé par un useMemo en haut du composant).
 const CUTOFF_MINUTES = 14 * 60 + 30;
+
+// Index = getDay() (0 = dimanche), comme le champ availableDays des produits.
+const DAYS_FR = [
+  "dimanche",
+  "lundi",
+  "mardi",
+  "mercredi",
+  "jeudi",
+  "vendredi",
+  "samedi",
+];
 
 interface OrderFormProps {
   onSubmit: (formData: OrderFormData) => void;
@@ -117,6 +129,39 @@ interface OrderFormItem {
   customDescription?: string;
 }
 
+/**
+ * Chemin inverse de getSerializedItemNotes : à l'enregistrement, la note d'un
+ * article est aplatie en texte
+ *   Note client: ...
+ *   Description: ...            (item personnalisé)
+ *   Options: Taille: 8 po | ... (produit du catalogue)
+ * À la réouverture d'une commande on redécoupe ces lignes, sinon la
+ * description d'un item personnalisé restait invisible et le préfixe
+ * s'empilait à chaque modification (« Note client: Note client: ... »).
+ */
+const parseSerializedItemNotes = (raw?: string) => {
+  const noteLines: string[] = [];
+  let customDescription = "";
+
+  for (const line of String(raw || "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (/^note client\s*:/i.test(trimmed)) {
+      noteLines.push(trimmed.replace(/^note client\s*:/i, "").trim());
+    } else if (/^description\s*:/i.test(trimmed)) {
+      customDescription = trimmed.replace(/^description\s*:/i, "").trim();
+    } else if (/^options\s*:/i.test(trimmed)) {
+      // Déjà rechargé via selectedOptions — on ne le remet pas dans la note.
+    } else {
+      // Note libre (ex. commande passée depuis le site) : conservée telle quelle.
+      noteLines.push(trimmed);
+    }
+  }
+
+  return { notes: noteLines.join("\n"), customDescription };
+};
+
 export default function OrderForm({
   onSubmit,
   onCancel,
@@ -140,12 +185,26 @@ export default function OrderForm({
   };
 
   const [formData, setFormData] = useState<OrderFormData>(() => {
-    const initialItems = initialData?.items?.map(item => ({
-      ...item,
-      taxable: item.taxable,
-      isPacked: false
-    })) || [];
-    
+    const initialItems =
+      initialData?.items?.map((item) => {
+        // Une commande enregistrée ne garde pas le drapeau « item
+        // personnalisé » : on le redéduit du productId (0/absent = pas de
+        // fiche produit). Sans ça, à la réouverture la ligne repassait dans
+        // la branche « produit » et affichait « Sélectionnez un produit »,
+        // le nom, le prix et la description de l'item disparaissaient.
+        const isCustom = item.isCustom ?? !item.productId;
+        const parsedNotes = parseSerializedItemNotes(item.notes);
+
+        return {
+          ...item,
+          isCustom,
+          notes: parsedNotes.notes,
+          customDescription: item.customDescription || parsedNotes.customDescription,
+          taxable: item.taxable,
+          isPacked: false,
+        };
+      }) || [];
+
     return {
       date: initialData?.date || new Date().toISOString().split("T")[0],
       pickupTime: initialData?.pickupTime || "",
@@ -235,6 +294,43 @@ export default function OrderForm({
     }
     return warnings;
   }, [formData.date, formData.pickupTime, formData.items, products, isEditing]);
+
+  // Jour de la semaine (0 = dimanche) de la date de la commande. Midi pour
+  // éviter tout décalage de fuseau qui ferait basculer d'un jour.
+  const selectedDayOfWeek = useMemo(() => {
+    if (!formData.date) return null;
+    const d = new Date(`${formData.date}T12:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d.getDay();
+  }, [formData.date]);
+
+  // Produits déjà présents à l'ouverture d'une commande existante. On ne
+  // rebloque pas dessus : sinon corriger un simple numéro de téléphone sur une
+  // vieille commande deviendrait impossible. Seuls les produits AJOUTÉS
+  // pendant la modification sont vérifiés.
+  const initialProductIds = useMemo(
+    () =>
+      new Set(
+        (initialData?.items || [])
+          .map((item) => item.productId)
+          .filter((id): id is number => !!id),
+      ),
+    // Volontairement figé sur le premier rendu (état d'origine de la commande).
+    [],
+  );
+
+  // Produits limités à certains jours (ex. vendredi-samedi-dimanche). La
+  // boutique en ligne bloquait déjà ces produits ; la prise de commande, non.
+  const getUnavailableDayMessage = (productId: number | null) => {
+    if (!productId || selectedDayOfWeek === null) return null;
+    const product = products.find((p) => p.id === productId);
+    const days = product?.availableDays;
+    if (!Array.isArray(days) || days.length === 0) return null;
+    if (days.includes(selectedDayOfWeek)) return null;
+    return `${product?.name || `Produit #${productId}`} n'est disponible que le ${days
+      .map((d) => DAYS_FR[d] || "")
+      .filter(Boolean)
+      .join(", ")} — pas le ${DAYS_FR[selectedDayOfWeek]}.`;
+  };
 
   const editPaymentAdjustment = useMemo(() => {
     if (!pricingBaseline) return null;
@@ -1052,6 +1148,20 @@ export default function OrderForm({
         }
       });
     }
+
+    // Produits limités à certains jours de la semaine : bloquant, comme sur la
+    // boutique en ligne. Un produit « vendredi-samedi-dimanche » ne peut pas
+    // être commandé pour un mardi.
+    formData.items.forEach((item, index) => {
+      if (item.isCustom || !item.productId) return;
+      // En modification, on n'empêche pas d'enregistrer à cause d'un produit
+      // déjà présent avant l'ouverture (l'avertissement rouge reste affiché).
+      if (isEditing && initialProductIds.has(item.productId)) return;
+      const message = getUnavailableDayMessage(item.productId);
+      if (message) {
+        newErrors[`item_${index}_availability`] = `⚠️ ${message}`;
+      }
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -2021,6 +2131,13 @@ export default function OrderForm({
                 const selectedItem = formData.items.find(
                   (item) => !item.isCustom && item.productId === product.id,
                 );
+                // Produit non offert le jour choisi : grisé et signalé avant
+                // même le clic, pour éviter d'avoir à revenir en arrière.
+                const unavailableToday =
+                  selectedDayOfWeek !== null &&
+                  Array.isArray(product.availableDays) &&
+                  product.availableDays.length > 0 &&
+                  !product.availableDays.includes(selectedDayOfWeek);
 
                 return (
                   <button
@@ -2028,7 +2145,11 @@ export default function OrderForm({
                     type="button"
                     onClick={() => addProductFromPos(product)}
                     className={`rounded-md border bg-white overflow-hidden text-left hover:border-amber-400 hover:shadow-sm transition ${
-                      selectedItem ? "border-green-400 ring-1 ring-green-300" : "border-gray-200"
+                      unavailableToday
+                        ? "border-red-300 opacity-60"
+                        : selectedItem
+                          ? "border-green-400 ring-1 ring-green-300"
+                          : "border-gray-200"
                     }`}
                   >
                     <div className="h-20 bg-gray-100">
@@ -2049,6 +2170,11 @@ export default function OrderForm({
                         {product.name}
                       </div>
                       <div className="mt-1 text-[11px] text-gray-600">{product.price.toFixed(2)} $</div>
+                      {unavailableToday && (
+                        <div className="mt-1 text-[10px] font-semibold text-red-700">
+                          ⛔ Pas le {DAYS_FR[selectedDayOfWeek!]}
+                        </div>
+                      )}
                       {selectedItem && (
                         <div className="mt-1 text-[10px] font-semibold text-green-700">
                           Dans la commande: x{selectedItem.quantity}
@@ -2090,6 +2216,11 @@ export default function OrderForm({
                       ? getPreparationTimeWarning(item.productId) || "Délai de préparation insuffisant pour la date sélectionnée."
                       : null
                     : null;
+                // Produit limité à certains jours (ex. vend.-sam.-dim.) commandé
+                // pour un autre jour : signalé en rouge et bloquant.
+                const availabilityWarning = item.isCustom
+                  ? null
+                  : getUnavailableDayMessage(item.productId);
 
                 return (
                   <React.Fragment key={item.id}>
@@ -2203,6 +2334,11 @@ export default function OrderForm({
                           {(livePreparationWarning || preparationError) && (
                             <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
                               ⚠️ {livePreparationWarning || preparationError}
+                            </div>
+                          )}
+                          {availabilityWarning && (
+                            <div className="text-[11px] font-medium text-red-700 bg-red-50 border border-red-300 rounded px-2 py-1">
+                              ⛔ {availabilityWarning}
                             </div>
                           )}
                         </div>
@@ -2358,9 +2494,15 @@ export default function OrderForm({
                       const hasSavedNoteValue = noteOptions.some((o) =>
                         String(item.selectedOptions?.[o.name] || "").trim().length > 0,
                       );
+                      // La note libre existe pour TOUS les articles (y compris
+                      // les items personnalisés et les produits sans option
+                      // « note »). Avant, la ligne ne s'ouvrait que si le
+                      // produit avait une option texte : le bouton note ne
+                      // faisait rien et une note déjà enregistrée restait
+                      // invisible à la modification.
+                      const hasFreeNote = String(item.notes || "").trim().length > 0;
                       const showNoteRow =
-                        noteOptions.length > 0 &&
-                        (expandedNoteItemIds.has(item.id) || hasSavedNoteValue);
+                        expandedNoteItemIds.has(item.id) || hasSavedNoteValue || hasFreeNote;
                       if (!showNoteRow) return null;
                       return (
                       <TableRow className={item.isCustom ? "bg-purple-50" : ""}>
@@ -2442,6 +2584,20 @@ export default function OrderForm({
                               </div>
                             )}
 
+                            <div className="flex items-start gap-2">
+                              <Label className="text-[11px] text-gray-600 shrink-0 min-w-[70px] pt-1.5">
+                                Note
+                              </Label>
+                              <Textarea
+                                value={item.notes || ""}
+                                onChange={(e) =>
+                                  handleItemChange(item.id, "notes", e.target.value)
+                                }
+                                placeholder="Note pour cet article (inscription sur le gâteau, allergie, précision...)"
+                                rows={2}
+                                className="text-xs flex-1"
+                              />
+                            </div>
                           </div>
                         </TableCell>
                       </TableRow>

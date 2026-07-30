@@ -43,7 +43,11 @@
       "Read(//c/c/Users/Hp/marius_fanny/**)",
       "Read(//c/c/Users/Hp/marius_fanny/frontend/**)",
       "Bash(xargs ls -la)",
-      "Bash(sort -k9)"
+      "Bash(sort -k9)",
+      "Bash(npm view *)",
+      "Bash(OUT=\"C:/Users/Hp/AppData/Local/Temp/claude/c--Users-Hp-marius-fanny/b38d7e7f-a735-400d-bf39-e149d87dbf03/scratchpad/facture-test.pdf\" node dump2_tmp.mjs)",
+      "Bash(git -C c:/Users/Hp/marius_fanny status --short)",
+      "Bash(cd c:/Users/Hp/marius_fanny/frontend && npx tsc -b 2>&1 | head -20; cd ../backend && npx tsc --noEmit 2>&1 | head -10; echo \"TYPECHECK DONE\")"
     ]
   }
 }

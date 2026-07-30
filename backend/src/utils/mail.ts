@@ -86,12 +86,15 @@ const GOOGLE_REVIEW_URL =
 const FRONTEND_URL =
   process.env.FRONTEND_URL || "https://marius-fanny-xi.vercel.app";
 
-const buildInvoiceDownloadSection = (orderId?: string) => {
+const buildInvoiceDownloadSection = (orderId?: string, pdfAttached = false) => {
   if (!orderId) return "";
   const invoiceUrl = `${FRONTEND_URL}/facture/${orderId}`;
   return `
   <div style="background-color: #F9F7F2; padding: 16px 20px; border-radius: 8px; margin-top: 20px; border-left: 4px solid #337957; text-align: center;">
     <p style="color: #2D2A26; margin: 0 0 10px 0; font-weight: bold; font-size: 14px;">📄 Votre facture</p>
+    ${pdfAttached ? `<p style="color: #337957; margin: 0 0 12px 0; font-size: 13px; font-weight: bold;">
+      La facture est jointe à ce courriel en format PDF.
+    </p>` : ""}
     <p style="color: #555; margin: 0 0 12px 0; font-size: 13px;">
       Téléchargez ou imprimez votre facture en cliquant sur le bouton ci-dessous.
     </p>
@@ -154,6 +157,13 @@ const buildNoReplyNotice = () => `
 /**
  * Send an email via Resend if API key is set, else fall back to Nodemailer.
  */
+/** Pièce jointe (ex. la facture PDF des clients gouvernementaux). */
+export interface MailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+}
+
 async function sendEmail(opts: {
   from: string;
   to: string;
@@ -161,7 +171,10 @@ async function sendEmail(opts: {
   html: string;
   replyTo?: string;
   bcc?: string;
+  attachments?: MailAttachment[];
 }): Promise<void> {
+  const attachments = opts.attachments?.length ? opts.attachments : undefined;
+
   if (resend) {
     const { error } = await resend.emails.send({
       from: opts.from,
@@ -170,6 +183,15 @@ async function sendEmail(opts: {
       html: opts.html,
       ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
       ...(opts.bcc ? { bcc: opts.bcc } : {}),
+      // Resend attend { filename, content } — le Buffer est accepté tel quel.
+      ...(attachments
+        ? {
+            attachments: attachments.map((a) => ({
+              filename: a.filename,
+              content: a.content,
+            })),
+          }
+        : {}),
     });
     if (error) throw new Error(`Resend error: ${error.message}`);
   } else {
@@ -182,6 +204,7 @@ async function sendEmail(opts: {
       // commande passent une adresse explicite (la boîte de Fanny).
       replyTo: opts.replyTo || opts.from,
       ...(opts.bcc ? { bcc: opts.bcc } : {}),
+      ...(attachments ? { attachments } : {}),
     });
   }
 }
@@ -1185,6 +1208,10 @@ export async function sendInvoiceOrderConfirmation(
   hideBreakdown: boolean = false,
   organization?: string,
   taxBreakdown?: { tps?: number; tvq?: number },
+  // Pièces jointes optionnelles — la facture PDF pour les clients
+  // gouvernementaux, dont le service des comptes payables exige un fichier et
+  // non un lien de téléchargement.
+  attachments?: MailAttachment[],
 ): Promise<void> {
   try {
     const { tps: tpsAmount, tvq: tvqAmount } = taxParts(taxAmount, taxBreakdown);
@@ -1267,6 +1294,7 @@ export async function sendInvoiceOrderConfirmation(
       from: DISPLAY_FROM_NOREPLY,
       replyTo: ORDER_CONTACT_EMAIL,
       to: email,
+      attachments,
       subject: asFacture
         ? `🧾 Facture - Commande ${paddedNumber}`
         : `📋 Confirmation de commande - ${paddedNumber}`,
@@ -1339,7 +1367,7 @@ export async function sendInvoiceOrderConfirmation(
             </div>
             ` : ""}
 
-            ${hideBreakdown ? "" : buildInvoiceDownloadSection(orderId)}
+            ${hideBreakdown ? "" : buildInvoiceDownloadSection(orderId, !!attachments?.length)}
 
             ${buildClientNoteSection(clientNote)}
 

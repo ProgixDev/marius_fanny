@@ -21,6 +21,8 @@ import {
 } from "../utils/deliveryZones.js";
 import { sendOrderReceipt } from "../utils/emailService.js";
 import { sendOrderBalanceEmail, sendInvoiceOrderConfirmation } from "../utils/mail.js";
+import type { MailAttachment } from "../utils/mail.js";
+import { buildInvoicePdf, invoicePdfFilename } from "../utils/invoicePdf.js";
 import { sendSms } from "../utils/smsService.js";
 import {
   cancelSquareInvoiceById,
@@ -993,10 +995,65 @@ export const createOrder = async (
           orderId: order._id.toString(),
         };
 
+        // Clients gouvernementaux : la facture part EN PIÈCE JOINTE (PDF). Le
+        // service des comptes payables d'une ville doit archiver un fichier —
+        // le bouton « Télécharger la facture » ne suffit pas.
+        const contactEmail = (orderData.clientInfo.email || "").trim().toLowerCase();
+        const hasSeparateBillingEmail = !!billingEmail && billingEmail !== contactEmail;
+        let invoiceAttachments: MailAttachment[] | undefined;
+
+        if (isGovernment) {
+          try {
+            const pdf = await buildInvoicePdf({
+              orderNumber: order.orderNumber,
+              orderDate: order.orderDate,
+              clientName: customerName,
+              clientEmail: orderData.clientInfo.email,
+              clientPhone: orderData.clientInfo.phone,
+              organization: billingOrganization,
+              deliveryType: orderData.deliveryType,
+              pickupLocation: (order as any).pickupLocation,
+              deliveryAddress: (order as any).deliveryAddress,
+              serviceDate: order.pickupDate || (orderData.deliveryDate ? new Date(orderData.deliveryDate) : null),
+              timeSlot: orderData.deliveryTimeSlot || undefined,
+              items: orderData.items.map((item: any) => ({
+                productName: item.productName,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                amount: item.amount,
+                notes: item.notes,
+                selectedOptions: item.selectedOptions,
+              })),
+              subtotal,
+              tpsAmount: taxBreakdown.tps,
+              tvqAmount: taxBreakdown.tvq,
+              deliveryFee,
+              total,
+              amountPaid: (order as any).amountPaid || 0,
+              notes: orderData.notes,
+            });
+            invoiceAttachments = [
+              {
+                filename: invoicePdfFilename(order.orderNumber),
+                content: pdf,
+                contentType: "application/pdf",
+              },
+            ];
+          } catch (pdfError: any) {
+            // Une facture PDF ratée ne doit jamais empêcher le courriel.
+            console.error(
+              "⚠️ [FACTURE PDF] Génération impossible:",
+              pdfError?.message || pdfError,
+            );
+          }
+        }
+
         if (isGovernment) {
           // Gov contact #1: a CONFIRMATION without the facture breakdown — just
           // the order + total. The facture (with tax breakdown) goes to the
-          // billing email below.
+          // billing email below. Le PDF n'y est joint QUE s'il n'y a pas de
+          // courriel de facturation distinct — sinon personne ne recevrait la
+          // facture.
           await sendInvoiceOrderConfirmation(
             receiptPayload.email,
             receiptPayload.name,
@@ -1017,6 +1074,7 @@ export const createOrder = async (
             true,  // hideBreakdown → no facture for the contact
             billingOrganization, // organization shown in the header
             { tps: receiptPayload.tpsAmount, tvq: receiptPayload.tvqAmount },
+            hasSeparateBillingEmail ? undefined : invoiceAttachments,
           );
         } else {
           await sendOrderReceipt(receiptMode, receiptPayload);
@@ -1034,8 +1092,7 @@ export const createOrder = async (
         // Government clients: also send the invoice/facture to the billing
         // email (e.g. the city's accounts-payable), on top of the confirmation
         // sent to the contact above.
-        const contactEmail = (orderData.clientInfo.email || "").trim().toLowerCase();
-        if (isGovernment && billingEmail && billingEmail !== contactEmail) {
+        if (isGovernment && hasSeparateBillingEmail && billingEmail) {
           try {
             // The 2nd email is the FACTURE (not the confirmation): same data,
             // but framed/subjected as an invoice for the city to pay.
@@ -1059,6 +1116,7 @@ export const createOrder = async (
               false, // hideBreakdown
               billingOrganization, // organization shown on the facture
               { tps: receiptPayload.tpsAmount, tvq: receiptPayload.tvqAmount },
+              invoiceAttachments, // facture PDF en pièce jointe
             );
             console.log(`✅ Facture sent to billing email ${billingEmail}`);
           } catch (e: any) {
