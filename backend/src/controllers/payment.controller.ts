@@ -14,6 +14,7 @@ import { sendInvoiceOrderConfirmation } from "../utils/mail.js";
 import type { MailAttachment } from "../utils/mail.js";
 import { buildInvoicePdf, invoicePdfFilename } from "../utils/invoicePdf.js";
 import { sendOrderReceipt } from "../utils/emailService.js";
+import { orderServiceDate } from "../utils/dates.js";
 
 /**
  * Send a payment-confirmation/receipt email exactly once for an order, after a
@@ -46,9 +47,7 @@ const sendPaidConfirmationOnce = async (orderId: any): Promise<void> => {
       total: order.total,
       paymentId: order.squarePaymentId || "square",
       orderDate: order.orderDate,
-      pickupDate:
-        order.pickupDate ||
-        (order.deliveryDate ? new Date(order.deliveryDate) : undefined),
+      pickupDate: orderServiceDate(order),
       pickupTimeSlot: order.deliveryTimeSlot || undefined,
       deliveryType: order.deliveryType,
       clientNote: order.notes,
@@ -836,7 +835,9 @@ export const createInvoice = async (req: Request, res: Response) => {
 
           // Fetch order to get pickup/delivery date AND its real line items.
           const orderDoc = await Order.findById(orderId).lean().catch(() => null);
-          const pickupDate = (orderDoc as any)?.pickupDate ? new Date((orderDoc as any).pickupDate) : undefined;
+          // orderServiceDate : une commande en LIVRAISON n'a pas forcément de
+          // pickupDate — sans ça son courriel partait sans aucune date.
+          const pickupDate = orderServiceDate(orderDoc as any);
           const pickupTimeSlot = (orderDoc as any)?.pickupTimeSlot || (orderDoc as any)?.deliveryTimeSlot;
           const orderDeliveryType = (orderDoc as any)?.deliveryType || deliveryType;
           const orderClientNote = (orderDoc as any)?.notes;
@@ -932,7 +933,7 @@ export const createInvoice = async (req: Request, res: Response) => {
           if (customerEmail && publishedPublicUrl) {
             try {
               const orderDoc2 = await Order.findById(orderId).lean().catch(() => null);
-              const pickupDate2 = (orderDoc2 as any)?.pickupDate ? new Date((orderDoc2 as any).pickupDate) : undefined;
+              const pickupDate2 = orderServiceDate(orderDoc2 as any);
               const pickupTimeSlot2 = (orderDoc2 as any)?.pickupTimeSlot || (orderDoc2 as any)?.deliveryTimeSlot;
               const orderDeliveryType2 = (orderDoc2 as any)?.deliveryType || deliveryType;
               const orderClientNote2 = (orderDoc2 as any)?.notes;
@@ -1114,7 +1115,7 @@ export async function resendInvoiceLinkForOrder(order: any): Promise<{
     order.total || 0,
     publicUrl,
     new Date(),
-    order.pickupDate ? new Date(order.pickupDate) : undefined,
+    orderServiceDate(order),
     order.deliveryTimeSlot,
     order.deliveryType,
     order.notes,
@@ -1527,9 +1528,7 @@ export const resendFacture = async (req: Request, res: Response) => {
         deliveryType: order.deliveryType,
         pickupLocation: (order as any).pickupLocation,
         deliveryAddress: (order as any).deliveryAddress,
-        serviceDate:
-          order.pickupDate ||
-          (order.deliveryDate ? new Date(order.deliveryDate) : null),
+        serviceDate: orderServiceDate(order) || null,
         timeSlot: order.deliveryTimeSlot || undefined,
         items: (order.items || []).map((it: any) => ({
           productName: it.productName,
@@ -1579,8 +1578,7 @@ export const resendFacture = async (req: Request, res: Response) => {
           order.total,
           undefined,
           order.orderDate,
-          order.pickupDate ||
-            (order.deliveryDate ? new Date(order.deliveryDate) : undefined),
+          orderServiceDate(order),
           order.deliveryTimeSlot || undefined,
           order.deliveryType,
           order.notes,
@@ -2349,7 +2347,7 @@ export async function createInvoiceForExistingOrder(
       body: `Marius et Fanny: votre lien de paiement pour la commande #${(orderNumber || orderId).split("-").pop()}: ${publicUrl}`,
     });
   } else {
-    const pickupDate = order.pickupDate ? new Date(order.pickupDate) : undefined;
+    const pickupDate = orderServiceDate(order);
     await sendInvoiceOrderConfirmation(
       customerEmail,
       customerName,

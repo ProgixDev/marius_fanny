@@ -12,6 +12,7 @@ import {
   Undo2,
   CheckCircle,
 } from 'lucide-react';
+import { parseServiceDate } from '../utils/dates';
 
 const apiUrl = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
 
@@ -159,7 +160,16 @@ function describeChange(change: OrderChange): {
   if (field === 'pickupDate' || field === 'deliveryDate') {
     const formatDate = (v: any) => {
       try {
-        return v ? new Date(v).toLocaleString('fr-CA', { dateStyle: 'medium', timeStyle: 'short' }) : "—";
+        const parsed = parseServiceDate(v);
+        if (!parsed) return "—";
+        // deliveryDate est un JOUR (« 2026-08-14 ») : afficher une heure y serait
+        // trompeur (et minuit UTC affichait la veille).
+        const dayOnly = typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim());
+        return parsed.toLocaleString('fr-CA', {
+          dateStyle: 'medium',
+          ...(dayOnly ? {} : { timeStyle: 'short' as const }),
+          timeZone: 'America/Montreal',
+        });
       } catch { return String(v); }
     };
     return {

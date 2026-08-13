@@ -32,6 +32,7 @@ import type { Order } from "../types";
 const API_URL = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
 const normalizedApiUrl = API_URL.startsWith("http") ? API_URL : `https://${API_URL}`;
 import { authHeaders } from "../utils/authHeaders";
+import { parseServiceDate } from "../utils/dates";
 
 interface Driver {
   id: string;
@@ -181,13 +182,18 @@ export default function DeliveryAssignment() {
   const getAssignmentForOrder = (orderId: string) =>
     assignments.find((a) => a.orderId === orderId);
 
-  const formatDate = (dateString: string) =>
-    new Date(dateString).toLocaleDateString("fr-CA", {
+  const formatDate = (dateString?: string | Date | null) => {
+    // parseServiceDate : « 2026-08-14 » (deliveryDate) est un jour calendaire ;
+    // lu comme minuit UTC il s'affichait la veille en heure de Montréal.
+    const parsed = parseServiceDate(dateString);
+    if (!parsed) return "—";
+    return parsed.toLocaleDateString("fr-CA", {
       year: "numeric",
       month: "short",
       day: "numeric",
       timeZone: "America/Montreal",
     });
+  };
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("fr-CA", { style: "currency", currency: "CAD" }).format(amount);

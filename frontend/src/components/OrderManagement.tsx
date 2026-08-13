@@ -49,6 +49,7 @@ import { orderAPI } from "../lib/OrderAPI";
 import { normalizedApiUrl } from "../lib/AuthClient";
 import { clientAPI } from "../lib/ClientAPI";
 import { getErrorMessage } from "../utils/errorMessage";
+import { parseServiceDate } from "../utils/dates";
 
 // Build headers that authenticate via BOTH the session cookie AND the bearer
 // token. Cross-site cookies are blocked by Safari/iPad (ITP), so cookie-only
@@ -323,15 +324,22 @@ export function OrderManagement() {
                 orders: [],
               },
               orderDate: o.orderDate || o.createdAt,
+              // Date de SERVICE de la commande. Le repli sur `createdAt` ne vaut
+              // que s'il n'existe aucune date : une commande en LIVRAISON n'a
+              // souvent pas de pickupDate, et retomber sur la date de création
+              // affichait « ramassage le 10 » pour une livraison le 14, pré-
+              // remplissait le formulaire de modification avec cette date-là et
+              // mettait les commandes « représentant » en retard dès leur
+              // création.
               pickupDate:
                 o.pickupDate ||
-                (o.deliveryType === "pickup" && o.deliveryDate
+                (o.deliveryDate
                   ? (() => {
                       const datePart = String(o.deliveryDate).split("T")[0];
-                      const timeRaw = String(o.deliveryTimeSlot || "00:00").trim();
-                      const timePart = /^([01]\d|2[0-3]):[0-5]\d$/.test(timeRaw)
-                        ? timeRaw
-                        : "00:00";
+                      const timeRaw = String(o.deliveryTimeSlot || "").trim();
+                      const timePart = /^([01]\d|2[0-3]):[0-5]\d/.test(timeRaw)
+                        ? timeRaw.slice(0, 5)
+                        : "12:00";
                       const parsed = new Date(`${datePart}T${timePart}:00`);
                       if (Number.isNaN(parsed.getTime())) return o.createdAt || o.orderDate;
                       return parsed.toISOString();
@@ -642,7 +650,11 @@ export function OrderManagement() {
     // Check both paymentStatus and depositPaid to handle all cases
     const isPaid = order?.paymentStatus === "paid" || order?.depositPaid === true;
     if (isPaid) return null;
-    
+
+    // Une commande ANNULÉE n'a plus rien à encaisser : sans ça elle restait
+    // affichée « paiement en retard » (cas de la 317, pourtant annulée).
+    if (order?.status === "cancelled") return null;
+
     // For government clients: show due date (from DB or calculate 60 days)
     if (order?.billingKind === "gouvernement") {
       if (order?.paymentDueDate) {
@@ -662,7 +674,7 @@ export function OrderManagement() {
         return new Date(order.pickupDate);
       }
       if (order.deliveryDate) {
-        return new Date(order.deliveryDate);
+        return parseServiceDate(order.deliveryDate);
       }
       // For same-day payment, return order date (payment should be made now)
       const base = new Date(order.orderDate || order.createdAt);
@@ -677,13 +689,19 @@ export function OrderManagement() {
   const isGovernmentLate = (order: any) => {
     if (order?.billingKind !== "gouvernement") return false;
     if (order?.paymentStatus === "paid") return false;
+    if (order?.status === "cancelled") return false;
     const base = new Date(order.orderDate || order.createdAt);
     const daysOpen = Math.floor((Date.now() - base.getTime()) / (1000 * 60 * 60 * 24));
     return daysOpen >= 60;
   };
 
-  const formatDateOnly = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("fr-CA", {
+  // parseServiceDate : « 2026-08-14 » est un JOUR, pas un instant. Lu tel quel
+  // par `new Date`, il vaut minuit UTC et reculait d'un jour une fois affiché en
+  // heure de Montréal (une livraison du 14 s'affichait « 13 août »).
+  const formatDateOnly = (dateString?: string | Date | null) => {
+    const date = parseServiceDate(dateString);
+    if (!date) return "—";
+    return date.toLocaleDateString("fr-CA", {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -2365,6 +2383,10 @@ export function OrderManagement() {
       {/* ALERT FOR OVERDUE PAYMENTS - AT TOP CENTER */}
       {(() => {
         const overdueOrders = orders.filter((order) => {
+          // Commande déjà remboursée = réglée, plus rien à relancer.
+          const refunded =
+            Array.isArray((order as any).refunds) && (order as any).refunds.length > 0;
+          if (refunded) return false;
           const dueDate = getPaymentDueDateForOrder(order);
           return dueDate && new Date() > dueDate && order.paymentStatus !== "paid";
         });
@@ -2905,17 +2927,24 @@ export function OrderManagement() {
                             </div>
                           </div>
                         )}
-                        <div className="flex items-center gap-3 p-3 bg-white rounded-lg">
-                          <Calendar className="w-5 h-5 text-(--bakery-gold)" />
-                          <div>
-                            <p className="text-xs text-(--bakery-text-secondary)">
-                              Date de ramassage
-                            </p>
-                            <p className="text-sm font-medium text-(--bakery-text)">
-                              {formatDateOnly(selectedOrder.pickupDate)}
-                            </p>
+                        {/* Une commande en LIVRAISON n'a pas de date de
+                            ramassage : `pickupDate` y retombe sur la date de
+                            création, ce qui affichait une 3e date sans rapport
+                            (« ramassage le 10 » pour une livraison le 14) et
+                            faisait appeler les clients. */}
+                        {selectedOrder.deliveryType === "pickup" && (
+                          <div className="flex items-center gap-3 p-3 bg-white rounded-lg">
+                            <Calendar className="w-5 h-5 text-(--bakery-gold)" />
+                            <div>
+                              <p className="text-xs text-(--bakery-text-secondary)">
+                                Date de ramassage
+                              </p>
+                              <p className="text-sm font-medium text-(--bakery-text)">
+                                {formatDateOnly(selectedOrder.pickupDate)}
+                              </p>
+                            </div>
                           </div>
-                        </div>
+                        )}
                         {selectedOrder.deliveryType === "pickup" && (
                           <div className="flex items-center gap-3 p-3 bg-white rounded-lg">
                             <Clock className="w-5 h-5 text-(--bakery-gold)" />
@@ -3917,8 +3946,23 @@ export function OrderManagement() {
           initialData={
             selectedOrder
               ? {
-                  date: (selectedOrder.pickupDate || selectedOrder.orderDate).split("T")[0],
+                  // Pour une LIVRAISON, la date de référence est deliveryDate
+                  // (« YYYY-MM-DD »). S'appuyer sur pickupDate y pré-remplissait
+                  // le formulaire avec la date de création, et l'enregistrement
+                  // écrasait alors la vraie date de livraison.
+                  date: (
+                    (selectedOrder.deliveryType === "delivery" &&
+                      (selectedOrder as any).deliveryDate) ||
+                    selectedOrder.pickupDate ||
+                    selectedOrder.orderDate
+                  ).split("T")[0],
                   pickupTime: (() => {
+                    // Le créneau enregistré fait foi (« 12:30 - 13:00 ») : le
+                    // recalculer depuis pickupDate perdait la plage horaire.
+                    const slot = String(selectedOrder.deliveryTimeSlot || "").trim();
+                    if (/^([01]\d|2[0-3]):[0-5]\d(\s*-\s*([01]\d|2[0-3]):[0-5]\d)?$/.test(slot)) {
+                      return slot;
+                    }
                     const d = new Date(selectedOrder.pickupDate);
                     // Read hour/minute in Montreal time, not the browser's timezone.
                     const parts = new Intl.DateTimeFormat("en-CA", {

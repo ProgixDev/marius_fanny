@@ -20,7 +20,12 @@ import {
   getAllDeliveryZones,
 } from "../utils/deliveryZones.js";
 import { sendOrderReceipt } from "../utils/emailService.js";
-import { sendOrderBalanceEmail, sendInvoiceOrderConfirmation } from "../utils/mail.js";
+import {
+  sendOrderBalanceEmail,
+  sendInvoiceOrderConfirmation,
+  sendOrderUpdatedEmail,
+} from "../utils/mail.js";
+import { parseServiceDate, orderServiceDate } from "../utils/dates.js";
 import type { MailAttachment } from "../utils/mail.js";
 import { buildInvoicePdf, invoicePdfFilename } from "../utils/invoicePdf.js";
 import { sendSms } from "../utils/smsService.js";
@@ -92,11 +97,14 @@ export const createOrder = async (
     const CUTOFF_MINUTES = 14 * 60 + 30;
 
     const now = new Date();
+    // `deliveryDate` est un jour calendaire « YYYY-MM-DD » : il faut le lire via
+    // parseServiceDate, sinon minuit UTC reprojeté à Montréal recule d'un jour
+    // et le contrôle de délai porte sur la veille de la date demandée.
     const targetDateStr =
       orderData.pickupDate
         ? toMontrealDate(new Date(orderData.pickupDate))
         : orderData.deliveryDate
-          ? toMontrealDate(new Date(orderData.deliveryDate))
+          ? String(orderData.deliveryDate).slice(0, 10)
           : null;
 
     // --- Filet de sécurité "argent sans commande" ---
@@ -560,7 +568,11 @@ export const createOrder = async (
     if (orderData.pickupDate) {
       pickupDate = new Date(orderData.pickupDate);
     } else if (orderData.deliveryType === "pickup" && orderData.deliveryDate) {
-      const slot = String(orderData.deliveryTimeSlot || "00:00").trim() || "00:00";
+      // Sans créneau connu on ancre à MIDI, pas à minuit : minuit heure serveur
+      // (UTC en production) reprojeté à Montréal retombe sur la VEILLE, et la
+      // date de ramassage affichée reculait alors d'un jour.
+      const raw = String(orderData.deliveryTimeSlot || "").trim();
+      const slot = /^([01]\d|2[0-3]):[0-5]\d/.test(raw) ? raw.slice(0, 5) : "12:00";
       pickupDate = new Date(`${orderData.deliveryDate}T${slot}:00`);
     }
 
@@ -574,7 +586,7 @@ export const createOrder = async (
         paymentDueDate = pickupDate;
         console.log("📋 [BILLING] Setting representative paymentDueDate to pickupDate:", paymentDueDate);
       } else if (orderData.deliveryDate) {
-        paymentDueDate = new Date(orderData.deliveryDate);
+        paymentDueDate = parseServiceDate(orderData.deliveryDate);
         console.log("📋 [BILLING] Setting representative paymentDueDate to deliveryDate:", paymentDueDate);
       } else {
         // No pickup/delivery date - payment due same day as order
@@ -988,7 +1000,7 @@ export const createOrder = async (
           paymentId: orderData.squarePaymentId,
           invoiceUrl: undefined, // Will be updated via webhook or separate call
           orderDate: order.orderDate,
-          pickupDate: order.pickupDate || (orderData.deliveryDate ? new Date(orderData.deliveryDate) : undefined),
+          pickupDate: orderServiceDate(order),
           pickupTimeSlot: orderData.deliveryTimeSlot || undefined,
           deliveryType: orderData.deliveryType,
           clientNote: orderData.notes,
@@ -1014,7 +1026,7 @@ export const createOrder = async (
               deliveryType: orderData.deliveryType,
               pickupLocation: (order as any).pickupLocation,
               deliveryAddress: (order as any).deliveryAddress,
-              serviceDate: order.pickupDate || (orderData.deliveryDate ? new Date(orderData.deliveryDate) : null),
+              serviceDate: orderServiceDate(order) || null,
               timeSlot: orderData.deliveryTimeSlot || undefined,
               items: orderData.items.map((item: any) => ({
                 productName: item.productName,
@@ -1620,6 +1632,130 @@ export const getOrderById = async (
  * Update an order
  * PATCH /api/orders/:id
  */
+/** Jour calendaire « YYYY-MM-DD » d'une date de service, pour comparaison. */
+const serviceDayKey = (order: any): string => {
+  const d = orderServiceDate(order);
+  return d ? d.toLocaleDateString("en-CA", { timeZone: "America/Montreal" }) : "";
+};
+
+/** Libellé lisible d'une date de service (courriel client). */
+const serviceDayLabel = (key: string): string => {
+  const d = parseServiceDate(key);
+  return d
+    ? d.toLocaleDateString("fr-CA", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        timeZone: "America/Montreal",
+      })
+    : "non précisée";
+};
+
+/**
+ * Décrit, en français et du point de vue du CLIENT, ce qui a changé sur une
+ * commande. Renvoie une liste vide quand rien de visible pour lui n'a bougé
+ * (statut, paiement, notes internes, avancement de l'emballage) — c'est ce qui
+ * évite d'inonder le client de courriels à chaque case cochée en cuisine.
+ */
+function describeCustomerFacingChanges(
+  before: {
+    items: Array<{
+      productName: string;
+      quantity: number;
+      unitPrice: number;
+      selectedOptions?: Record<string, string>;
+    }>;
+    deliveryDate?: string;
+    pickupDate?: Date;
+    deliveryTimeSlot?: string;
+    deliveryType: string;
+  },
+  after: any,
+): string[] {
+  const lines: string[] = [];
+
+  // --- Articles : on agrège par produit + options choisies. `productionStatus`
+  // est volontairement ignoré (c'est l'emballage, pas le contenu).
+  const tally = (
+    items: Array<{
+      productName: string;
+      quantity: number;
+      unitPrice: number;
+      selectedOptions?: Record<string, string>;
+    }>,
+  ) => {
+    const map = new Map<string, { label: string; quantity: number; unitPrice: number }>();
+    for (const it of items || []) {
+      const options = it.selectedOptions
+        ? Object.entries(it.selectedOptions)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(", ")
+        : "";
+      const key = `${it.productName}||${options}`;
+      const label = options ? `${it.productName} (${options})` : it.productName;
+      const entry = map.get(key);
+      if (entry) {
+        entry.quantity += it.quantity;
+      } else {
+        map.set(key, { label, quantity: it.quantity, unitPrice: it.unitPrice });
+      }
+    }
+    return map;
+  };
+
+  const oldItems = tally(before.items);
+  const newItems = tally(
+    (after.items || []).map((it: any) => ({
+      productName: it.productName,
+      quantity: it.quantity,
+      unitPrice: it.unitPrice,
+      selectedOptions: it.selectedOptions,
+    })),
+  );
+
+  for (const [key, next] of newItems) {
+    const prev = oldItems.get(key);
+    if (!prev) {
+      lines.push(`Ajouté : ${next.quantity} × ${next.label}`);
+    } else if (prev.quantity !== next.quantity) {
+      lines.push(`${next.label} : ${prev.quantity} → ${next.quantity}`);
+    } else if (Math.abs((prev.unitPrice || 0) - (next.unitPrice || 0)) > 0.001) {
+      lines.push(
+        `${next.label} : prix unitaire ${(prev.unitPrice || 0).toFixed(2)}$ → ${(next.unitPrice || 0).toFixed(2)}$`,
+      );
+    }
+  }
+  for (const [key, prev] of oldItems) {
+    if (!newItems.has(key)) {
+      lines.push(`Retiré : ${prev.quantity} × ${prev.label}`);
+    }
+  }
+
+  // --- Date et créneau de service
+  const oldDay = serviceDayKey(before);
+  const newDay = serviceDayKey(after);
+  if (oldDay !== newDay) {
+    const label = after.deliveryType === "delivery" ? "livraison" : "ramassage";
+    lines.push(
+      `Date de ${label} : ${serviceDayLabel(oldDay)} → ${serviceDayLabel(newDay)}`,
+    );
+  }
+
+  const oldSlot = (before.deliveryTimeSlot || "").trim();
+  const newSlot = (after.deliveryTimeSlot || "").trim();
+  if (oldSlot !== newSlot) {
+    lines.push(`Heure : ${oldSlot || "non précisée"} → ${newSlot || "non précisée"}`);
+  }
+
+  if (before.deliveryType !== after.deliveryType) {
+    const label = (t: string) => (t === "delivery" ? "Livraison" : "Ramassage");
+    lines.push(`Type : ${label(before.deliveryType)} → ${label(after.deliveryType)}`);
+  }
+
+  return lines;
+}
+
 /**
  * Update an order
  * PATCH /api/orders/:id
@@ -1643,6 +1779,22 @@ export const updateOrder = async (
     const updateData = req.body;
     const changes: any[] = [];
     const userId = req.user?.id;
+
+    // État AVANT modification — sert à décrire au client ce qui a changé
+    // (courriel « commande modifiée » envoyé après l'enregistrement).
+    const before = {
+      items: (order.items || []).map((it: any) => ({
+        productName: it.productName,
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+        selectedOptions: it.selectedOptions,
+      })),
+      deliveryDate: order.deliveryDate,
+      pickupDate: order.pickupDate,
+      deliveryTimeSlot: order.deliveryTimeSlot,
+      deliveryType: order.deliveryType,
+      status: order.status,
+    };
 
     // Track and update client info
     if (updateData.clientInfo) {
@@ -2196,6 +2348,50 @@ export const updateOrder = async (
     await order.save();
 
     console.log(`✅ Order ${order.orderNumber} updated with ${changes.length} changes`);
+
+    // --- Courriel « commande modifiée » au client -------------------------
+    // Ajouter ou retirer un article (ou déplacer la date) ne prévenait PAS le
+    // client : il gardait une confirmation périmée — typiquement une commande
+    // déjà payée en magasin à laquelle on ajoute un item. On lui renvoie donc
+    // sa commande à jour. Volontairement silencieux pour :
+    //   - une commande annulée (elle n'est plus à servir) ;
+    //   - un simple pointage d'emballage (le back office renvoie `items` à
+    //     chaque case cochée, mais seul `productionStatus` change) ;
+    //   - un changement de statut/paiement seul.
+    try {
+      const clientEmail = (order.clientInfo?.email || "").trim();
+      const changeLines = describeCustomerFacingChanges(before, order);
+
+      if (changeLines.length > 0 && clientEmail && order.status !== "cancelled") {
+        await sendOrderUpdatedEmail({
+          email: clientEmail,
+          name: `${order.clientInfo.firstName} ${order.clientInfo.lastName}`.trim(),
+          orderNumber: order.orderNumber,
+          items: (order.items || []).map((it: any) => ({
+            productName: it.productName,
+            quantity: it.quantity,
+            amount: it.amount ?? (it.unitPrice || 0) * (it.quantity || 1),
+          })),
+          changeLines,
+          subtotal: order.subtotal,
+          taxAmount: order.taxAmount,
+          taxBreakdown: { tps: order.tpsAmount, tvq: order.tvqAmount },
+          deliveryFee: order.deliveryFee,
+          total: order.total,
+          amountPaid: order.amountPaid || 0,
+          serviceDate: orderServiceDate(order),
+          timeSlot: order.deliveryTimeSlot || undefined,
+          deliveryType: order.deliveryType,
+          orderId: order._id.toString(),
+        });
+      }
+    } catch (mailError: any) {
+      // Un envoi raté ne doit jamais faire échouer l'enregistrement.
+      console.error(
+        `⚠️ [MAJ COMMANDE] Courriel « commande modifiée » non envoyé pour ${order.orderNumber}:`,
+        mailError?.message || mailError,
+      );
+    }
 
     // Émission du lien de paiement APRÈS l'enregistrement : Square doit voir la
     // commande à jour (montants, articles), et la facture y est créée puis

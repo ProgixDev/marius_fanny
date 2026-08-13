@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import Order from "../models/Order.js";
 import { resendInvoiceLinkForOrder } from "./payment.controller.js";
+import { parseServiceDate } from "../utils/dates.js";
 
 interface OrderWithBilling {
   _id: import("mongoose").Types.ObjectId;
@@ -45,7 +46,7 @@ function getEffectiveDueDate(order: any): Date | null {
 
   if (order?.billingKind === "representant") {
     if (order.pickupDate) return new Date(order.pickupDate);
-    if (order.deliveryDate) return new Date(order.deliveryDate);
+    if (order.deliveryDate) return parseServiceDate(order.deliveryDate) || null;
     return new Date(order.orderDate || order.createdAt);
   }
   if (order?.billingKind === "gouvernement") {

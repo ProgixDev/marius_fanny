@@ -812,6 +812,205 @@ const buildClientNoteSection = (note?: string) => {
   </div>`;
 };
 
+/**
+ * Confirmation de commande MODIFIÉE.
+ *
+ * Envoyée quand le back office ajoute/retire un article ou déplace la date :
+ * jusqu'ici le client ne recevait plus rien après sa confirmation initiale et
+ * gardait en main une liste d'articles et un total périmés (cas typique : une
+ * commande déjà payée en magasin à laquelle on ajoute un item).
+ */
+export async function sendOrderUpdatedEmail(data: {
+  email: string;
+  name: string;
+  orderNumber: string;
+  items: Array<{ productName: string; quantity: number; amount: number }>;
+  changeLines: string[];
+  subtotal: number;
+  taxAmount: number;
+  taxBreakdown?: { tps?: number | null; tvq?: number | null } | null;
+  deliveryFee: number;
+  total: number;
+  amountPaid: number;
+  serviceDate?: Date;
+  timeSlot?: string;
+  deliveryType?: "pickup" | "delivery";
+  clientNote?: string;
+  orderId?: string;
+}): Promise<void> {
+  try {
+    const { tps: tpsAmount, tvq: tvqAmount } = taxParts(
+      data.taxAmount,
+      data.taxBreakdown,
+    );
+    const paddedNumber = data.orderNumber.split("-").pop() || data.orderNumber;
+
+    const itemsHtml = data.items
+      .map(
+        (item) => `
+        <tr>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; color: #555;">${item.productName}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center; color: #555;">${item.quantity}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; color: #555;">${item.amount.toFixed(2)}$</td>
+        </tr>`,
+      )
+      .join("");
+
+    const changesHtml = data.changeLines.length
+      ? `
+      <div style="background-color: #FFF8E7; padding: 16px 20px; border-radius: 8px; margin-bottom: 24px; border-left: 4px solid #C5A065;">
+        <p style="color: #2D2A26; margin: 0 0 8px 0; font-weight: bold; font-size: 14px;">Ce qui a changé</p>
+        <ul style="color: #555; margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.7;">
+          ${data.changeLines.map((line) => `<li>${line}</li>`).join("")}
+        </ul>
+      </div>`
+      : "";
+
+    const formattedServiceDate = data.serviceDate
+      ? data.serviceDate.toLocaleDateString("fr-CA", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          timeZone: "America/Montreal",
+        })
+      : null;
+    const serviceSection = formattedServiceDate
+      ? `<div style="background-color: #EAF6EF; border: 2px solid #337957; border-radius: 10px; padding: 16px; margin-top: 16px; text-align: center;">
+          <p style="color: #337957; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px 0;">📅 ${data.deliveryType === "delivery" ? "Date de livraison" : "Date de ramassage"}</p>
+          <p style="color: #2D2A26; font-size: 18px; font-weight: bold; margin: 0;">${formattedServiceDate}</p>
+          ${data.timeSlot ? `<p style="color: #337957; font-size: 15px; margin: 6px 0 0 0;">⏰ Heure : <strong>${data.timeSlot}</strong></p>` : ""}
+        </div>`
+      : "";
+
+    // Écart de paiement : le client doit savoir s'il reste un montant à régler
+    // (article ajouté après un paiement) ou si un remboursement lui est dû.
+    const balance = Number((data.total - data.amountPaid).toFixed(2));
+    const paymentSection =
+      balance > 0.01
+        ? `<div style="background-color: #FFF4E6; padding: 15px; border-radius: 8px; margin-top: 24px; border-left: 4px solid #C5A065;">
+            <p style="color: #2D2A26; margin: 0; font-weight: bold;">Reste à payer : ${balance.toFixed(2)}$</p>
+            <p style="color: #555; margin: 5px 0 0 0; font-size: 14px;">Ce montant sera réglé lors du ${data.deliveryType === "delivery" ? "de la livraison" : "ramassage"}, ou par un lien de paiement que nous pouvons vous envoyer.</p>
+          </div>`
+        : balance < -0.01
+          ? `<div style="background-color: #E8F5E9; padding: 15px; border-radius: 8px; margin-top: 24px; border-left: 4px solid #4CAF50;">
+              <p style="color: #2D7D32; margin: 0; font-weight: bold;">Montant à vous rembourser : ${Math.abs(balance).toFixed(2)}$</p>
+              <p style="color: #555; margin: 5px 0 0 0; font-size: 14px;">Nous communiquerons avec vous pour le remboursement.</p>
+            </div>`
+          : `<div style="background-color: #E8F5E9; padding: 15px; border-radius: 8px; margin-top: 24px; border-left: 4px solid #4CAF50;">
+              <p style="color: #2D7D32; margin: 0; font-weight: bold;">Aucun montant supplémentaire à payer</p>
+              <p style="color: #555; margin: 5px 0 0 0; font-size: 14px;">Votre commande est entièrement réglée.</p>
+            </div>`;
+
+    await sendEmail({
+      from: DISPLAY_FROM_NOREPLY,
+      replyTo: ORDER_CONTACT_EMAIL,
+      to: data.email,
+      subject: `Commande ${paddedNumber} modifiée`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #F9F7F2; border-radius: 10px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <img src="${LOGO_URL}" alt="Marius & Fanny" style="max-width: 180px; height: auto;" />
+          </div>
+
+          <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <div style="display: inline-block; background-color: #C5A065; color: white; padding: 10px 20px; border-radius: 20px; font-weight: bold;">
+                ✏️ COMMANDE MODIFIÉE
+              </div>
+            </div>
+
+            <h2 style="color: #2D2A26; text-align: center; margin-bottom: 20px;">Bonjour ${data.name},</h2>
+
+            <p style="color: #555; line-height: 1.6; text-align: center; margin-bottom: 30px;">
+              Votre commande a été mise à jour. Voici son contenu à jour — cette version remplace la confirmation précédente.
+            </p>
+
+            <div style="background-color: #F9F7F2; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+              <p style="color: #999; margin: 0 0 5px 0; font-size: 12px;">Numéro de commande</p>
+              <p style="color: #C5A065; font-size: 24px; font-weight: bold; margin: 0;">${paddedNumber}</p>
+              ${serviceSection}
+            </div>
+
+            ${changesHtml}
+
+            <h3 style="color: #2D2A26; border-bottom: 2px solid #C5A065; padding-bottom: 10px;">
+              Votre commande à jour
+            </h3>
+
+            <table style="width: 100%; margin-bottom: 20px; border-collapse: collapse;">
+              <thead>
+                <tr style="background-color: #F9F7F2;">
+                  <th style="padding: 10px; text-align: left; color: #2D2A26;">Produit</th>
+                  <th style="padding: 10px; text-align: center; color: #2D2A26;">Qté</th>
+                  <th style="padding: 10px; text-align: right; color: #2D2A26;">Prix</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+              </tbody>
+            </table>
+
+            <div style="text-align: right; margin-top: 20px;">
+              <p style="color: #555; margin: 5px 0;">
+                <span style="display: inline-block; width: 150px;">Sous-total:</span>
+                <strong>${data.subtotal.toFixed(2)}$</strong>
+              </p>
+              <p style="color: #555; margin: 5px 0;">
+                <span style="display: inline-block; width: 150px;">TPS (5 %):</span>
+                <strong>${tpsAmount.toFixed(2)}$</strong>
+              </p>
+              <p style="color: #555; margin: 5px 0;">
+                <span style="display: inline-block; width: 150px;">TVQ (9,975 %):</span>
+                <strong>${tvqAmount.toFixed(2)}$</strong>
+              </p>
+              ${
+                data.deliveryFee > 0
+                  ? `<p style="color: #555; margin: 5px 0;">
+                <span style="display: inline-block; width: 150px;">Livraison:</span>
+                <strong>${data.deliveryFee.toFixed(2)}$</strong>
+              </p>`
+                  : ""
+              }
+              <p style="color: #C5A065; font-size: 20px; margin: 15px 0 0 0; padding-top: 10px; border-top: 2px solid #C5A065;">
+                <span style="display: inline-block; width: 150px;">Nouveau total:</span>
+                <strong>${data.total.toFixed(2)}$</strong>
+              </p>
+              ${
+                data.amountPaid > 0.01
+                  ? `<p style="color: #555; margin: 5px 0; font-size: 14px;">
+                <span style="display: inline-block; width: 150px;">Déjà payé:</span>
+                <strong>${data.amountPaid.toFixed(2)}$</strong>
+              </p>`
+                  : ""
+              }
+            </div>
+
+            ${paymentSection}
+
+            ${buildInvoiceDownloadSection(data.orderId)}
+
+            ${buildClientNoteSection(data.clientNote)}
+
+            ${buildClaimPolicySection()}
+
+            ${buildCancellationPolicySection()}
+            ${buildNoReplyNotice()}
+          </div>
+
+          <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
+            <p>© 2026 Marius & Fanny. Tous droits réservés.</p>
+          </div>
+        </div>
+      `,
+    });
+    console.log("✅ Courriel « commande modifiée » envoyé vers:", data.email);
+  } catch (error) {
+    console.error("❌ Erreur envoi du courriel de commande modifiée:", error);
+    throw error;
+  }
+}
+
 export async function sendFullPaymentReceipt(
   email: string,
   name: string,

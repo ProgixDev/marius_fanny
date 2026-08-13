@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { authClient } from "../lib/AuthClient";
 import { authHeaders } from "../utils/authHeaders";
 import { getSessionUniversal } from "../utils/getSession";
+import { parseServiceDate } from "../utils/dates";
 import GoldenBackground from "./GoldenBackground";
 import {
   User,
@@ -140,12 +141,18 @@ const Dashboard: React.FC = () => {
 
   const ITEMS_PER_PAGE = 10;
 
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString("fr-FR", {
+  // parseServiceDate : une date de livraison « 2026-08-14 » vaut minuit UTC si
+  // on la passe telle quelle à `new Date`, et s'affichait donc la veille.
+  const formatDate = (date?: string | Date | null) => {
+    const parsed = parseServiceDate(date);
+    if (!parsed) return "—";
+    return parsed.toLocaleDateString("fr-FR", {
       year: "numeric",
       month: "long",
       day: "numeric",
+      timeZone: "America/Montreal",
     });
+  };
 
   const getScheduledDate = (order: any) => {
     if (order?.deliveryType === "pickup") {

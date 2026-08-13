@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Download } from "lucide-react";
+import { parseServiceDate } from "../utils/dates";
 
 // We compute the API URL inline instead of importing from ../lib/AuthClient
 // because that module instantiates better-auth at load time, which touches
@@ -107,11 +108,15 @@ export default function Invoice() {
   }
 
   const formatDate = (iso?: string) => {
-    if (!iso) return "";
-    return new Date(iso).toLocaleDateString("fr-CA", {
+    // parseServiceDate : « 2026-08-14 » est un jour, pas minuit UTC — sans ça la
+    // date de service imprimée sur la facture reculait d'un jour.
+    const parsed = parseServiceDate(iso);
+    if (!parsed) return "";
+    return parsed.toLocaleDateString("fr-CA", {
       year: "numeric",
       month: "long",
       day: "numeric",
+      timeZone: "America/Montreal",
     });
   };
 
