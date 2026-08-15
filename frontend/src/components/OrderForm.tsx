@@ -3,7 +3,6 @@ import { Plus, Trash2, Check, ChevronsUpDown, Package, StickyNote, Lock } from "
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Textarea } from "./ui/textarea";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import {
   Table,
@@ -183,6 +182,12 @@ export default function OrderForm({
       normalized.includes("remarque")
     );
   };
+  // Zone allergies par défaut, pour les articles dont la fiche produit n'a pas
+  // (encore) l'option — et pour les items personnalisés, qui n'ont pas de fiche
+  // du tout. Même intitulé que celui posé en base par « Activer la zone
+  // allergènes client », donc la valeur atterrit au même endroit et remonte à la
+  // liste de production.
+  const DEFAULT_ALLERGY_OPTION_NAME = "Allergies / note client";
 
   const [formData, setFormData] = useState<OrderFormData>(() => {
     const initialItems =
@@ -2466,11 +2471,20 @@ export default function OrderForm({
                               })
                             }
                             className={`h-8 w-8 ${
-                              expandedNoteItemIds.has(item.id) || item.notes
+                              // Le bouton s'allume sur une valeur RÉELLEMENT
+                              // saisie (allergies / options texte) — plus sur
+                              // l'ancienne note libre, qui n'existe plus.
+                              expandedNoteItemIds.has(item.id) ||
+                              Object.entries(item.selectedOptions || {}).some(
+                                ([name, value]) =>
+                                  (isAllergyOptionName(name) ||
+                                    isClientNoteOptionName(name)) &&
+                                  String(value || "").trim().length > 0,
+                              )
                                 ? "text-amber-600 hover:text-amber-700"
                                 : "text-gray-400 hover:text-gray-600"
                             }`}
-                            title="Ajouter une note"
+                            title="Allergies / note client"
                           >
                             <StickyNote className="w-4 h-4" />
                           </Button>
@@ -2493,18 +2507,24 @@ export default function OrderForm({
                           isAllergyOptionName(option.name) ||
                           isClientNoteOptionName(option.name),
                       );
-                      const hasSavedNoteValue = noteOptions.some((o) =>
-                        String(item.selectedOptions?.[o.name] || "").trim().length > 0,
+                      // Repli allergies : sans option « allerg… » sur la fiche
+                      // produit (et pour un item personnalisé, qui n'a pas de
+                      // fiche), le bouton note ouvrirait une zone vide. On
+                      // affiche alors le champ allergies par défaut, pour que
+                      // l'allergie reste saisissable sur N'IMPORTE quel article.
+                      const needsAllergyFallback = !noteOptions.some((o) =>
+                        isAllergyOptionName(o.name),
                       );
-                      // La note libre existe pour TOUS les articles (y compris
-                      // les items personnalisés et les produits sans option
-                      // « note »). Avant, la ligne ne s'ouvrait que si le
-                      // produit avait une option texte : le bouton note ne
-                      // faisait rien et une note déjà enregistrée restait
-                      // invisible à la modification.
-                      const hasFreeNote = String(item.notes || "").trim().length > 0;
+                      const hasSavedNoteValue =
+                        noteOptions.some(
+                          (o) =>
+                            String(item.selectedOptions?.[o.name] || "").trim().length > 0,
+                        ) ||
+                        String(
+                          item.selectedOptions?.[DEFAULT_ALLERGY_OPTION_NAME] || "",
+                        ).trim().length > 0;
                       const showNoteRow =
-                        expandedNoteItemIds.has(item.id) || hasSavedNoteValue || hasFreeNote;
+                        expandedNoteItemIds.has(item.id) || hasSavedNoteValue;
                       if (!showNoteRow) return null;
                       return (
                       <TableRow className={item.isCustom ? "bg-purple-50" : ""}>
@@ -2586,20 +2606,37 @@ export default function OrderForm({
                               </div>
                             )}
 
-                            <div className="flex items-start gap-2">
-                              <Label className="text-[11px] text-gray-600 shrink-0 min-w-[70px] pt-1.5">
-                                Note
-                              </Label>
-                              <Textarea
-                                value={item.notes || ""}
-                                onChange={(e) =>
-                                  handleItemChange(item.id, "notes", e.target.value)
-                                }
-                                placeholder="Note pour cet article (inscription sur le gâteau, allergie, précision...)"
-                                rows={2}
-                                className="text-xs flex-1"
-                              />
-                            </div>
+                            {/* L'ancienne zone « Note » libre par article a été
+                                retirée : elle n'était transmise NULLE PART — ni
+                                sur la confirmation du client, ni sur la liste de
+                                production — et laissait croire au personnel que
+                                le client la lirait. Pour une consigne visible du
+                                client, utiliser « Note pour le client » en bas du
+                                formulaire ; pour la cuisine, les options du
+                                produit. */}
+                            {needsAllergyFallback && (
+                              <div className="flex items-center gap-2">
+                                <Label className="text-[11px] text-gray-600 shrink-0 min-w-[70px]">
+                                  {DEFAULT_ALLERGY_OPTION_NAME}
+                                </Label>
+                                <Input
+                                  value={
+                                    item.selectedOptions?.[
+                                      DEFAULT_ALLERGY_OPTION_NAME
+                                    ] || ""
+                                  }
+                                  onChange={(e) =>
+                                    handleOptionChange(
+                                      item.id,
+                                      DEFAULT_ALLERGY_OPTION_NAME,
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="Écrire allergies / note client..."
+                                  className="h-7 text-xs flex-1"
+                                />
+                              </div>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
