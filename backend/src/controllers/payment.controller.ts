@@ -130,6 +130,139 @@ const getRefundableAmountCents = async (paymentId: string): Promise<bigint> => {
 };
 
 /**
+ * ---------------------------------------------------------------------------
+ * Montant RÉELLEMENT encaissé (source de vérité = Square)
+ * ---------------------------------------------------------------------------
+ * Historiquement le code écrivait `order.amountPaid = order.total` dès qu'un
+ * webhook « facture payée » arrivait. Si des articles étaient AJOUTÉS après le
+ * paiement, le total montait — et le webhook (ou le job de reconciliation, qui
+ * tourne toutes les 30 min) réappliquait ce total : la commande s'affichait
+ * « payée 2800 $ » alors que Square n'avait encaissé que 2438 $, et le solde de
+ * l'ajout disparaissait. On lit désormais le montant encaissé DANS Square.
+ */
+
+/** Cumul encaissé sur UNE facture Square, en dollars (null si inconnu). */
+const invoiceCollectedDollars = (invoice: any): number | null => {
+  const requests = invoice?.paymentRequests || invoice?.payment_requests;
+  if (!Array.isArray(requests) || requests.length === 0) return null;
+  let cents = 0;
+  let known = false;
+  for (const r of requests) {
+    const money = r?.totalCompletedAmountMoney || r?.total_completed_amount_money;
+    const amount = money?.amount;
+    if (amount == null) continue;
+    known = true;
+    cents += Number(amount);
+  }
+  return known ? cents / 100 : null;
+};
+
+/**
+ * Ajoute une facture Square à l'historique de la commande (sans doublon).
+ * `squareInvoiceId` reste le lien COURANT ; l'historique garde les précédents
+ * (paiement initial + liens de solde émis après un ajout d'articles).
+ */
+export const rememberSquareInvoiceId = (order: any, invoiceId?: string | null) => {
+  if (!invoiceId) return;
+  const history: string[] = ((order as any).squareInvoiceIds as string[]) || [];
+  if (history.includes(invoiceId)) return;
+  (order as any).squareInvoiceIds = [...history, invoiceId];
+  if (typeof order.markModified === "function") order.markModified("squareInvoiceIds");
+};
+
+/** Toutes les factures Square connues d'une commande (historique + courante). */
+const orderInvoiceIds = (order: any): string[] =>
+  Array.from(
+    new Set(
+      [...(((order as any).squareInvoiceIds as string[]) || []), order?.squareInvoiceId]
+        .filter((v): v is string => Boolean(v)),
+    ),
+  );
+
+/**
+ * Somme encaissée sur TOUTES les factures Square de la commande. `hint` évite
+ * un appel réseau pour la facture déjà reçue dans le webhook.
+ */
+const collectedFromSquareInvoices = async (
+  order: any,
+  hint?: any,
+): Promise<{ amount: number; known: boolean }> => {
+  const ids = orderInvoiceIds(order);
+  let amount = 0;
+  let known = false;
+
+  for (const id of ids) {
+    try {
+      const invoice =
+        hint && (hint.id === id) ? hint : (await squareClient.invoices.get({ invoiceId: id }) as any)?.invoice;
+      const collected = invoiceCollectedDollars(invoice);
+      if (collected != null) {
+        amount += collected;
+        known = true;
+      }
+    } catch {
+      /* facture introuvable / réseau : on ignore cette facture */
+    }
+  }
+
+  return { amount, known };
+};
+
+/** Total des remboursements COMPLÉTÉS enregistrés sur la commande, en dollars. */
+const completedRefundDollars = (order: any): number =>
+  (((order as any).refunds as any[]) || [])
+    .filter((r) => String(r?.refundStatus || "").toLowerCase() === "completed")
+    .reduce((sum, r) => sum + (Number(r?.amountCents) || 0) / 100, 0);
+
+/**
+ * Applique un encaissement réel à la commande : `amountPaid` = ce que Square a
+ * encaissé (moins les remboursements), et le statut en découle. Une commande
+ * dont le total a augmenté APRÈS le paiement reste donc « acompte payé » avec
+ * son solde à percevoir, au lieu de basculer faussement en « payée ».
+ * Retourne true si la commande est entièrement payée.
+ */
+const applyCollectedAmount = (order: any, collectedDollars: number | null): boolean => {
+  const total = order.total || 0;
+  const epsilon = 0.01;
+  // Montant inconnu (payload Square partiel) : on ne GONFLE jamais un
+  // encaissement déjà connu — on garde ce qu'on avait, sinon le total.
+  const gross =
+    collectedDollars == null
+      ? (order.amountPaid || 0) > epsilon
+        ? order.amountPaid
+        : total
+      : collectedDollars;
+  const paid = Math.max(0, gross - completedRefundDollars(order));
+
+  order.amountPaid = paid;
+
+  if (paid >= total - epsilon && paid > epsilon) {
+    order.paymentStatus = "paid";
+    order.depositPaid = true;
+    order.balancePaid = true;
+    order.depositPaidAt = order.depositPaidAt || new Date();
+    order.balancePaidAt = order.balancePaidAt || new Date();
+    return true;
+  }
+
+  if (paid > epsilon) {
+    // Paiement partiel : typiquement le total a augmenté (articles ajoutés)
+    // après l'encaissement → il reste un solde à percevoir.
+    order.paymentStatus = "deposit_paid";
+    order.depositPaid = true;
+    order.balancePaid = false;
+    order.balancePaidAt = undefined;
+    order.depositPaidAt = order.depositPaidAt || new Date();
+    return false;
+  }
+
+  order.paymentStatus = "unpaid";
+  order.depositPaid = false;
+  order.balancePaid = false;
+  return false;
+};
+
+/**
  * Create a Square payment
  * POST /api/payments/create
  */
@@ -664,6 +797,15 @@ export const createInvoice = async (req: Request, res: Response) => {
       /* non bloquant */
     }
 
+    // Facture de SOLDE : le frontend envoie une seule ligne synthetique
+    // "Solde commande MF-…" pour ne facturer que la difference apres un ajout
+    // d articles.
+    const isBalanceOnlyInvoice =
+      Array.isArray(items) &&
+      items.length === 1 &&
+      typeof items[0]?.name === "string" &&
+      /^solde commande/i.test(items[0].name);
+
     // Build line items for the invoice
     const lineItems = items.map((item: any) => ({
       name: item.name,
@@ -766,7 +908,12 @@ export const createInvoice = async (req: Request, res: Response) => {
         orderId: squareOrderId,
         // Unique invoice number per attempt (orderId + timestamp) — Square requires uniqueness per location
         invoiceNumber: `${orderId}-${Date.now()}`,
-        title: `Commande ${orderNumber || orderId}`,
+        // Une facture de SOLDE (articles ajoutes apres un paiement) porte un
+        // titre distinct : dans Square, deux factures intitulees a l identique
+        // rendaient l ajout invisible/indistinguable du paiement initial.
+        title: isBalanceOnlyInvoice
+          ? `Solde/ajout - Commande ${orderNumber || orderId}`
+          : `Commande ${orderNumber || orderId}`,
         // TPS/TVQ ajoutés à la DESCRIPTION (gratuite). Les "custom fields" Square
         // nécessitent un abonnement payant (Invoices Plus) → sinon la création
         // de la facture échoue.
@@ -977,6 +1124,23 @@ export const createInvoice = async (req: Request, res: Response) => {
             publishError?.message ||
             "Facture creee mais publication/envoi email incomplet";
         }
+      }
+    }
+
+    // Historiser la facture cote SERVEUR (ne pas dependre du frontend) : le
+    // lien courant + tous les precedents restent tracables, sinon le lien d un
+    // ajout d articles ecrase celui du paiement initial.
+    if (invoice?.id) {
+      try {
+        const orderDocForHistory = await Order.findById(orderId);
+        if (orderDocForHistory) {
+          rememberSquareInvoiceId(orderDocForHistory, orderDocForHistory.squareInvoiceId);
+          orderDocForHistory.squareInvoiceId = invoice.id;
+          rememberSquareInvoiceId(orderDocForHistory, invoice.id);
+          await orderDocForHistory.save();
+        }
+      } catch {
+        /* non bloquant */
       }
     }
 
@@ -1417,7 +1581,13 @@ export const reconcileOrderRefund = async (req: Request, res: Response) => {
     (order as any).refunds = refunds;
     order.markModified("refunds");
 
-    order.amountPaid = Math.max(0, total - refundedDollars);
+    // Base = ce que Square a réellement encaissé sur ce paiement (et non le
+    // total de la commande, qui peut avoir changé depuis).
+    const capturedCents = Number(
+      payment?.totalMoney?.amount ?? payment?.amountMoney?.amount ?? NaN,
+    );
+    const grossCollected = Number.isFinite(capturedCents) ? capturedCents / 100 : total;
+    order.amountPaid = Math.max(0, grossCollected - refundedDollars);
     if (order.amountPaid < 0.01) {
       order.status = "cancelled";
       order.paymentStatus = "unpaid";
@@ -2019,19 +2189,21 @@ export const squareWebhook = async (req: Request, res: Response) => {
           if (order.status === "cancelled" || ((order as any).refunds?.length > 0)) {
             console.log(`⏭️ [WEBHOOK] Order ${order.orderNumber} already refunded/cancelled — NOT re-marking paid (invoice: ${invoiceId})`);
           } else {
-            const total = order.total || 0;
-            order.paymentStatus = "paid";
-            order.depositPaid = true;
-            order.balancePaid = true;
-            order.amountPaid = total;
-            order.depositPaidAt = order.depositPaidAt || new Date();
-            order.balancePaidAt = new Date();
+            // Montant réellement encaissé (toutes les factures de la commande),
+            // JAMAIS `order.total` : si des articles ont été ajoutés après le
+            // paiement, le solde doit rester dû.
+            const { amount, known } = await collectedFromSquareInvoices(order, invoice);
+            const fullyPaid = applyCollectedAmount(order, known ? amount : null);
 
             await order.save();
-            console.log(`✅ [WEBHOOK] Order ${order.orderNumber} marked as PAID (invoice: ${invoiceId})`);
+            console.log(
+              `✅ [WEBHOOK] Order ${order.orderNumber} encaissé ${order.amountPaid.toFixed(2)}$ / ${(order.total || 0).toFixed(2)}$ (invoice: ${invoiceId})`,
+            );
             // Email a payment confirmation/receipt (covers SMS-link payers who
             // otherwise never get any email). Idempotent — sent at most once.
-            await sendPaidConfirmationOnce(order._id);
+            // Uniquement quand la commande est SOLDÉE : un reçu « payé » pour
+            // une commande au solde partiel serait faux.
+            if (fullyPaid) await sendPaidConfirmationOnce(order._id);
           }
         } else {
           console.warn(`⚠️ [WEBHOOK] No order found for invoice ${invoiceId}`);
@@ -2059,17 +2231,29 @@ export const squareWebhook = async (req: Request, res: Response) => {
           if (order.status === "cancelled" || ((order as any).refunds?.length > 0)) {
             console.log(`⏭️ [WEBHOOK] Order ${order.orderNumber} already refunded/cancelled — NOT re-marking paid (payment: ${paymentId})`);
           } else {
-            const total = order.total || 0;
-            order.paymentStatus = "paid";
-            order.depositPaid = true;
-            order.balancePaid = true;
-            order.amountPaid = total;
-            order.depositPaidAt = order.depositPaidAt || new Date();
-            order.balancePaidAt = new Date();
+            // Priorité aux factures Square (cumul de tous les liens émis) ;
+            // à défaut, le montant du paiement lui-même.
+            const { amount, known } = await collectedFromSquareInvoices(order);
+            const paymentDollars =
+              Number(
+                payment?.amount_money?.amount ??
+                  payment?.amountMoney?.amount ??
+                  payment?.total_money?.amount ??
+                  payment?.totalMoney?.amount ??
+                  NaN,
+              ) / 100;
+            const collected = known
+              ? amount
+              : Number.isFinite(paymentDollars)
+                ? paymentDollars
+                : null;
+            const fullyPaid = applyCollectedAmount(order, collected);
 
             await order.save();
-            console.log(`✅ [WEBHOOK] Order ${order.orderNumber} marked as PAID (payment: ${paymentId})`);
-            await sendPaidConfirmationOnce(order._id);
+            console.log(
+              `✅ [WEBHOOK] Order ${order.orderNumber} encaissé ${order.amountPaid.toFixed(2)}$ / ${(order.total || 0).toFixed(2)}$ (payment: ${paymentId})`,
+            );
+            if (fullyPaid) await sendPaidConfirmationOnce(order._id);
           }
         }
       }
@@ -2115,14 +2299,14 @@ export const squareWebhook = async (req: Request, res: Response) => {
           (order as any).refunds = updatedRefunds;
           order.markModified("refunds");
 
-          // Recompute amountPaid from total MINUS all completed refunds. Using an
-          // absolute recomputation (not subtraction) keeps this idempotent across
-          // repeated/duplicate webhooks — no double-counting.
-          const total = order.total || 0;
-          const totalRefundedDollars = updatedRefunds
-            .filter((r) => String(r.refundStatus || "").toLowerCase() === "completed")
-            .reduce((s, r) => s + (Number(r.amountCents) || 0) / 100, 0);
-          order.amountPaid = Math.max(0, total - totalRefundedDollars);
+          // Recompute amountPaid from what Square actually COLLECTED minus all
+          // completed refunds. Absolute recomputation (not subtraction) keeps
+          // this idempotent across repeated/duplicate webhooks.
+          const { amount, known } = await collectedFromSquareInvoices(order);
+          // Pas de facture Square (paiement direct) : on retombe sur le total,
+          // jamais sur `amountPaid` — qui est déjà net des remboursements et
+          // serait donc décompté deux fois par un webhook rejoué.
+          applyCollectedAmount(order, known ? amount : order.total || 0);
 
           // If fully refunded, mark order as cancelled + unpaid.
           if (order.amountPaid < 0.01) {
@@ -2158,28 +2342,34 @@ export async function reconcileUnpaidOrders(): Promise<number> {
   const orders = await Order.find({
     paymentStatus: { $ne: "paid" },
     status: { $ne: "cancelled" },
-    squareInvoiceId: { $exists: true, $nin: [null, ""] },
+    $or: [
+      { squareInvoiceId: { $exists: true, $nin: [null, ""] } },
+      { squareInvoiceIds: { $exists: true, $ne: [] } },
+    ],
     createdAt: { $gte: since },
   });
 
   let fixed = 0;
   for (const order of orders) {
     try {
-      const r = await squareClient.invoices.get({ invoiceId: order.squareInvoiceId! });
-      const inv = (r as any)?.invoice || r;
-      if (inv?.status !== "PAID") continue;
       if (order.status === "cancelled" || ((order as any).refunds?.length > 0)) continue;
 
-      order.paymentStatus = "paid";
-      order.depositPaid = true;
-      order.balancePaid = true;
-      order.amountPaid = order.total || 0;
-      order.depositPaidAt = order.depositPaidAt || new Date();
-      order.balancePaidAt = new Date();
+      // Cumul RÉELLEMENT encaissé sur toutes les factures de la commande.
+      // On ne marque « payée » que si ça couvre le total actuel : une commande
+      // dont les articles ont été augmentés après coup garde son solde dû.
+      const { amount, known } = await collectedFromSquareInvoices(order);
+      if (!known || amount <= 0.01) continue;
+
+      const previousPaid = order.amountPaid || 0;
+      const fullyPaid = applyCollectedAmount(order, amount);
+      if (Math.abs((order.amountPaid || 0) - previousPaid) < 0.01 && !fullyPaid) continue;
+
       await order.save();
       fixed++;
-      console.log(`🔄 [RECONCILE] Commande ${order.orderNumber} marquée PAYÉE (facture ${order.squareInvoiceId})`);
-      await sendPaidConfirmationOnce(order._id);
+      console.log(
+        `🔄 [RECONCILE] Commande ${order.orderNumber} : encaissé ${(order.amountPaid || 0).toFixed(2)}$ / ${(order.total || 0).toFixed(2)}$ (${fullyPaid ? "PAYÉE" : "solde restant"})`,
+      );
+      if (fullyPaid) await sendPaidConfirmationOnce(order._id);
     } catch {
       /* facture introuvable / erreur réseau : on réessaiera au prochain cycle */
     }
@@ -2377,6 +2567,7 @@ export async function createInvoiceForExistingOrder(
 
   // Persist the invoice id so the dashboard shows the payment link badge
   order.squareInvoiceId = invoice.id;
+  rememberSquareInvoiceId(order, invoice.id);
   await order.save();
 
   return { invoiceId: invoice.id, publicUrl };

@@ -93,6 +93,11 @@ export interface IOrder extends Document {
   }>;
   squarePaymentId?: string; // Square payment ID for tracking
   squareInvoiceId?: string; // Square invoice ID for invoice payments
+  // TOUTES les factures Square émises pour cette commande (dans l'ordre).
+  // `squareInvoiceId` ne garde que la DERNIÈRE : sans cet historique, le lien
+  // d'un ajout d'articles écrasait celui du paiement initial et le montant
+  // réellement encaissé devenait introuvable.
+  squareInvoiceIds?: string[];
   status:
     | "pending"
     | "confirmed"
@@ -434,6 +439,10 @@ const OrderSchema = new Schema<IOrder>(
     squareInvoiceId: {
       type: String,
       trim: true,
+    },
+    squareInvoiceIds: {
+      type: [String],
+      default: undefined,
     },
     status: {
       type: String,

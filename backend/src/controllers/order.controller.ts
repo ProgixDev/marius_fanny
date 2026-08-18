@@ -32,6 +32,7 @@ import { sendSms } from "../utils/smsService.js";
 import {
   cancelSquareInvoiceById,
   createInvoiceForExistingOrder,
+  rememberSquareInvoiceId,
 } from "./payment.controller.js";
 import {
   calculatePromoDiscount,
@@ -2251,6 +2252,10 @@ export const updateOrder = async (
     if (updateData.squareInvoiceId && updateData.squareInvoiceId !== order.squareInvoiceId) {
       const oldInvoiceId = order.squareInvoiceId;
       order.squareInvoiceId = updateData.squareInvoiceId;
+      // Historiser : sans ça, le lien d'un AJOUT d'articles ecrasait celui du
+      // paiement initial et on ne retrouvait plus le montant encaisse.
+      rememberSquareInvoiceId(order, oldInvoiceId);
+      rememberSquareInvoiceId(order, updateData.squareInvoiceId);
       changes.push({
         changedAt: new Date(),
         changedBy: userId,
