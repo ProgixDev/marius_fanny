@@ -93,6 +93,9 @@ export interface IOrder extends Document {
   }>;
   squarePaymentId?: string; // Square payment ID for tracking
   squareInvoiceId?: string; // Square invoice ID for invoice payments
+  // Déjà encaissé quand la facture en cours a été émise (0 pour une facture
+  // couvrant toute la commande, le montant déjà payé pour une facture de solde).
+  squareInvoiceBaselinePaid?: number;
   status:
     | "pending"
     | "confirmed"
@@ -434,6 +437,14 @@ const OrderSchema = new Schema<IOrder>(
     squareInvoiceId: {
       type: String,
       trim: true,
+    },
+    // Montant DÉJÀ encaissé au moment où la facture Square en cours a été
+    // émise. Une facture de SOLDE ne porte que sur le reste à payer : sans ce
+    // repère, encaisser 120$ sur une commande de 752$ dont 632$ étaient déjà
+    // payés se lirait « 120$ payés » au lieu de « 752$ payés ».
+    squareInvoiceBaselinePaid: {
+      type: Number,
+      default: 0,
     },
     status: {
       type: String,

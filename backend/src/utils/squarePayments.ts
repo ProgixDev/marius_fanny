@@ -71,9 +71,17 @@ export const collectedDollarsFromInvoice = (invoice: any): number => {
  */
 export const applyCollectedAmount = (order: any, collectedDollars: number): boolean => {
   const total = order.total || 0;
+
+  // Une facture de SOLDE ne réclame que le reste à payer : son encaissement
+  // s'AJOUTE au montant déjà rentré quand la facture a été émise (repère posé
+  // à l'émission du lien). Pour une facture couvrant toute la commande, ce
+  // repère vaut 0 et l'encaissé fait foi tel quel.
+  const baseline = Number(order.squareInvoiceBaselinePaid) || 0;
+  const fromSquare = (collectedDollars || 0) + baseline;
+
   // Jamais à la baisse : un acompte encaissé en magasin (hors Square) ne doit
   // pas être effacé par la lecture d'une facture Square partielle.
-  const paid = Math.max(order.amountPaid || 0, collectedDollars || 0);
+  const paid = Math.max(order.amountPaid || 0, fromSquare);
   order.amountPaid = Number(paid.toFixed(2));
 
   if (order.amountPaid >= total - 0.01) {

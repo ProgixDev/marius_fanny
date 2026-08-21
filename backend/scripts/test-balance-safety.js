@@ -143,6 +143,58 @@ test("on retire les articles ajoutés → retour à payé, sans faux rembourseme
   assert.strictEqual(order.amountPaid, 3000, "aucun remboursement à réclamer");
 });
 
+test("la cliente PAIE le lien du solde → la commande devient payée", () => {
+  // Commande 361 : 632.18$ encaissés, on ajoute 5 boîtes → total 752.62$.
+  // Le lien de solde envoyé ne réclame que 120.44$ : à son émission on note le
+  // déjà-encaissé (632.18$), sinon son paiement ferait retomber la commande à
+  // « 120.44$ payés » et le solde ne disparaîtrait jamais.
+  const order = {
+    total: 752.62,
+    amountPaid: 632.18,
+    paymentStatus: "deposit_paid",
+    squareInvoiceBaselinePaid: 632.18,
+  };
+  const fullyPaid = applyCollectedAmount(
+    order,
+    collectedDollarsFromInvoice(squareInvoice(12044, 12044)),
+  );
+  assert.strictEqual(fullyPaid, true, "le solde payé doit solder la commande");
+  assert.strictEqual(order.amountPaid, 752.62);
+  assert.strictEqual(order.paymentStatus, "paid");
+  assert.strictEqual(order.balancePaid, true);
+});
+
+test("le lien du solde reste impayé → la commande garde son solde", () => {
+  const order = {
+    total: 752.62,
+    amountPaid: 632.18,
+    paymentStatus: "deposit_paid",
+    squareInvoiceBaselinePaid: 632.18,
+  };
+  applyCollectedAmount(order, 0); // facture de solde émise mais pas encore payée
+  assert.strictEqual(order.amountPaid, 632.18);
+  assert.strictEqual(order.paymentStatus, "deposit_paid");
+});
+
+test("solde payé en 2 fois (2 liens successifs) → total atteint, sans double compte", () => {
+  const order = { total: 1000, amountPaid: 600, paymentStatus: "deposit_paid", squareInvoiceBaselinePaid: 600 };
+  applyCollectedAmount(order, 200); // 1er lien de solde : 200$
+  assert.strictEqual(order.amountPaid, 800);
+  order.squareInvoiceBaselinePaid = 800; // 2e lien émis pour les 200$ restants
+  const fullyPaid = applyCollectedAmount(order, 200);
+  assert.strictEqual(order.amountPaid, 1000);
+  assert.strictEqual(fullyPaid, true);
+  // Le robot repasse sur la même facture 30 min plus tard : rien ne bouge.
+  applyCollectedAmount(order, 200);
+  assert.strictEqual(order.amountPaid, 1000, "aucune addition en boucle");
+});
+
+test("facture couvrant TOUTE la commande : repère à 0, l'encaissé fait foi", () => {
+  const order = { total: 500, amountPaid: 0, paymentStatus: "unpaid", squareInvoiceBaselinePaid: 0 };
+  assert.strictEqual(applyCollectedAmount(order, 500), true);
+  assert.strictEqual(order.amountPaid, 500);
+});
+
 test("centimes : 752,25$ encaissés sur 752,25$ → payé (pas de solde fantôme)", () => {
   const order = { total: 752.25, amountPaid: 0, paymentStatus: "unpaid" };
   const fullyPaid = applyCollectedAmount(order, collectedDollarsFromInvoice(squareInvoice(75225, 75225)));

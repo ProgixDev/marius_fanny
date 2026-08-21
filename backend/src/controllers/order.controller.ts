@@ -2257,6 +2257,11 @@ export const updateOrder = async (
     if (updateData.squareInvoiceId && updateData.squareInvoiceId !== order.squareInvoiceId) {
       const oldInvoiceId = order.squareInvoiceId;
       order.squareInvoiceId = updateData.squareInvoiceId;
+      // Repère indispensable : un lien de SOLDE ne réclame que le reste à
+      // payer. On mémorise ce qui est déjà encaissé pour que l'encaissement de
+      // ce lien s'AJOUTE au lieu de remplacer (sinon payer 120$ de solde
+      // ferait retomber une commande de 752$ à « 120$ payés »).
+      (order as any).squareInvoiceBaselinePaid = order.amountPaid || 0;
       changes.push({
         changedAt: new Date(),
         changedBy: userId,

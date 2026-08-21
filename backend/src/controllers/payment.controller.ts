@@ -1952,11 +1952,13 @@ export const cancelInvoice = async (req: Request, res: Response) => {
     const clearOrderInvoice = async () => {
       try {
         if (orderId) {
-          await Order.findByIdAndUpdate(orderId, { $unset: { squareInvoiceId: "" } });
+          await Order.findByIdAndUpdate(orderId, {
+            $unset: { squareInvoiceId: "", squareInvoiceBaselinePaid: "" },
+          });
         } else {
           await Order.updateOne(
             { squareInvoiceId: targetInvoiceId },
-            { $unset: { squareInvoiceId: "" } },
+            { $unset: { squareInvoiceId: "", squareInvoiceBaselinePaid: "" } },
           );
         }
       } catch {
@@ -2447,8 +2449,11 @@ export async function createInvoiceForExistingOrder(
     );
   }
 
-  // Persist the invoice id so the dashboard shows the payment link badge
+  // Persist the invoice id so the dashboard shows the payment link badge.
+  // On mémorise aussi le déjà-encaissé : si cette facture ne couvre qu'un
+  // solde, son paiement doit s'ajouter à ce qui est déjà rentré.
   order.squareInvoiceId = invoice.id;
+  (order as any).squareInvoiceBaselinePaid = order.amountPaid || 0;
   await order.save();
 
   return { invoiceId: invoice.id, publicUrl };
