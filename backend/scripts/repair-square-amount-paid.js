@@ -62,35 +62,11 @@ const square = new SquareClient({
       : SquareEnvironment.Sandbox,
 });
 
-/** Montant réellement encaissé sur une facture Square, en dollars (NaN si illisible). */
-const collectedDollars = (invoice) => {
-  const requests = invoice?.paymentRequests || invoice?.payment_requests || [];
-  if (!Array.isArray(requests) || requests.length === 0) return NaN;
-  const read = (m) =>
-    m?.amount === undefined || m?.amount === null ? null : Number(m.amount);
-
-  let cents = 0;
-  let known = false;
-  for (const pr of requests) {
-    const c = read(pr?.totalCompletedAmountMoney ?? pr?.total_completed_amount_money);
-    if (c !== null) {
-      cents += c;
-      known = true;
-    }
-  }
-  if (known) return cents / 100;
-
-  let computed = 0;
-  let computedKnown = false;
-  for (const pr of requests) {
-    const c = read(pr?.computedAmountMoney ?? pr?.computed_amount_money);
-    if (c !== null) {
-      computed += c;
-      computedKnown = true;
-    }
-  }
-  return computedKnown ? computed / 100 : NaN;
-};
+// Même lecture que le serveur (une seule version de la logique, testée par
+// scripts/test-balance-safety.js). Nécessite `npm run build` au préalable.
+const { collectedDollarsFromInvoice: collectedDollars } = await import(
+  "../dist/src/utils/squarePayments.js"
+);
 
 const main = async () => {
   const client = new MongoClient(MONGODB_URI);

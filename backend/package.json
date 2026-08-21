@@ -10,6 +10,7 @@
     "devv": "nodemon --exec tsx src/index.ts",
     "dev:node": "tsx watch src/index.ts",
     "build": "tsc",
+    "test:balance": "node scripts/test-balance-safety.js",
     "lint": "eslint . --max-warnings 0",
     "start": "node dist/src/index.js"
   },
