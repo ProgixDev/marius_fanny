@@ -17,6 +17,103 @@ import { sendOrderReceipt } from "../utils/emailService.js";
 import { orderServiceDate } from "../utils/dates.js";
 
 /**
+ * Montant RÉELLEMENT encaissé sur une facture Square, en dollars.
+ *
+ * Square expose, pour chaque demande de paiement, `totalCompletedAmountMoney`
+ * (ce qui a été payé) à côté de `computedAmountMoney` (ce qui était réclamé).
+ * On lit toujours l'encaissé — jamais le total de la commande, qui peut avoir
+ * AUGMENTÉ depuis l'émission de la facture (ajout d'articles).
+ *
+ * Retourne NaN si la facture ne permet pas de conclure : l'appelant doit alors
+ * s'abstenir plutôt que d'inventer un montant.
+ */
+const collectedDollarsFromInvoice = (invoice: any): number => {
+  const requests =
+    invoice?.paymentRequests || invoice?.payment_requests || [];
+  if (!Array.isArray(requests) || requests.length === 0) return NaN;
+
+  const readCents = (money: any): number | null => {
+    const amount = money?.amount;
+    if (amount === undefined || amount === null) return null;
+    return Number(amount);
+  };
+
+  let cents = 0;
+  let known = false;
+  for (const pr of requests) {
+    const completed = readCents(
+      pr?.totalCompletedAmountMoney ?? pr?.total_completed_amount_money,
+    );
+    if (completed !== null) {
+      cents += completed;
+      known = true;
+    }
+  }
+  if (known) return cents / 100;
+
+  // Repli : la facture est PAYÉE mais Square n'a pas détaillé l'encaissé →
+  // on retient le montant RÉCLAMÉ par la facture (son montant d'émission),
+  // qui reste la bonne référence même si la commande a grossi depuis.
+  let computedCents = 0;
+  let computedKnown = false;
+  for (const pr of requests) {
+    const computed = readCents(
+      pr?.computedAmountMoney ?? pr?.computed_amount_money,
+    );
+    if (computed !== null) {
+      computedCents += computed;
+      computedKnown = true;
+    }
+  }
+  return computedKnown ? computedCents / 100 : NaN;
+};
+
+/**
+ * Applique un encaissement Square à une commande, sans JAMAIS inventer d'argent.
+ *
+ * Avant, webhook et réconciliation faisaient `amountPaid = order.total` : une
+ * commande déjà payée à laquelle on ajoutait des articles était re-marquée
+ * « payée » au NOUVEAU total (bug des commandes 359/360/361 du 18 août). Le
+ * solde dû disparaissait de l'écran, l'encadré « comment payer la balance ? »
+ * ne s'affichait plus, et retirer un article réclamait un remboursement pour
+ * de l'argent jamais reçu.
+ *
+ * Ici on ne monte `amountPaid` qu'à hauteur de ce qui a vraiment été encaissé,
+ * et le statut est DÉDUIT de la comparaison avec le total courant.
+ * Retourne true si la commande est intégralement payée.
+ */
+const applyCollectedAmount = (order: any, collectedDollars: number): boolean => {
+  const total = order.total || 0;
+  // Jamais à la baisse : un acompte encaissé en magasin (hors Square) ne doit
+  // pas être effacé par la lecture d'une facture Square partielle.
+  const paid = Math.max(order.amountPaid || 0, collectedDollars || 0);
+  order.amountPaid = Number(paid.toFixed(2));
+
+  if (order.amountPaid >= total - 0.01) {
+    order.paymentStatus = "paid";
+    order.depositPaid = true;
+    order.balancePaid = true;
+    order.depositPaidAt = order.depositPaidAt || new Date();
+    order.balancePaidAt = order.balancePaidAt || new Date();
+    return true;
+  }
+
+  if (order.amountPaid > 0.01) {
+    order.paymentStatus = "deposit_paid";
+    order.depositPaid = true;
+    order.depositPaidAt = order.depositPaidAt || new Date();
+    order.balancePaid = false;
+    order.balancePaidAt = undefined;
+    return false;
+  }
+
+  order.paymentStatus = "unpaid";
+  order.depositPaid = false;
+  order.balancePaid = false;
+  return false;
+};
+
+/**
  * Send a payment-confirmation/receipt email exactly once for an order, after a
  * Square payment completes. Without this, customers who paid via an SMS payment
  * link never received any email (the SMS only carried the link, and the webhook
@@ -2019,19 +2116,35 @@ export const squareWebhook = async (req: Request, res: Response) => {
           if (order.status === "cancelled" || ((order as any).refunds?.length > 0)) {
             console.log(`⏭️ [WEBHOOK] Order ${order.orderNumber} already refunded/cancelled — NOT re-marking paid (invoice: ${invoiceId})`);
           } else {
-            const total = order.total || 0;
-            order.paymentStatus = "paid";
-            order.depositPaid = true;
-            order.balancePaid = true;
-            order.amountPaid = total;
-            order.depositPaidAt = order.depositPaidAt || new Date();
-            order.balancePaidAt = new Date();
-
-            await order.save();
-            console.log(`✅ [WEBHOOK] Order ${order.orderNumber} marked as PAID (invoice: ${invoiceId})`);
-            // Email a payment confirmation/receipt (covers SMS-link payers who
-            // otherwise never get any email). Idempotent — sent at most once.
-            await sendPaidConfirmationOnce(order._id);
+            // Montant RÉELLEMENT encaissé — pas le total de la commande, qui a
+            // pu grossir depuis l'émission de la facture (articles ajoutés).
+            let collected = collectedDollarsFromInvoice(invoice);
+            if (!Number.isFinite(collected)) {
+              try {
+                const r = await squareClient.invoices.get({ invoiceId });
+                collected = collectedDollarsFromInvoice((r as any)?.invoice || r);
+              } catch {
+                /* on retombe sur le contrôle ci-dessous */
+              }
+            }
+            if (!Number.isFinite(collected)) {
+              console.warn(
+                `⚠️ [WEBHOOK] Montant encaissé illisible pour ${order.orderNumber} (facture ${invoiceId}) — la réconciliation réessaiera`,
+              );
+            } else {
+              const fullyPaid = applyCollectedAmount(order, collected);
+              await order.save();
+              if (fullyPaid) {
+                console.log(`✅ [WEBHOOK] Order ${order.orderNumber} marked as PAID (invoice: ${invoiceId}, ${collected.toFixed(2)}$)`);
+                // Email a payment confirmation/receipt (covers SMS-link payers who
+                // otherwise never get any email). Idempotent — sent at most once.
+                await sendPaidConfirmationOnce(order._id);
+              } else {
+                console.log(
+                  `💰 [WEBHOOK] Order ${order.orderNumber} : ${collected.toFixed(2)}$ encaissés sur ${(order.total || 0).toFixed(2)}$ — solde de ${((order.total || 0) - (order.amountPaid || 0)).toFixed(2)}$ toujours dû`,
+                );
+              }
+            }
           }
         } else {
           console.warn(`⚠️ [WEBHOOK] No order found for invoice ${invoiceId}`);
@@ -2059,17 +2172,30 @@ export const squareWebhook = async (req: Request, res: Response) => {
           if (order.status === "cancelled" || ((order as any).refunds?.length > 0)) {
             console.log(`⏭️ [WEBHOOK] Order ${order.orderNumber} already refunded/cancelled — NOT re-marking paid (payment: ${paymentId})`);
           } else {
-            const total = order.total || 0;
-            order.paymentStatus = "paid";
-            order.depositPaid = true;
-            order.balancePaid = true;
-            order.amountPaid = total;
-            order.depositPaidAt = order.depositPaidAt || new Date();
-            order.balancePaidAt = new Date();
+            // Le montant du PAIEMENT fait foi. `payment.updated` peut arriver
+            // plusieurs fois pour le même paiement : on prend le maximum (via
+            // applyCollectedAmount), jamais une addition.
+            const paidCents = Number(
+              payment?.amountMoney?.amount ??
+                payment?.amount_money?.amount ??
+                payment?.totalMoney?.amount ??
+                payment?.total_money?.amount ??
+                NaN,
+            );
+            const collected = Number.isFinite(paidCents)
+              ? paidCents / 100
+              : order.total || 0;
+            const fullyPaid = applyCollectedAmount(order, collected);
 
             await order.save();
-            console.log(`✅ [WEBHOOK] Order ${order.orderNumber} marked as PAID (payment: ${paymentId})`);
-            await sendPaidConfirmationOnce(order._id);
+            if (fullyPaid) {
+              console.log(`✅ [WEBHOOK] Order ${order.orderNumber} marked as PAID (payment: ${paymentId}, ${collected.toFixed(2)}$)`);
+              await sendPaidConfirmationOnce(order._id);
+            } else {
+              console.log(
+                `💰 [WEBHOOK] Order ${order.orderNumber} : ${collected.toFixed(2)}$ encaissés sur ${(order.total || 0).toFixed(2)}$ — solde de ${((order.total || 0) - (order.amountPaid || 0)).toFixed(2)}$ toujours dû`,
+              );
+            }
           }
         }
       }
@@ -2170,16 +2296,53 @@ export async function reconcileUnpaidOrders(): Promise<number> {
       if (inv?.status !== "PAID") continue;
       if (order.status === "cancelled" || ((order as any).refunds?.length > 0)) continue;
 
-      order.paymentStatus = "paid";
-      order.depositPaid = true;
-      order.balancePaid = true;
-      order.amountPaid = order.total || 0;
-      order.depositPaidAt = order.depositPaidAt || new Date();
-      order.balancePaidAt = new Date();
+      // Ce que Square a VRAIMENT encaissé sur cette facture. Sans ça, une
+      // commande agrandie après paiement (articles ajoutés) était re-marquée
+      // payée au nouveau total et son solde dû s'évaporait.
+      const collected = collectedDollarsFromInvoice(inv);
+      if (!Number.isFinite(collected)) {
+        console.warn(
+          `⚠️ [RECONCILE] Montant encaissé illisible pour ${order.orderNumber} (facture ${order.squareInvoiceId}) — commande laissée telle quelle`,
+        );
+        continue;
+      }
+
+      const previous = {
+        amountPaid: order.amountPaid || 0,
+        paymentStatus: order.paymentStatus,
+      };
+      const fullyPaid = applyCollectedAmount(order, collected);
+
+      if (
+        Math.abs((order.amountPaid || 0) - previous.amountPaid) < 0.01 &&
+        order.paymentStatus === previous.paymentStatus
+      ) {
+        continue; // rien de neuf : on ne réécrit pas la commande à chaque cycle
+      }
+
+      order.changeHistory.push({
+        changedAt: new Date(),
+        field: "paymentStatus",
+        oldValue: previous.paymentStatus,
+        newValue: order.paymentStatus,
+        changeType: "payment_updated",
+        notes: fullyPaid
+          ? `Paiement Square confirmé : ${collected.toFixed(2)}$ encaissé (facture ${order.squareInvoiceId})`
+          : `Paiement Square partiel : ${collected.toFixed(2)}$ encaissé sur ${(order.total || 0).toFixed(2)}$ — reste ${((order.total || 0) - (order.amountPaid || 0)).toFixed(2)}$ à percevoir`,
+      } as any);
+
       await order.save();
       fixed++;
-      console.log(`🔄 [RECONCILE] Commande ${order.orderNumber} marquée PAYÉE (facture ${order.squareInvoiceId})`);
-      await sendPaidConfirmationOnce(order._id);
+      if (fullyPaid) {
+        console.log(`🔄 [RECONCILE] Commande ${order.orderNumber} marquée PAYÉE (facture ${order.squareInvoiceId}, ${collected.toFixed(2)}$)`);
+        await sendPaidConfirmationOnce(order._id);
+      } else {
+        // Facture payée mais commande agrandie depuis : il reste un solde. On
+        // n'envoie SURTOUT pas de reçu « payé » et on garde le solde visible.
+        console.log(
+          `🔄 [RECONCILE] Commande ${order.orderNumber} : ${collected.toFixed(2)}$ encaissés sur ${(order.total || 0).toFixed(2)}$ — solde de ${((order.total || 0) - (order.amountPaid || 0)).toFixed(2)}$ conservé`,
+        );
+      }
     } catch {
       /* facture introuvable / erreur réseau : on réessaiera au prochain cycle */
     }

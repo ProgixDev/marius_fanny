@@ -2007,6 +2007,12 @@ export const updateOrder = async (
       const previousBalancePaid = order.balancePaid;
       const previousPaymentStatus = order.paymentStatus;
 
+      // On FIGE le montant déjà encaissé sur la commande. Tant qu'il restait
+      // déduit (`amountPaid` à 0 sur les vieilles commandes), le back office
+      // recevait « 0$ payé » après modification : l'encadré « comment payer la
+      // balance ? » ne s'ouvrait pas et la commande restait affichée « payée ».
+      order.amountPaid = Number(estimatedPaidAmount.toFixed(2));
+
       if (estimatedPaidAmount >= total - epsilon) {
         order.depositPaid = true;
         order.balancePaid = true;

@@ -544,10 +544,27 @@ export function OrderManagement() {
       const paidAmount = (order as any).amountPaid || 0;
       const balance = (order.total || 0) - paidAmount;
       if (balance > 0.01 && paidAmount > 0.01) {
+        // Pastille CLIQUABLE : elle rouvre l'encadré « comment payer le
+        // solde ? ». L'encadré ne s'affichait qu'une fois, juste après la
+        // modification — fermé ou manqué, il n'y avait plus aucun moyen
+        // d'envoyer le lien du solde.
         return (
-          <span className="px-2 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-800">
+          <button
+            type="button"
+            title="Encaisser le solde (boutique, courriel ou SMS)"
+            onClick={(e) => {
+              e.stopPropagation();
+              setBalancePaymentModal({
+                open: true,
+                order,
+                amount: Number(balance.toFixed(2)),
+                clientName: `${order.client?.firstName || ""} ${order.client?.lastName || ""}`.trim(),
+              });
+            }}
+            className="px-2 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-800 hover:bg-orange-200 hover:ring-2 hover:ring-orange-300 transition-all cursor-pointer"
+          >
             Balance: {balance.toFixed(2)}$
-          </span>
+          </button>
         );
       }
     }
@@ -3842,8 +3859,15 @@ export function OrderManagement() {
               const newTotal = saved?.total ?? formData.total;
               const paidAmount = saved?.amountPaid ?? (selectedOrder as any).amountPaid ?? 0;
 
-              // Update payment status based on paid vs new total
-              if (paidAmount > 0.01) {
+              // État de paiement : le SERVEUR fait foi (il vient de recalculer
+              // le total et le solde). Garder l'ancien état local affichait
+              // « payée » une commande à laquelle on venait d'ajouter des
+              // articles non payés.
+              if (saved?.paymentStatus) {
+                updatedOrder.paymentStatus = saved.paymentStatus;
+                updatedOrder.depositPaid = saved.depositPaid ?? updatedOrder.depositPaid;
+                updatedOrder.balancePaid = saved.balancePaid ?? updatedOrder.balancePaid;
+              } else if (paidAmount > 0.01) {
                 if (newTotal <= paidAmount) {
                   // Fully paid or overpaid (refund case)
                   updatedOrder.paymentStatus = "paid";
