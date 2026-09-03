@@ -20,6 +20,11 @@ import {
   restoreQuantity,
   type OrderItemWithPacking,
 } from "../src/utils/orderItems";
+import {
+  derivePaymentMethod,
+  derivePaymentMethodLabel,
+  PAYMENT_METHOD_TEXT,
+} from "../src/utils/orderPayment";
 
 let passed = 0;
 let failed = 0;
@@ -142,6 +147,55 @@ test("un chiffre tapé remplace bien la valeur", () => {
 test("sans valeur mémorisée, on retombe sur 1 (jamais 0)", () => {
   assert.strictEqual(restoreQuantity(0, undefined), 1);
   assert.strictEqual(restoreQuantity(0, 0), 1);
+});
+
+// ---------------------------------------------------------------------------
+// Nature du paiement. L'ancienne deduction testait paymentType AVANT Square :
+// une commande payee par carte s'affichait donc « en magasin », et « payer par
+// lien » redevenait « payer en magasin » a la reouverture du formulaire.
+// ---------------------------------------------------------------------------
+console.log("\n--- Nature du paiement : ce que la commande dit vraiment ---");
+
+test("payee par carte : paymentType 'full' ne masque plus Square", () => {
+  // Le cas exact du bug : full + encaissement Square reel.
+  const order = { paymentType: "full", squarePaymentId: "pay_abc", squareInvoiceId: "inv_1" };
+  assert.strictEqual(derivePaymentMethodLabel(order), "card");
+  assert.strictEqual(derivePaymentMethod(order), "payment_link");
+});
+
+test("lien de paiement envoye mais pas encore paye", () => {
+  const order = { paymentType: "full", squareInvoiceId: "inv:0-ABC" };
+  assert.strictEqual(derivePaymentMethodLabel(order), "payment_link");
+  assert.strictEqual(derivePaymentMethod(order), "payment_link");
+});
+
+test("vraiment paye en magasin : aucune trace Square", () => {
+  const order = { paymentType: "full" };
+  assert.strictEqual(derivePaymentMethodLabel(order), "in_store");
+  assert.strictEqual(derivePaymentMethod(order), "in_store");
+});
+
+test("client gouvernemental : facture, jamais « en magasin »", () => {
+  const order = { paymentType: "full", billingKind: "gouvernement" };
+  assert.strictEqual(derivePaymentMethodLabel(order), "government_invoice");
+  assert.strictEqual(derivePaymentMethod(order), "in_store");
+});
+
+test("acompte avec lien : reste un lien de paiement", () => {
+  const order = { paymentType: "deposit", squareInvoiceId: "inv_2" };
+  assert.strictEqual(derivePaymentMethodLabel(order), "payment_link");
+});
+
+test("une valeur explicite est respectee si elle existe un jour", () => {
+  assert.strictEqual(derivePaymentMethodLabel({ paymentMethod: "payment_link" }), "payment_link");
+  assert.strictEqual(derivePaymentMethodLabel({ paymentMethod: "in_store", squareInvoiceId: "x" }), "in_store");
+});
+
+test("chaque nature a un libelle affichable", () => {
+  for (const key of ["card", "payment_link", "government_invoice", "in_store"] as const) {
+    assert.ok(PAYMENT_METHOD_TEXT[key].title.length > 0);
+    assert.ok(PAYMENT_METHOD_TEXT[key].badge.length > 0);
+  }
 });
 
 console.log(`\n${passed} réussis, ${failed} échoués\n`);

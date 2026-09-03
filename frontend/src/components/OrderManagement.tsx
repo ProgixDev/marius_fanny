@@ -68,14 +68,42 @@ import {
   buildOrderItemsUpdatePayload,
   type OrderItemWithPacking,
 } from "../utils/orderItems";
+import {
+  derivePaymentMethod,
+  derivePaymentMethodLabel,
+  PAYMENT_METHOD_TEXT,
+  type PaymentMethodLabel,
+} from "../utils/orderPayment";
 
 interface OrderWithPacking extends Omit<Order, 'items'> {
   items: OrderItemWithPacking[];
   paymentMethod?: "in_store" | "payment_link";
+  /** Nature precise du paiement (carte / lien / facture / magasin). */
+  paymentMethodLabel?: PaymentMethodLabel;
   paymentLinkChannel?: "email" | "sms";
   squarePaymentId?: string;
   squareInvoiceId?: string;
 }
+
+// Formateurs Intl construits UNE seule fois : ils etaient recrees a chaque
+// cellule rendue, soit des milliers d'allocations par frappe dans la
+// recherche. Intl est l'un des constructeurs les plus couteux du navigateur.
+const CURRENCY_FMT = new Intl.NumberFormat("fr-CA", {
+  style: "currency",
+  currency: "CAD",
+});
+const TORONTO_DATE_FMT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Toronto",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const TORONTO_TIME_FMT = new Intl.DateTimeFormat("fr-CA", {
+  timeZone: "America/Toronto",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
 
 export function OrderManagement() {
   const [orders, setOrders] = useState<OrderWithPacking[]>([]);
@@ -100,6 +128,11 @@ export function OrderManagement() {
   const [orderToDelete, setOrderToDelete] = useState<OrderWithPacking | null>(null);
   const [orderToCancel, setOrderToCancel] = useState<OrderWithPacking | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Chargement de la liste : sans lui, l'écran restait sur « Aucune donnée
+  // trouvée » pendant tout le téléchargement, et un échec en était
+  // indiscernable.
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
   const [editNotification, setEditNotification] = useState<{ type: "balance" | "refund" | "nochange"; amount: number; clientName: string } | null>(null);
   const [balancePaymentModal, setBalancePaymentModal] = useState<{ open: boolean; order: OrderWithPacking | null; amount: number; clientName: string }>({ open: false, order: null, amount: 0, clientName: "" });
   const [isSendingBalanceLink, setIsSendingBalanceLink] = useState(false);
@@ -192,6 +225,8 @@ export function OrderManagement() {
   // Charger les commandes depuis l'API au montage
   useEffect(() => {
     const fetchOrders = async () => {
+      setIsLoadingOrders(true);
+      setOrdersError(null);
       try {
         const limit = 100;
         const maxPages = 20; // safety cap (up to 2000 orders)
@@ -214,33 +249,18 @@ export function OrderManagement() {
         }
         
         if (items.length > 0) {
-          // Debug: log billing info for all government orders
-          const govOrders = items.filter((o: any) => o.billingKind === "gouvernement");
-          if (govOrders.length > 0) {
-            console.log("📦 Government orders from API:", govOrders.map((o: any) => ({
-              orderNumber: o.orderNumber,
-              billingKind: o.billingKind,
-              paymentDueDate: o.paymentDueDate,
-              paymentStatus: o.paymentStatus
-            })));
-          }
-          
           const mapped: OrderWithPacking[] = items.map((o: any) => {
             const mappedSource: OrderWithPacking["source"] =
               o.source === "online" || o.source === "phone" || o.source === "in_store"
                 ? o.source
                 : "in_store";
 
-            const mappedPaymentMethod: NonNullable<OrderWithPacking["paymentMethod"]> =
-              o.paymentMethod === "in_store" || o.paymentMethod === "payment_link"
-                ? o.paymentMethod
-                : o.paymentType === "full"
-                  ? "in_store"
-                  : o.paymentType === "deposit"
-                    ? "payment_link"
-                    : o.squarePaymentId || o.squareInvoiceId
-                      ? "payment_link"
-                      : "in_store";
+            // Un encaissement Square constaté prime sur toute déduction : voir
+            // utils/orderPayment.ts. L'ancien ordre testait paymentType avant
+            // Square, si bien qu'une commande payée par carte s'affichait
+            // « en magasin » et que « payer par lien » se perdait à la
+            // réouverture du formulaire de modification.
+            const mappedPaymentMethod = derivePaymentMethod(o);
 
             // S'assurer que les items ont des produits avec des noms
             const orderItems = mapApiItemsToLocal(o.items);
@@ -313,6 +333,7 @@ export function OrderManagement() {
               status: o.status || "pending",
               source: mappedSource,
               paymentMethod: mappedPaymentMethod,
+              paymentMethodLabel: derivePaymentMethodLabel(o),
               paymentLinkChannel: o.paymentLinkChannel || "email",
               notes: o.notes,
               changeHistory: o.changeHistory,
@@ -326,7 +347,14 @@ export function OrderManagement() {
           setFilteredOrders(applyOrderFilters(mapped));
         }
       } catch (err) {
+        // Un échec silencieux ressemblait exactement à « aucune commande » :
+        // le personnel croyait la liste vide alors que le serveur répondait mal.
         console.error("Failed to fetch orders:", err);
+        setOrdersError(
+          "Impossible de charger les commandes. Vérifiez la connexion, puis rafraîchissez la page.",
+        );
+      } finally {
+        setIsLoadingOrders(false);
       }
     };
 
@@ -686,12 +714,7 @@ export function OrderManagement() {
       dateStr = String(order.deliveryDate).slice(0, 10);
     } else if (order.pickupDate) {
       try {
-        dateStr = new Intl.DateTimeFormat("en-CA", {
-          timeZone: "America/Toronto",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        }).format(new Date(order.pickupDate));
+        dateStr = TORONTO_DATE_FMT.format(new Date(order.pickupDate));
       } catch {
         /* ignore */
       }
@@ -704,12 +727,7 @@ export function OrderManagement() {
       timeStr = order.deliveryTimeSlot.trim();
     } else if (order.pickupDate) {
       try {
-        const hhmm = new Intl.DateTimeFormat("fr-CA", {
-          timeZone: "America/Toronto",
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        }).format(new Date(order.pickupDate));
+        const hhmm = TORONTO_TIME_FMT.format(new Date(order.pickupDate));
         if (hhmm && hhmm !== "00:00") timeStr = hhmm;
       } catch {
         /* ignore */
@@ -798,10 +816,7 @@ export function OrderManagement() {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("fr-CA", {
-      style: "currency",
-      currency: "CAD",
-    }).format(amount);
+    return CURRENCY_FMT.format(amount);
   };
 
   const formatOrderNumber = (orderNumber: string) => {
@@ -2562,16 +2577,31 @@ export function OrderManagement() {
           ))}
         </div>
 
-        <DataTable
-          data={filteredOrders}
-          columns={viewMode === "simple" ? columns : completeColumns}
-          filters={[]}
-          searchPlaceholder="Rechercher par numero, client ou telephone..."
-          getSearchValue={getSearchValue}
-          itemsPerPage={10}
-          selectable={false}
-          rowClassName={(order: OrderWithPacking) => getOrderColor(order)}
-        />
+        {ordersError && (
+          <div className="flex items-center justify-center py-8 rounded-lg border border-red-200 bg-red-50">
+            <span className="text-red-700 text-sm">{ordersError}</span>
+          </div>
+        )}
+
+        {isLoadingOrders && !ordersError ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#337957]"></div>
+            <span className="ml-3 text-gray-600">Chargement des commandes...</span>
+          </div>
+        ) : (
+          !ordersError && (
+            <DataTable
+              data={filteredOrders}
+              columns={viewMode === "simple" ? columns : completeColumns}
+              filters={[]}
+              searchPlaceholder="Rechercher par numero, client ou telephone..."
+              getSearchValue={getSearchValue}
+              itemsPerPage={10}
+              selectable={false}
+              rowClassName={(order: OrderWithPacking) => getOrderColor(order)}
+            />
+          )
+        )}
       </div>
 
       {/* MODAL DES PRODUITS AVEC BOUTONS EMBALLER */}
@@ -3159,16 +3189,22 @@ export function OrderManagement() {
                           Méthode de paiement
                         </div>
                         <div className="text-sm text-gray-600 mt-1">
-                          {selectedOrder.paymentMethod === "payment_link"
-                            ? "Lien de paiement envoyé"
-                            : "Paiement en magasin"}
+                          {
+                            PAYMENT_METHOD_TEXT[
+                              selectedOrder.paymentMethodLabel ??
+                                derivePaymentMethodLabel(selectedOrder as any)
+                            ].title
+                          }
                         </div>
                       </div>
                       <div className="text-right">
                         <span className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm font-medium">
-                          {selectedOrder.paymentMethod === "payment_link"
-                            ? "Lien de paiement"
-                            : "En magasin"}
+                          {
+                            PAYMENT_METHOD_TEXT[
+                              selectedOrder.paymentMethodLabel ??
+                                derivePaymentMethodLabel(selectedOrder as any)
+                            ].badge
+                          }
                         </span>
                       </div>
                     </div>
