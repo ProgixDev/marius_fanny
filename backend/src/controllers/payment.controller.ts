@@ -21,6 +21,52 @@ import {
   collectedDollarsFromInvoice,
   applyCollectedAmount,
 } from "../utils/squarePayments.js";
+// Construction du corps de commande Square : les taxes y sont posées via le
+// mécanisme natif de Square (section « Taxes »), plus jamais comme articles.
+import {
+  buildSquareOrderBody,
+  readSquareOrderAmounts,
+  isBalanceOnlyLineSet,
+} from "../utils/squareOrder.js";
+
+/**
+ * Réaligne la commande sur ce que Square a réellement calculé.
+ *
+ * L'application arrondit les taxes une fois sur le total ; Square les arrondit
+ * ligne par ligne. L'écart tient en quelques cents, mais c'est le montant de
+ * Square que le client paie : si la base de données garde l'autre chiffre, la
+ * commande est ensuite vue comme partiellement payée (ou trop payée) et la
+ * réconciliation dérive. On aligne donc la base sur Square, et on trace.
+ */
+const reconcileOrderWithSquareAmounts = async (
+  orderDoc: any,
+  orderResponse: any,
+): Promise<void> => {
+  try {
+    const amounts = readSquareOrderAmounts(orderResponse);
+    if (!amounts || !orderDoc) return;
+
+    const previousTotal = Number(orderDoc.total || 0);
+    if (!amounts.total || Math.abs(amounts.total - previousTotal) < 0.005) return;
+
+    console.warn(
+      `⚠️ [TAXES] Écart d'arrondi avec Square sur ${orderDoc.orderNumber}: ` +
+        `${previousTotal.toFixed(2)}$ (app) → ${amounts.total.toFixed(2)}$ (Square). ` +
+        `Alignement de la commande sur Square.`,
+    );
+
+    orderDoc.taxAmount = amounts.tax;
+    if (amounts.tps || amounts.tvq) {
+      orderDoc.tpsAmount = amounts.tps;
+      orderDoc.tvqAmount = amounts.tvq;
+    }
+    orderDoc.total = amounts.total;
+    await orderDoc.save();
+  } catch (error: any) {
+    // Jamais bloquant : une facture correcte vaut mieux qu'un échec complet.
+    console.error("⚠️ [TAXES] Réalignement sur Square impossible:", error?.message || error);
+  }
+};
 
 /**
  * Send a payment-confirmation/receipt email exactly once for an order, after a
@@ -670,76 +716,36 @@ export const createInvoice = async (req: Request, res: Response) => {
       /* non bloquant */
     }
 
-    // Build line items for the invoice
-    const lineItems = items.map((item: any) => ({
-      name: item.name,
-      quantity: item.quantity.toString(),
-      itemType: "ITEM",
-      basePriceMoney: {
-        amount: BigInt(Math.round(item.unitPrice * 100)),
-        currency: "CAD",
-      },
-    }));
+    // Les articles reçus dans le corps de la requête ne portent que
+    // {name, quantity, unitPrice} : impossible d'en déduire la taxabilité. On
+    // repart donc de la commande en base, qui a les productId — sauf pour une
+    // facture de SOLDE, dont la ligne forfaitaire inclut déjà les taxes.
+    const invoiceOrderDoc = await Order.findById(orderId).catch(() => null);
+    const useOrderItems =
+      !isBalanceOnlyLineSet(items) &&
+      Array.isArray((invoiceOrderDoc as any)?.items) &&
+      (invoiceOrderDoc as any).items.length > 0;
 
-    // Taxes en DEUX lignes distinctes (TPS / TVQ). On lit le découpage réel
-    // stocké sur la commande ; à défaut, on répartit le total par proportion.
-    if (taxAmount > 0) {
-      const invOrder = await Order.findById(orderId)
-        .select("tpsAmount tvqAmount")
-        .lean()
-        .catch(() => null);
-      const tvq =
-        (invOrder as any)?.tvqAmount != null
-          ? (invOrder as any).tvqAmount
-          : taxAmount * (0.09975 / 0.14975);
-      const tps =
-        (invOrder as any)?.tpsAmount != null
-          ? (invOrder as any).tpsAmount
-          : taxAmount - tvq;
-      if (tps > 0) {
-        lineItems.push({
-          name: "TPS (5 %)",
-          quantity: "1",
-          itemType: "ITEM",
-          basePriceMoney: { amount: BigInt(Math.round(tps * 100)), currency: "CAD" },
-        });
-      }
-      if (tvq > 0) {
-        lineItems.push({
-          name: "TVQ (9,975 %)",
-          quantity: "1",
-          itemType: "ITEM",
-          basePriceMoney: { amount: BigInt(Math.round(tvq * 100)), currency: "CAD" },
-        });
-      }
-    }
-
-    // Add delivery fee as a line item if applicable
-    if (deliveryFee > 0) {
-      lineItems.push({
-        name: "Frais de livraison",
-        quantity: "1",
-        itemType: "ITEM",
-        basePriceMoney: {
-          amount: BigInt(Math.round(deliveryFee * 100)),
-          currency: "CAD",
-        },
-      });
-    }
+    const squareOrderBody = await buildSquareOrderBody({
+      locationId: squareConfig.locationId!,
+      referenceId: orderId,
+      orderItems: useOrderItems ? ((invoiceOrderDoc as any).items as any) : null,
+      fallbackLines: items,
+      deliveryFee: useOrderItems ? deliveryFee : 0,
+    });
 
     // Calculate due date (default to 7 days from now)
     const invoiceDueDate = dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const orderRequest: any = {
       idempotencyKey: randomUUID(),
-      order: {
-        locationId: squareConfig.locationId,
-        referenceId: orderId,
-        lineItems,
-      },
+      order: squareOrderBody,
     };
 
     const orderResponse = await squareClient.orders.create(orderRequest);
+    if (useOrderItems) {
+      await reconcileOrderWithSquareAmounts(invoiceOrderDoc, orderResponse);
+    }
     const squareOrderId = (orderResponse as any)?.order?.id;
 
     if (!squareOrderId) {
@@ -854,11 +860,7 @@ export const createInvoice = async (req: Request, res: Response) => {
           // products + a balance recap — otherwise the message just says
           // "Solde commande MF-…" which is useless for them. We rebuild the
           // item list from the order doc whenever we detect this pattern.
-          const isBalanceInvoice =
-            Array.isArray(items) &&
-            items.length === 1 &&
-            typeof items[0]?.name === "string" &&
-            /^solde commande/i.test(items[0].name);
+          const isBalanceInvoice = isBalanceOnlyLineSet(items);
 
           const orderItems = ((orderDoc as any)?.items || []) as Array<any>;
           const emailItems = isBalanceInvoice && orderItems.length > 0
@@ -1084,6 +1086,7 @@ export async function resendInvoiceLinkForOrder(order: any): Promise<{
 
   if (status === "PAID") return { success: false, code: "ALREADY_PAID" };
   if (status === "CANCELED") return { success: false, code: "CANCELED" };
+
   if (!publicUrl) return { success: false, code: "NO_URL" };
 
   const channel = order.paymentLinkChannel || "email";
@@ -2309,52 +2312,13 @@ export async function createInvoiceForExistingOrder(
   // INVALID_PHONE_NUMBER errors.
   const phoneForSquare = channel === "sms" ? normalizedPhone : null;
 
-  const lineItems: any[] = items.map((item) => ({
-    name: item.name,
-    quantity: item.quantity.toString(),
-    itemType: "ITEM",
-    basePriceMoney: {
-      amount: BigInt(Math.round(item.unitPrice * 100)),
-      currency: "CAD",
-    },
-  }));
-  // TPS et TVQ en DEUX lignes distinctes (certains produits n'ont que la TPS).
-  // On utilise le découpage réel stocké sur la commande ; à défaut (anciennes
-  // commandes), on répartit le total par proportion.
-  {
-    const tvq =
-      (order as any).tvqAmount != null
-        ? (order as any).tvqAmount
-        : taxAmount * (0.09975 / 0.14975);
-    const tps =
-      (order as any).tpsAmount != null
-        ? (order as any).tpsAmount
-        : taxAmount - tvq;
-    if (tps > 0) {
-      lineItems.push({
-        name: "TPS (5 %)",
-        quantity: "1",
-        itemType: "ITEM",
-        basePriceMoney: { amount: BigInt(Math.round(tps * 100)), currency: "CAD" },
-      });
-    }
-    if (tvq > 0) {
-      lineItems.push({
-        name: "TVQ (9,975 %)",
-        quantity: "1",
-        itemType: "ITEM",
-        basePriceMoney: { amount: BigInt(Math.round(tvq * 100)), currency: "CAD" },
-      });
-    }
-  }
-  if (deliveryFee > 0) {
-    lineItems.push({
-      name: "Frais de livraison",
-      quantity: "1",
-      itemType: "ITEM",
-      basePriceMoney: { amount: BigInt(Math.round(deliveryFee * 100)), currency: "CAD" },
-    });
-  }
+  // TPS/TVQ posées nativement par Square, ligne par ligne (voir squareOrder.ts).
+  const squareOrderBody = await buildSquareOrderBody({
+    locationId: squareConfig.locationId!,
+    referenceId: orderId,
+    orderItems: order.items as any,
+    deliveryFee,
+  });
 
   const invoiceDueDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     .toISOString()
@@ -2362,12 +2326,9 @@ export async function createInvoiceForExistingOrder(
 
   const orderResp = await squareClient.orders.create({
     idempotencyKey: randomUUID(),
-    order: {
-      locationId: squareConfig.locationId,
-      referenceId: orderId,
-      lineItems,
-    },
+    order: squareOrderBody,
   });
+  await reconcileOrderWithSquareAmounts(order, orderResp);
   const squareOrderId = (orderResp as any)?.order?.id;
   if (!squareOrderId) throw new Error("Square order id missing");
 

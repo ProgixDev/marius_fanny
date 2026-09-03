@@ -51,6 +51,40 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  * - Article personnalisé (productId <= 0) : `taxable` → both, sinon none.
  */
 export async function computeTaxBreakdown(items: TaxableItem[]): Promise<TaxBreakdown> {
+  const modes = await computeItemTaxModes(items);
+
+  let tps = 0;
+  let tvq = 0;
+  items.forEach((item, index) => {
+    const amount = item.amount || 0;
+    const mode = modes[index];
+    if (mode === "both") {
+      tps += amount * TPS_RATE;
+      tvq += amount * TVQ_RATE;
+    } else if (mode === "gst_only") {
+      tps += amount * TPS_RATE;
+    }
+    // "none" → rien
+  });
+
+  tps = round2(tps);
+  tvq = round2(tvq);
+  return { tps, tvq, total: round2(tps + tvq) };
+}
+
+/**
+ * Mode de taxe EFFECTIF de chaque article, dans le même ordre que `items`.
+ *
+ * Applique exactement les mêmes règles que `computeTaxBreakdown` (dont elle est
+ * désormais la base) : `taxMode` du produit, règle des 6 sur les viennoiseries
+ * et pâtisseries, et articles personnalisés.
+ *
+ * Nécessaire pour Square : les taxes doivent y être posées ligne par ligne
+ * (`appliedTaxes`), puisqu'un même bon de commande peut mêler des articles à
+ * TPS+TVQ, à TPS seule et exonérés. Un taux global unique ne peut pas
+ * représenter ça.
+ */
+export async function computeItemTaxModes(items: TaxableItem[]): Promise<TaxMode[]> {
   const ids = Array.from(new Set(items.map((i) => i.productId).filter((id) => id > 0)));
   const products = ids.length
     ? await Product.find({ id: { $in: ids }, deletedAt: { $exists: false } })
@@ -74,39 +108,20 @@ export async function computeTaxBreakdown(items: TaxableItem[]): Promise<TaxBrea
   }, 0);
   const bakedGoodsExempt = bakedGoodsCount >= 6;
 
-  let tps = 0;
-  let tvq = 0;
-  for (const item of items) {
-    const amount = item.amount || 0;
-
+  return items.map((item) => {
     // Article personnalisé : pas de fiche produit à consulter.
     if ((item.productId || 0) <= 0) {
       const taxable = item.taxable !== undefined ? !!item.taxable : true;
-      if (taxable) {
-        tps += amount * TPS_RATE;
-        tvq += amount * TVQ_RATE;
-      }
-      continue;
+      return taxable ? "both" : "none";
     }
 
     const p = productMap.get(item.productId);
     const isBakedGood = isViennoiserieProduct(p) || isPatisserieProduct(p);
     // Règle des 6 : viennoiseries/pâtisseries exonérées à 6 unités et plus.
-    if (isBakedGood && bakedGoodsExempt) continue;
+    if (isBakedGood && bakedGoodsExempt) return "none";
 
-    const mode = productTaxMode(p);
-    if (mode === "both") {
-      tps += amount * TPS_RATE;
-      tvq += amount * TVQ_RATE;
-    } else if (mode === "gst_only") {
-      tps += amount * TPS_RATE;
-    }
-    // "none" → rien
-  }
-
-  tps = round2(tps);
-  tvq = round2(tvq);
-  return { tps, tvq, total: round2(tps + tvq) };
+    return productTaxMode(p);
+  });
 }
 
 /**
