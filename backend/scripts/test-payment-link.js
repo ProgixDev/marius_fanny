@@ -298,5 +298,71 @@ test("l'ordre des articles n'invente pas un changement", () => {
   assert.deepStrictEqual(describeItemChanges(before, after), []);
 });
 
+
+// ---------------------------------------------------------------------------
+// Delai de preparation + heure limite de 14 h. Le CRM refusait les produits a
+// 2 jours de preparation commandes apres 14 h, alors que la limite ne concerne
+// que ce qui pourrait partir des le lendemain.
+// ---------------------------------------------------------------------------
+const { minimumServiceDate, preparationDays, cutoffApplies } = await import(
+  "../dist/src/utils/leadTime.js"
+);
+
+const LUNDI = "2026-09-07"; // lundi
+const MARDI = "2026-09-08";
+const MERCREDI = "2026-09-09";
+const JEUDI = "2026-09-10";
+
+console.log("\n--- Heure limite de 14 h : ce qu'elle doit vraiment bloquer ---");
+
+test("produit 1 jour, commande lundi 13 h : recuperable mardi", () => {
+  assert.strictEqual(minimumServiceDate(LUNDI, 1, false), MARDI);
+});
+
+test("produit 1 jour, commande lundi 15 h : repousse a mercredi", () => {
+  assert.strictEqual(minimumServiceDate(LUNDI, 1, true), MERCREDI);
+});
+
+test("produit 2 jours, commande lundi 13 h : mercredi", () => {
+  assert.strictEqual(minimumServiceDate(LUNDI, 2, false), MERCREDI);
+});
+
+test("produit 2 jours, commande lundi 15 h : mercredi AUSSI (le bug)", () => {
+  // Avant correction : jeudi. La limite de 14 h ne doit pas s'y appliquer.
+  assert.strictEqual(minimumServiceDate(LUNDI, 2, true), MERCREDI);
+});
+
+test("produit 2 jours, commande lundi 18 h : toujours mercredi", () => {
+  assert.strictEqual(minimumServiceDate(LUNDI, 2, true), MERCREDI);
+});
+
+test("produit 3 jours : la limite ne s'applique pas non plus", () => {
+  assert.strictEqual(minimumServiceDate(LUNDI, 3, true), JEUDI);
+  assert.strictEqual(minimumServiceDate(LUNDI, 3, false), JEUDI);
+});
+
+test("sans delai de preparation, passe 14 h : demain reste bloque", () => {
+  assert.strictEqual(minimumServiceDate(LUNDI, 0, true), MARDI);
+  assert.strictEqual(minimumServiceDate(LUNDI, 0, false), LUNDI);
+});
+
+test("la limite ne s'applique qu'aux delais de 0 ou 1 jour", () => {
+  assert.strictEqual(cutoffApplies(0, true), true);
+  assert.strictEqual(cutoffApplies(1, true), true);
+  assert.strictEqual(cutoffApplies(2, true), false);
+  assert.strictEqual(cutoffApplies(1, false), false);
+});
+
+test("heures converties en jours, arrondi vers le haut", () => {
+  assert.strictEqual(preparationDays(0), 0);
+  assert.strictEqual(preparationDays(24), 1);
+  assert.strictEqual(preparationDays(25), 2);
+  assert.strictEqual(preparationDays(48), 2);
+});
+
+test("changement de mois : la date reste valide", () => {
+  assert.strictEqual(minimumServiceDate("2026-09-30", 2, true), "2026-10-02");
+});
+
 console.log(`\n${passed} reussis, ${failed} echoues\n`);
 if (failed > 0) process.exit(1);

@@ -702,7 +702,10 @@ export default function OrderForm({
     // alors que la date respectait pourtant le délai affiché.
     const prepDays = Math.ceil(product.preparationTimeHours / 24);
     const m = getMontrealNow();
-    const cutoffPenalty = m.hour * 60 + m.minute >= CUTOFF_MINUTES ? 1 : 0;
+    // L'heure limite ne vise QUE ce qui pourrait partir dès demain : un produit
+    // à 2 jours de préparation ne sort pas avant après-demain de toute façon.
+    const cutoffPenalty =
+      prepDays <= 1 && m.hour * 60 + m.minute >= CUTOFF_MINUTES ? 1 : 0;
     const d = new Date(Date.UTC(m.year, m.month - 1, m.day, 12, 0, 0));
     d.setUTCDate(d.getUTCDate() + prepDays + cutoffPenalty);
     const minStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
@@ -749,7 +752,10 @@ export default function OrderForm({
     const prepDays = Math.ceil(maxPrepHours / 24);
 
     const m = getMontrealNow();
-    const cutoffPenalty = m.hour * 60 + m.minute >= CUTOFF_MINUTES ? 1 : 0;
+    // Même règle que ci-dessus : la limite de 14 h ne s'applique qu'aux
+    // commandes qui pourraient être servies dès demain.
+    const cutoffPenalty =
+      prepDays <= 1 && m.hour * 60 + m.minute >= CUTOFF_MINUTES ? 1 : 0;
 
     // Build a Date that represents Montréal's today at noon (avoids DST/TZ
     // wobble), then add the lead-time days.

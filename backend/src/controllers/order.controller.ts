@@ -35,6 +35,7 @@ import {
 } from "./payment.controller.js";
 import { shouldReissuePaymentLink, reissuePaymentLink } from "../utils/paymentLink.js";
 import { describeItemChanges, shouldRecordItemChange } from "../utils/orderChanges.js";
+import { preparationDays, minimumServiceDate } from "../utils/leadTime.js";
 import {
   calculatePromoDiscount,
   isPromoCurrentlyValid,
@@ -157,17 +158,12 @@ export const createOrder = async (
         },
         0,
       );
-      const prepDays = Math.ceil(maxPrepHours / 24);
+      const prepDays = preparationDays(maxPrepHours);
 
-      // Build the minimum date in Montreal time, then add the 14h-cutoff
-      // penalty (+1 day if ordering past the cutoff).
+      // Délai de préparation + heure limite de 14 h — voir utils/leadTime.ts :
+      // la limite ne s'applique qu'à ce qui pourrait être servi dès demain.
       const [tY, tM, tD] = todayStr.split("-").map((s) => parseInt(s, 10));
-      const minDate = new Date(Date.UTC(tY, tM - 1, tD));
-      minDate.setUTCDate(minDate.getUTCDate() + prepDays);
-      if (pastCutoff) {
-        minDate.setUTCDate(minDate.getUTCDate() + 1);
-      }
-      const minDateStr = minDate.toISOString().split("T")[0];
+      const minDateStr = minimumServiceDate(todayStr, prepDays, pastCutoff);
 
       if (targetDateStr < minDateStr) {
         // Distinguish the "tomorrow blocked because past 14h" case for a

@@ -224,7 +224,11 @@ const Checkout: React.FC = () => {
     // margin so customers don't see two different times in the UI). Past
     // the cutoff, the lead time is bumped by one day. Date constructor
     // handles month/year overflow when day > daysInMonth.
-    const cutoffPenalty = isPastCutoff(m) ? 1 : 0;
+    //
+    // L'heure limite ne concerne QUE ce qui pourrait partir dès demain. Un
+    // produit demandant 2 jours de préparation ne sort pas avant après-demain
+    // de toute façon : la pénalité le repoussait d'un jour sans raison.
+    const cutoffPenalty = prepDays <= 1 && isPastCutoff(m) ? 1 : 0;
     return buildLocalMidnight(m.year, m.month, m.day + prepDays + cutoffPenalty);
   };
 
