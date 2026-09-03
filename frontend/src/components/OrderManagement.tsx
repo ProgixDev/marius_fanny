@@ -86,6 +86,47 @@ interface OrderWithPacking extends Omit<Order, 'items'> {
   squareInvoiceId?: string;
 }
 
+// Convertit les articles renvoyés par l'API en articles d'affichage. Source
+// UNIQUE : utilisée au chargement de la liste comme après un enregistrement.
+// Auparavant la reconstruction post-enregistrement était réécrite à la main et
+// oubliait `selectedOptions` — les options (ex. « Pains : Pita ») disparaissaient
+// de l'écran, puis étaient effacées en base au premier changement de statut.
+const mapApiItemsToLocal = (apiItems: any[]): OrderItemWithPacking[] =>
+  (apiItems || []).map((item: any, idx: number) => {
+    let productName = `Produit #${item.productId}`; // Nom par defaut
+    let productPrice = item.unitPrice || 0;
+    if (item.product) {
+      productName = item.product.name || productName;
+      productPrice = item.product.price || productPrice;
+    } else if (item.productName) {
+      productName = item.productName;
+    }
+
+    return {
+      id: idx + 1,
+      orderId: 0,
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      subtotal: item.amount || item.quantity * item.unitPrice,
+      // Sans ça, un item personnalisé non taxable redevenait taxable
+      // dès qu'on rouvrait la commande pour la modifier.
+      taxable: item.taxable,
+      productionStatus: item.productionStatus || "pending",
+      notes: item.notes,
+      selectedOptions:
+        item.selectedOptions && Object.keys(item.selectedOptions).length > 0
+          ? item.selectedOptions
+          : undefined,
+      product: {
+        id: item.productId,
+        name: productName,
+        price: productPrice,
+      },
+      isPacked: item.productionStatus === "ready" || item.isPacked === true,
+    };
+  });
+
 const buildOrderItemsUpdatePayload = (items: OrderItemWithPacking[]) =>
   items.map((item) => ({
     productId: item.productId,
@@ -271,40 +312,7 @@ export function OrderManagement() {
                       : "in_store";
 
             // S'assurer que les items ont des produits avec des noms
-            const orderItems = (o.items || []).map((item: any, idx: number) => {
-              let productName = `Produit #${item.productId}`; // Nom par defaut
-              let productPrice = item.unitPrice || 0;
-              if (item.product) {
-                productName = item.product.name || productName;
-                productPrice = item.product.price || productPrice;
-              } else if (item.productName) {
-                productName = item.productName;
-              }
-              
-              return {
-                id: idx + 1,
-                orderId: 0,
-                productId: item.productId,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                subtotal: item.amount || (item.quantity * item.unitPrice),
-                // Sans ça, un item personnalisé non taxable redevenait taxable
-                // dès qu'on rouvrait la commande pour la modifier.
-                taxable: item.taxable,
-                productionStatus: item.productionStatus || "pending",
-                notes: item.notes,
-                selectedOptions:
-                  item.selectedOptions && Object.keys(item.selectedOptions).length > 0
-                    ? item.selectedOptions
-                    : undefined,
-                product: {
-                  id: item.productId,
-                  name: productName,
-                  price: productPrice
-                },
-                isPacked: item.productionStatus === "ready" || item.isPacked === true
-              };
-            });
+            const orderItems = mapApiItemsToLocal(o.items);
 
               return {
                 id: o._id || o.id,
@@ -3827,24 +3835,12 @@ export function OrderManagement() {
                         isDefault: selectedOrder.deliveryAddress?.isDefault || false,
                       }
                     : undefined,
-                items: formData.items
-                  .filter((item) => (item.productId != null || (item as any).isCustom) && item.quantity > 0)
-                  .map((item, idx) => ({
-                    id: idx + 1,
-                    productId: item.productId ?? 0,
-                    quantity: item.quantity,
-                    unitPrice: item.unitPrice,
-                    subtotal: item.amount,
-                    taxable: (item as any).isCustom ? (item as any).taxable !== false : undefined,
-                    productionStatus: "pending",
-                    notes: item.notes || undefined,
-                    product: {
-                      id: item.productId ?? 0,
-                      name: item.productName || ((item as any).isCustom ? "Item personnalisé" : `Produit #${item.productId}`),
-                      price: item.unitPrice,
-                    },
-                    isPacked: false,
-                  })),
+                // On repart des articles renvoyés par le serveur : ils portent
+                // les options et le statut de production réels. Le repli sur
+                // `apiItems` garde les options de ce qu'on vient d'envoyer.
+                items: Array.isArray(saved?.items)
+                  ? mapApiItemsToLocal(saved.items)
+                  : mapApiItemsToLocal(apiItems),
                 subtotal: saved?.subtotal ?? formData.subtotal,
                 taxAmount: saved?.taxAmount ?? formData.taxAmount,
                 deliveryFee: saved?.deliveryFee ?? formData.deliveryFee,

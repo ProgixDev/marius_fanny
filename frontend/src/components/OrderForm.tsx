@@ -392,7 +392,18 @@ export default function OrderForm({
     try {
       setProductsLoading(true);
       const response = await productAPI.getAllProducts(1, 1000);
-      setProducts(response.data.products.filter(p => p.available));
+      // On garde AUSSI les produits devenus indisponibles s'ils sont déjà dans
+      // la commande : sinon, en modification, leur ligne s'affichait vide (ni
+      // nom, ni menu d'options). Le sélecteur de produits refiltre déjà sur
+      // `available` de son côté, la liste d'ajout reste donc inchangée.
+      const productsInOrder = new Set(
+        (initialData?.items || [])
+          .map((it) => it.productId)
+          .filter((id): id is number => typeof id === "number" && id > 0),
+      );
+      setProducts(
+        response.data.products.filter((p) => p.available || productsInOrder.has(p.id)),
+      );
     } catch (error) {
       console.error('Failed to fetch products:', error);
     } finally {
@@ -791,6 +802,10 @@ export default function OrderForm({
 
   // Ref vers la dernière ligne ajoutée + défilement auto vers elle.
   const justAddedRowRef = useRef<HTMLTableRowElement | null>(null);
+  // Quantité présente AVANT que le champ ne soit vidé au focus. Sans ça, quitter
+  // la case sans rien taper retombait sur 1 : une ligne de 2 sandwichs devenait
+  // silencieusement 1 sandwich.
+  const quantityBeforeFocusRef = useRef<Record<string, number>>({});
   const [justAddedItemId, setJustAddedItemId] = useState<string | null>(null);
   useEffect(() => {
     if (!justAddedItemId) return;
@@ -2264,6 +2279,31 @@ export default function OrderForm({
                           </div>
                         ) : (
                         <div className="space-y-1">
+                          {/* Produit retiré du catalogue : sans ce repli, la
+                              cellule restait totalement vide (ni nom ni
+                              options) et le personnel ne voyait plus ce qui
+                              avait été commandé. Lecture seule : les valeurs
+                              enregistrées sont conservées telles quelles. */}
+                          {!!item.productId && !product && (
+                            <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1">
+                              <div className="flex items-center gap-2">
+                                <div className="text-[9px] font-semibold text-amber-700 uppercase shrink-0">
+                                  Produit retiré
+                                </div>
+                                <div className="truncate text-sm font-semibold text-gray-900">
+                                  {item.productName || `Produit #${item.productId}`}
+                                </div>
+                              </div>
+                              {item.selectedOptions &&
+                                Object.entries(item.selectedOptions)
+                                  .filter(([, value]) => String(value || "").trim() !== "")
+                                  .map(([label, value]) => (
+                                    <div key={label} className="text-[11px] text-amber-900">
+                                      {label} : {value}
+                                    </div>
+                                  ))}
+                            </div>
+                          )}
                           {/* !! obligatoire : avec productId = 0, `0 && ...`
                               renvoie 0 et React affiche un « 0 » parasite. */}
                           {!!item.productId && !!product && (
@@ -2369,9 +2409,14 @@ export default function OrderForm({
                           // Wipe the field on focus so the very next digit
                           // typed becomes the whole quantity. No backspace,
                           // no "13" when she meant "3". If she taps away
-                          // without typing anything, onBlur restores 1.
+                          // without typing anything, onBlur restores the
+                          // quantité d'origine (et non 1).
                           onFocus={(e) => {
                             const t = e.currentTarget;
+                            const previous = Number(item.quantity) || 0;
+                            if (previous > 0) {
+                              quantityBeforeFocusRef.current[String(item.id)] = previous;
+                            }
                             // setTimeout(0) lets the mobile keyboard's tap
                             // handler finish positioning the caret first,
                             // then we wipe.
@@ -2381,11 +2426,14 @@ export default function OrderForm({
                             }, 0);
                           }}
                           onBlur={() => {
-                            // If she leaves an empty/zero qty, snap back to 1
-                            // so the cart never has a 0-qty line silently.
+                            // Champ laissé vide : on remet ce qu'il y avait
+                            // avant, sinon 1 — jamais de ligne à 0.
                             if (!Number(item.quantity)) {
-                              handleItemChange(item.id, "quantity", 1);
+                              const restored =
+                                quantityBeforeFocusRef.current[String(item.id)] || 1;
+                              handleItemChange(item.id, "quantity", restored);
                             }
+                            delete quantityBeforeFocusRef.current[String(item.id)];
                           }}
                           onChange={(e) => {
                             // Strip everything except digits so a stray space
