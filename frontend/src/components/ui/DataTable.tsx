@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, Fragment, useEffect } from "react";
+import React, { useState, Fragment, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -105,7 +105,16 @@ export function DataTable<T extends object>({
   groupByOptions,
   onGroupByChange,
 }: DataTableProps<T>) {
+  // Saisie affichée immédiatement, filtrage différé : sans cet anti-rebond,
+  // chaque frappe reparcourait toutes les lignes (2 regex par ligne) puis
+  // recopiait et retriait le tableau entier — d'où la sensation de blocage.
+  const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(searchInput), 200);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
   const [filterValues, setFilterValues] = useState<Record<string, string>>(
     filters.reduce((acc, filter) => ({ ...acc, [filter.key]: "all" }), {}),
   );
@@ -135,7 +144,7 @@ export function DataTable<T extends object>({
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const filteredData = data.filter((item) => {
+  const filteredData = useMemo(() => data.filter((item) => {
     // Search filter
     if (searchTerm) {
       const lowerSearchTerm = searchTerm.toLowerCase();
@@ -179,24 +188,27 @@ export function DataTable<T extends object>({
     }
 
     return true;
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [data, searchTerm, filterValues, getSearchValue, searchKeys, searchKey]);
 
-  const sortedData = [...filteredData].sort((a, b) => {
-    if (!sortKey) return 0;
+  // Sans tri actif, on garde le tableau tel quel : la copie puis le tri
+  // s'exécutaient à chaque rendu même quand il n'y avait rien à trier.
+  const sortedData = useMemo(() => {
+    if (!sortKey) return filteredData;
     const col = columns.find((c) => c.key === sortKey);
-    if (!col || col.sortable === false) return 0;
+    if (!col || col.sortable === false) return filteredData;
     const getSortValue = (item: T) => {
       if (col.sortValue) return col.sortValue(item);
       return item[col.key as keyof T];
     };
-    const aVal = getSortValue(a);
-    const bVal = getSortValue(b);
-    const aStr = String(aVal).toLowerCase();
-    const bStr = String(bVal).toLowerCase();
-    if (aStr < bStr) return sortDirection === "asc" ? -1 : 1;
-    if (aStr > bStr) return sortDirection === "asc" ? 1 : -1;
-    return 0;
-  });
+    return [...filteredData].sort((a, b) => {
+      const aStr = String(getSortValue(a)).toLowerCase();
+      const bStr = String(getSortValue(b)).toLowerCase();
+      if (aStr < bStr) return sortDirection === "asc" ? -1 : 1;
+      if (aStr > bStr) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [filteredData, sortKey, sortDirection, columns]);
 
   // Group data if groupBy is provided
   const groupedData = groupBy
@@ -342,9 +354,9 @@ export function DataTable<T extends object>({
               type="text"
               placeholder={searchPlaceholder}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#C5A065]/50 outline-none text-sm"
-              value={searchTerm}
+              value={searchInput}
               onChange={(e) => {
-                setSearchTerm(e.target.value);
+                setSearchInput(e.target.value);
                 setCurrentPage(1);
               }}
             />
