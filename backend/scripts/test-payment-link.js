@@ -233,5 +233,70 @@ await (async () => {
   });
 })();
 
+// ---------------------------------------------------------------------------
+// Historique : « Produits modifiés » ne doit apparaitre que si quelque chose a
+// vraiment bouge. Mesure avant correction : 1369 des 1427 entrees (96 %) ne
+// consignaient aucun changement, creees en cochant les cases d'emballage.
+// ---------------------------------------------------------------------------
+const { describeItemChanges, shouldRecordItemChange } = await import(
+  "../dist/src/utils/orderChanges.js"
+);
+
+const items458 = () => [
+  { productName: "Boite a lunch dinde et pesto", quantity: 7, unitPrice: 20.95,
+    selectedOptions: { Pains: "Pita" } },
+  { productName: "Salade repas cesar", quantity: 4, unitPrice: 21.95 },
+];
+
+console.log("\n--- Historique : plus de lignes « Produits modifies » vides ---");
+
+test("cocher « emballe » ne cree AUCUNE entree", () => {
+  // Le clic renvoie le meme tableau, seul productionStatus differe.
+  const before = items458();
+  const after = items458().map((i) => ({ ...i, productionStatus: "ready" }));
+  assert.deepStrictEqual(describeItemChanges(before, after), []);
+  assert.strictEqual(shouldRecordItemChange(before, after, 935.03, 935.03), false);
+});
+
+test("une quantite modifiee cree bien une entree", () => {
+  const before = items458();
+  const after = items458();
+  after[1].quantity = 5;
+  assert.deepStrictEqual(describeItemChanges(before, after), ["Salade repas cesar : 4 → 5"]);
+  assert.strictEqual(shouldRecordItemChange(before, after, 935.03, 956.98), true);
+});
+
+test("un article ajoute ou retire cree une entree", () => {
+  const before = items458();
+  assert.ok(describeItemChanges(before, [before[0]])[0].startsWith("Retire") ||
+            describeItemChanges(before, [before[0]])[0].startsWith("Retiré"));
+  assert.strictEqual(shouldRecordItemChange(before, [before[0]], 935.03, 847.23), true);
+});
+
+test("changer l'option d'un produit compte comme un changement", () => {
+  const before = items458();
+  const after = items458();
+  after[0].selectedOptions = { Pains: "Baguette" };
+  assert.ok(describeItemChanges(before, after).length > 0);
+});
+
+test("un prix unitaire modifie compte, meme a quantite egale", () => {
+  const before = items458();
+  const after = items458();
+  after[1].unitPrice = 23.95;
+  assert.ok(describeItemChanges(before, after)[0].includes("prix unitaire"));
+});
+
+test("total change sans que les articles bougent (remise, livraison) : on consigne", () => {
+  const before = items458();
+  assert.strictEqual(shouldRecordItemChange(before, items458(), 935.03, 905.03), true);
+});
+
+test("l'ordre des articles n'invente pas un changement", () => {
+  const before = items458();
+  const after = [...items458()].reverse();
+  assert.deepStrictEqual(describeItemChanges(before, after), []);
+});
+
 console.log(`\n${passed} reussis, ${failed} echoues\n`);
 if (failed > 0) process.exit(1);

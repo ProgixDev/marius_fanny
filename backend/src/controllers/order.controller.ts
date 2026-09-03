@@ -34,6 +34,7 @@ import {
   createInvoiceForExistingOrder,
 } from "./payment.controller.js";
 import { shouldReissuePaymentLink, reissuePaymentLink } from "../utils/paymentLink.js";
+import { describeItemChanges, shouldRecordItemChange } from "../utils/orderChanges.js";
 import {
   calculatePromoDiscount,
   isPromoCurrentlyValid,
@@ -1511,25 +1512,31 @@ export const getOrders = async (
       // see what's leaving on delivery.
     }
 
-    // Execute query with pagination
+    // Execute query with pagination.
+    //
+    // `changeHistory` est EXCLU : la liste ne l'affiche jamais (le détail le
+    // récupère à part via GET /orders/:id/history), mais il pesait 84 % des
+    // 4,5 Mo transférés — d'où une recherche qui semblait figée. `.lean()`
+    // évite en plus d'hydrater 470 documents Mongoose pour rien.
     const skip = (Number(page) - 1) * Number(limit);
     const [orders, total] = await Promise.all([
-      Order.find(query).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
+      Order.find(query)
+        .select("-changeHistory")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
       Order.countDocuments(query),
     ]);
 
-    // Backfill amountPaid for old orders that don't have it set
-    for (const order of orders) {
-      if ((!order.amountPaid || order.amountPaid === 0) && order.paymentStatus === "paid") {
-        order.amountPaid = order.total;
-        order.save().catch(() => {});
-      }
-    }
+    // NOTE : le rattrapage de `amountPaid` qui se trouvait ici écrivait en base
+    // à CHAQUE lecture de page. Une lecture ne doit pas muter les données ;
+    // ce rattrapage appartient à un script de maintenance.
 
     // Add payment status indicators
     const ordersWithStatus = orders.map((order: any) => {
-      const orderObj = order.toObject?.() || order;
-      const isPaymentOverdue = 
+      const orderObj = order;
+      const isPaymentOverdue =
         orderObj.paymentDueDate && 
         orderObj.paymentStatus === "unpaid" &&
         new Date() > new Date(orderObj.paymentDueDate);
@@ -1538,8 +1545,17 @@ export const getOrders = async (
         ? Math.ceil((new Date().getTime() - new Date(orderObj.paymentDueDate).getTime()) / (1000 * 60 * 60 * 24))
         : 0;
 
+      // Anciennes commandes payées sans `amountPaid` : on renvoie la valeur
+      // correcte SANS l'écrire en base (une lecture ne doit rien muter).
+      const amountPaid =
+        (!orderObj.amountPaid || orderObj.amountPaid === 0) &&
+        orderObj.paymentStatus === "paid"
+          ? orderObj.total
+          : orderObj.amountPaid;
+
       return {
         ...orderObj,
+        amountPaid,
         isPaymentOverdue,
         daysOverdue,
       };
@@ -1673,40 +1689,11 @@ function describeCustomerFacingChanges(
   },
   after: any,
 ): string[] {
-  const lines: string[] = [];
-
-  // --- Articles : on agrège par produit + options choisies. `productionStatus`
-  // est volontairement ignoré (c'est l'emballage, pas le contenu).
-  const tally = (
-    items: Array<{
-      productName: string;
-      quantity: number;
-      unitPrice: number;
-      selectedOptions?: Record<string, string>;
-    }>,
-  ) => {
-    const map = new Map<string, { label: string; quantity: number; unitPrice: number }>();
-    for (const it of items || []) {
-      const options = it.selectedOptions
-        ? Object.entries(it.selectedOptions)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([k, v]) => `${k}: ${v}`)
-            .join(", ")
-        : "";
-      const key = `${it.productName}||${options}`;
-      const label = options ? `${it.productName} (${options})` : it.productName;
-      const entry = map.get(key);
-      if (entry) {
-        entry.quantity += it.quantity;
-      } else {
-        map.set(key, { label, quantity: it.quantity, unitPrice: it.unitPrice });
-      }
-    }
-    return map;
-  };
-
-  const oldItems = tally(before.items);
-  const newItems = tally(
+  // --- Articles : même comparateur que celui qui décide d'inscrire ou non une
+  // ligne dans l'historique (utils/orderChanges.ts), pour que les deux ne
+  // puissent jamais diverger.
+  const lines: string[] = describeItemChanges(
+    before.items,
     (after.items || []).map((it: any) => ({
       productName: it.productName,
       quantity: it.quantity,
@@ -1714,24 +1701,6 @@ function describeCustomerFacingChanges(
       selectedOptions: it.selectedOptions,
     })),
   );
-
-  for (const [key, next] of newItems) {
-    const prev = oldItems.get(key);
-    if (!prev) {
-      lines.push(`Ajouté : ${next.quantity} × ${next.label}`);
-    } else if (prev.quantity !== next.quantity) {
-      lines.push(`${next.label} : ${prev.quantity} → ${next.quantity}`);
-    } else if (Math.abs((prev.unitPrice || 0) - (next.unitPrice || 0)) > 0.001) {
-      lines.push(
-        `${next.label} : prix unitaire ${(prev.unitPrice || 0).toFixed(2)}$ → ${(next.unitPrice || 0).toFixed(2)}$`,
-      );
-    }
-  }
-  for (const [key, prev] of oldItems) {
-    if (!newItems.has(key)) {
-      lines.push(`Retiré : ${prev.quantity} × ${prev.label}`);
-    }
-  }
 
   // --- Date et créneau de service
   const oldDay = serviceDayKey(before);
@@ -2052,15 +2021,22 @@ export const updateOrder = async (
       order.total = total;
       order.depositAmount = depositAmount;
 
-      changes.push({
-        changedAt: new Date(),
-        changedBy: userId,
-        field: "items",
-        oldValue: oldItems,
-        newValue: updateData.items,
-        changeType: "items_modified",
-        notes: `Order items modified. Total: ${oldTotal.toFixed(2)}$ -> ${total.toFixed(2)}$`
-      });
+      // Ne consigner que si les articles ont RÉELLEMENT bougé. Cocher une case
+      // « emballé » renvoie tout le tableau : sans cette condition, chaque clic
+      // ajoutait une ligne « Produits modifiés » vide. 96 % des 1427 entrées
+      // existantes ne consignaient aucun changement, et chacune stocke une
+      // copie complète des articles — d'où des commandes qui enflent sans fin.
+      if (shouldRecordItemChange(oldItems as any, updateData.items as any, oldTotal, total)) {
+        changes.push({
+          changedAt: new Date(),
+          changedBy: userId,
+          field: "items",
+          oldValue: oldItems,
+          newValue: updateData.items,
+          changeType: "items_modified",
+          notes: `Order items modified. Total: ${oldTotal.toFixed(2)}$ -> ${total.toFixed(2)}$`
+        });
+      }
 
       const paymentDifference = total - estimatedPaidAmount;
       const paymentAdjustmentNote =
