@@ -2215,12 +2215,12 @@ export default function OrderForm({
           )}
         </div>
 
-        <div className="border border-gray-300 rounded-md overflow-hidden">
+        <div className="border border-gray-300 rounded-md overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="text-xs">PRODUIT</TableHead>
-                <TableHead className="w-24 text-xs">QTÉ</TableHead>
+                <TableHead className="w-28 text-xs">QTÉ</TableHead>
                 <TableHead className="w-28 text-xs">PRIX</TableHead>
                 <TableHead className="w-28 text-xs">MONTANT</TableHead>
                 <TableHead className="w-24"></TableHead>
@@ -2456,7 +2456,13 @@ export default function OrderForm({
                             );
                           }}
                           disabled={!item.productId && !item.isCustom}
-                          className={`h-8 text-sm ${quantityError ? "border-red-500" : ""}`}
+                          // Pas de h-8 : index.css réduit la police racine à
+                          // 13px dès 768px de large, donc sur iPad. La hauteur
+                          // forcée tombait alors à 26px pour une ligne de
+                          // 16px — le chiffre était rogné. `text-base` en
+                          // dessous de md évite en plus le zoom automatique
+                          // d'iOS Safari à la mise au point du champ.
+                          className={`text-base md:text-sm ${quantityError ? "border-red-500" : ""}`}
                         />
                         {quantityError && (
                           <p className="text-xs text-red-500 mt-1">
