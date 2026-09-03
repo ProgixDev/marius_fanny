@@ -40,6 +40,7 @@ import {
 import { getAvailableTimeSlots } from "../utils/timeSlots";
 import { calculatePriceWithOptions } from "../utils/customOptions";
 import { getImageUrl } from "../utils/api";
+import { restoreQuantity } from "../utils/orderItems";
 
 // Heure limite back office : commandes du lendemain acceptées jusqu'à 14h30.
 // Défini au niveau MODULE pour éviter tout problème d'ordre d'initialisation
@@ -2428,9 +2429,11 @@ export default function OrderForm({
                           onBlur={() => {
                             // Champ laissé vide : on remet ce qu'il y avait
                             // avant, sinon 1 — jamais de ligne à 0.
-                            if (!Number(item.quantity)) {
-                              const restored =
-                                quantityBeforeFocusRef.current[String(item.id)] || 1;
+                            const restored = restoreQuantity(
+                              Number(item.quantity),
+                              quantityBeforeFocusRef.current[String(item.id)],
+                            );
+                            if (restored !== Number(item.quantity)) {
                               handleItemChange(item.id, "quantity", restored);
                             }
                             delete quantityBeforeFocusRef.current[String(item.id)];

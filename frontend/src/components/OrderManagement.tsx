@@ -63,20 +63,11 @@ function authHeaders(): Record<string, string> {
   };
 }
 import type { Order } from "../types";
-
-interface OrderItemWithPacking {
-  id: number;
-  productId: number;
-  product?: { id: number; name: string; price: number };
-  quantity: number;
-  unitPrice: number;
-  subtotal: number;
-  taxable?: boolean;
-  productionStatus: string;
-  notes?: string;
-  selectedOptions?: Record<string, string>;
-  isPacked?: boolean;
-}
+import {
+  mapApiItemsToLocal,
+  buildOrderItemsUpdatePayload,
+  type OrderItemWithPacking,
+} from "../utils/orderItems";
 
 interface OrderWithPacking extends Omit<Order, 'items'> {
   items: OrderItemWithPacking[];
@@ -85,66 +76,6 @@ interface OrderWithPacking extends Omit<Order, 'items'> {
   squarePaymentId?: string;
   squareInvoiceId?: string;
 }
-
-// Convertit les articles renvoyés par l'API en articles d'affichage. Source
-// UNIQUE : utilisée au chargement de la liste comme après un enregistrement.
-// Auparavant la reconstruction post-enregistrement était réécrite à la main et
-// oubliait `selectedOptions` — les options (ex. « Pains : Pita ») disparaissaient
-// de l'écran, puis étaient effacées en base au premier changement de statut.
-const mapApiItemsToLocal = (apiItems: any[]): OrderItemWithPacking[] =>
-  (apiItems || []).map((item: any, idx: number) => {
-    let productName = `Produit #${item.productId}`; // Nom par defaut
-    let productPrice = item.unitPrice || 0;
-    if (item.product) {
-      productName = item.product.name || productName;
-      productPrice = item.product.price || productPrice;
-    } else if (item.productName) {
-      productName = item.productName;
-    }
-
-    return {
-      id: idx + 1,
-      orderId: 0,
-      productId: item.productId,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      subtotal: item.amount || item.quantity * item.unitPrice,
-      // Sans ça, un item personnalisé non taxable redevenait taxable
-      // dès qu'on rouvrait la commande pour la modifier.
-      taxable: item.taxable,
-      productionStatus: item.productionStatus || "pending",
-      notes: item.notes,
-      selectedOptions:
-        item.selectedOptions && Object.keys(item.selectedOptions).length > 0
-          ? item.selectedOptions
-          : undefined,
-      product: {
-        id: item.productId,
-        name: productName,
-        price: productPrice,
-      },
-      isPacked: item.productionStatus === "ready" || item.isPacked === true,
-    };
-  });
-
-const buildOrderItemsUpdatePayload = (items: OrderItemWithPacking[]) =>
-  items.map((item) => ({
-    productId: item.productId,
-    productName: item.product?.name ?? `Produit #${item.productId}`,
-    quantity: item.quantity,
-    unitPrice: item.unitPrice,
-    amount: item.subtotal,
-    taxable: item.taxable,
-    notes: item.notes,
-    selectedOptions:
-      item.selectedOptions && Object.keys(item.selectedOptions).length > 0
-        ? item.selectedOptions
-        : undefined,
-    productionStatus:
-      item.productionStatus === "ready" || item.productionStatus === "in_progress"
-        ? item.productionStatus
-        : "pending",
-  }));
 
 export function OrderManagement() {
   const [orders, setOrders] = useState<OrderWithPacking[]>([]);
