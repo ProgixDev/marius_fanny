@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTaxLabels } from "../utils/taxNumbers";
 import { useParams } from "react-router-dom";
 import { Download } from "lucide-react";
 import { parseServiceDate } from "../utils/dates";
@@ -55,6 +56,8 @@ interface OrderData {
 
 export default function Invoice() {
   const { orderId } = useParams<{ orderId: string }>();
+  // Intitules "TPS (numero)" / "TVQ (numero)" lus dans les reglages.
+  const taxLabels = useTaxLabels();
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -281,15 +284,12 @@ export default function Invoice() {
               <span className="font-medium">{fmt(order.subtotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">TPS (5 %) :</span>
+              <span className="text-gray-600">{taxLabels.tps} :</span>
               <span className="font-medium">{fmt(tps)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">TVQ (9,975 %) :</span>
+              <span className="text-gray-600">{taxLabels.tvq} :</span>
               <span className="font-medium">{fmt(tvq)}</span>
-            </div>
-            <div className="text-[10px] text-gray-500 pl-4">
-              TPS: 144652641RT001 &nbsp; TVQ: 1201862732TQ0001
             </div>
             {order.deliveryFee > 0 && (
               <div className="flex justify-between">

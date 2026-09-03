@@ -41,6 +41,17 @@ const initializeApp = async () => {
       await mongoose.connect(MONGODB_URI, mongooseOptions);
       console.log("✅ MONGOOSE CONNECTÉ");
       validateSquareConfig();
+
+    // Numeros de taxes affiches sur les factures : charges depuis les reglages,
+    // avec repli sur les valeurs par defaut si la lecture echoue.
+    try {
+      const { Settings } = await import("../src/models/Settings.js");
+      const { setTaxNumbers } = await import("../src/config/taxNumbers.js");
+      const s = await Settings.findOne().lean();
+      if (s) setTaxNumbers({ tps: (s as any).tpsNumber, tvq: (s as any).tvqNumber });
+    } catch (e: any) {
+      console.warn("⚠️ Numeros de taxes non charges, valeurs par defaut utilisees:", e?.message);
+    }
     } catch (err) {
       console.error("❌ ERREUR CONNEXION MONGOOSE:", err);
     }

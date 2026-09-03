@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { DEFAULT_TPS_NUMBER, DEFAULT_TVQ_NUMBER } from "../config/taxNumbers.js";
 
 export interface ISettings extends Document {
   // General
@@ -8,6 +9,10 @@ export interface ISettings extends Document {
   contactPhoneMontreal: string;
   address: string;
   addressMontreal: string;
+
+  // Numéros d'inscription aux taxes, affichés sur les factures
+  tpsNumber: string;
+  tvqNumber: string;
 
   // Business Hours - Laval
   businessHoursLaval: {
@@ -52,6 +57,10 @@ const settingsSchema = new Schema<ISettings>(
     contactPhoneMontreal: { type: String, default: "514-379-1898" },
     address: { type: String, default: "239-E Boulevard Samson, Laval" },
     addressMontreal: { type: String, default: "2006 rue St-Hubert, Montréal" },
+
+    // Numéros d'inscription aux taxes (voir config/taxNumbers.ts)
+    tpsNumber: { type: String, default: DEFAULT_TPS_NUMBER },
+    tvqNumber: { type: String, default: DEFAULT_TVQ_NUMBER },
 
     // Business Hours - Laval
     businessHoursLaval: {

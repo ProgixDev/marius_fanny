@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import { taxLabels } from "../config/taxNumbers.js";
 
 /**
  * Génération de la facture en PDF, pour la joindre aux courriels (les clients
@@ -269,8 +270,10 @@ export async function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
         y = doc.page.margins.top;
       }
 
-      const totalsX = right - 250;
-      const totalsLabelWidth = 150;
+      // Le bloc part plus à gauche depuis que les intitulés portent le numéro
+      // d'inscription : « TVQ (1201862732TQ0001) : » ne tenait pas en 150 pt.
+      const totalsX = right - 320;
+      const totalsLabelWidth = 220;
       const totalsValueX = right - 90;
 
       const totalLine = (label: string, value: string, bold = false) => {
@@ -281,13 +284,12 @@ export async function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
         y += 14;
       };
 
+      // Le numéro d'inscription figure DANS l'intitulé, plus sur une ligne
+      // grise séparée en dessous.
+      const labels = taxLabels();
       totalLine("Sous-total :", money(data.subtotal));
-      totalLine("TPS (5 %) :", money(tpsAmount));
-      totalLine("TVQ (9,975 %) :", money(tvqAmount));
-
-      doc.font("Helvetica").fontSize(7).fillColor(GREY);
-      doc.text("TPS: 144652641RT001    TVQ: 1201862732TQ0001", totalsX, y, { width: 240 });
-      y += 12;
+      totalLine(`${labels.tps} :`, money(tpsAmount));
+      totalLine(`${labels.tvq} :`, money(tvqAmount));
 
       if ((data.deliveryFee || 0) > 0) {
         totalLine("Livraison :", money(data.deliveryFee || 0));

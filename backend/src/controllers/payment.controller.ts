@@ -29,6 +29,7 @@ import {
   isBalanceOnlyLineSet,
 } from "../utils/squareOrder.js";
 import { expectedInvoiceAmount, isInvoiceStale } from "../utils/paymentLink.js";
+import { taxLabels } from "../config/taxNumbers.js";
 
 /**
  * Montant total réclamé par une facture Square, en dollars (null si illisible).
@@ -812,7 +813,7 @@ export const createInvoice = async (req: Request, res: Response) => {
         // TPS/TVQ ajoutés à la DESCRIPTION (gratuite). Les "custom fields" Square
         // nécessitent un abonnement payant (Invoices Plus) → sinon la création
         // de la facture échoue.
-        description: `${notes || `Facture pour la commande ${orderNumber || orderId}`}\nTPS: 144652641RT001 · TVQ: 1201862732TQ0001`,
+        description: `${notes || `Facture pour la commande ${orderNumber || orderId}`}\n${taxLabels().tps} · ${taxLabels().tvq}`,
         primaryRecipient: {
           customerId: squareCustomerId,
         },
@@ -2431,7 +2432,7 @@ export async function createInvoiceForExistingOrder(
       orderId: squareOrderId,
       invoiceNumber: `${orderId}-${Date.now()}`,
       title: `Commande ${orderNumber}`,
-      description: `Facture pour la commande ${orderNumber}\nTPS: 144652641RT001 · TVQ: 1201862732TQ0001`,
+      description: `Facture pour la commande ${orderNumber}\n${taxLabels().tps} · ${taxLabels().tvq}`,
       primaryRecipient: { customerId: squareCustomerId },
       paymentRequests: [
         { requestType: "BALANCE", dueDate: invoiceDueDate, automaticPaymentSource: "NONE" },

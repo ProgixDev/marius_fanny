@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTaxLabels } from "../utils/taxNumbers";
 import { useParams } from "react-router-dom";
 import { Check, X, Clock, CheckCircle2, XCircle, FileText } from "lucide-react";
 import { normalizedApiUrl } from "../lib/AuthClient";
@@ -44,6 +45,8 @@ interface QuoteData {
 
 export default function Quote() {
   const { quoteId } = useParams<{ quoteId: string }>();
+  // Intitules "TPS (numero)" / "TVQ (numero)" lus dans les reglages.
+  const taxLabels = useTaxLabels();
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -319,19 +322,16 @@ export default function Quote() {
               return (
                 <>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">TPS (5 %) :</span>
+                    <span className="text-gray-600">{taxLabels.tps} :</span>
                     <span className="font-medium">{fmt(tps)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">TVQ (9,975 %) :</span>
+                    <span className="text-gray-600">{taxLabels.tvq} :</span>
                     <span className="font-medium">{fmt(tvq)}</span>
                   </div>
                 </>
               );
             })()}
-            <div className="text-[10px] text-gray-500 pl-4">
-              TPS: 144652641RT001 &nbsp; TVQ: 1201862732TQ0001
-            </div>
             {quote.deliveryFee > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-600">Livraison :</span>

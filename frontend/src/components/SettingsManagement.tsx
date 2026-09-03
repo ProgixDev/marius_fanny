@@ -34,6 +34,8 @@ interface Settings {
   contactPhoneMontreal: string;
   address: string;
   addressMontreal: string;
+  tpsNumber: string;
+  tvqNumber: string;
   businessHoursLaval: BusinessHours;
   businessHoursMontreal: BusinessHours;
   emailOnNewOrder: boolean;
@@ -53,6 +55,8 @@ const defaultSettings: Settings = {
   contactPhoneMontreal: "514-379-1898",
   address: "239-E Boulevard Samson, Laval",
   addressMontreal: "2006 rue St-Hubert, Montréal",
+  tpsNumber: "144652641RT001",
+  tvqNumber: "1201862732TQ0001",
   businessHoursLaval: {
     monday: { open: "07:00", close: "18:00", closed: false },
     tuesday: { open: "07:00", close: "18:00", closed: false },
@@ -106,6 +110,8 @@ export default function SettingsManagement() {
           contactPhoneMontreal: d.contactPhoneMontreal ?? defaultSettings.contactPhoneMontreal,
           address: d.address ?? defaultSettings.address,
           addressMontreal: d.addressMontreal ?? defaultSettings.addressMontreal,
+          tpsNumber: d.tpsNumber ?? defaultSettings.tpsNumber,
+          tvqNumber: d.tvqNumber ?? defaultSettings.tvqNumber,
           businessHoursLaval: d.businessHoursLaval ?? defaultSettings.businessHoursLaval,
           businessHoursMontreal: d.businessHoursMontreal ?? defaultSettings.businessHoursMontreal,
           emailOnNewOrder: d.emailOnNewOrder ?? defaultSettings.emailOnNewOrder,
@@ -380,6 +386,38 @@ export default function SettingsManagement() {
                 onChange={(e) => handleInputChange("addressMontreal", e.target.value)}
                 className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#C5A065] focus:border-transparent outline-none text-sm transition-all"
               />
+            </div>
+
+            {/* Numéros d'inscription aux taxes : ils étaient recopiés en dur
+                dans 9 fichiers. Ils se modifient désormais ici. */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-stone-600">
+                Numéro de TPS
+              </label>
+              <input
+                type="text"
+                value={settings.tpsNumber}
+                onChange={(e) => handleInputChange("tpsNumber", e.target.value)}
+                className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#C5A065] focus:border-transparent outline-none text-sm transition-all"
+              />
+              <p className="text-[11px] text-stone-500">
+                Apparaît sur les factures : « TPS (numéro) ».
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-stone-600">
+                Numéro de TVQ
+              </label>
+              <input
+                type="text"
+                value={settings.tvqNumber}
+                onChange={(e) => handleInputChange("tvqNumber", e.target.value)}
+                className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#C5A065] focus:border-transparent outline-none text-sm transition-all"
+              />
+              <p className="text-[11px] text-stone-500">
+                Apparaît sur les factures : « TVQ (numéro) ».
+              </p>
             </div>
           </div>
         </div>

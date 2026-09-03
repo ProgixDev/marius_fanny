@@ -1,6 +1,7 @@
 import * as nodemailer from "nodemailer";
 import { Resend } from "resend";
 import dotenv from "dotenv";
+import { taxLabels as TAX_LABELS } from "../config/taxNumbers.js";
 
 dotenv.config();
 
@@ -966,33 +967,33 @@ export async function sendOrderUpdatedEmail(data: {
 
             <div style="text-align: right; margin-top: 20px;">
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">Sous-total:</span>
+                <span style="display: inline-block; width: 210px;">Sous-total:</span>
                 <strong>${data.subtotal.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">TPS (5 %):</span>
+                <span style="display: inline-block; width: 210px;">${TAX_LABELS().tps} :</span>
                 <strong>${tpsAmount.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">TVQ (9,975 %):</span>
+                <span style="display: inline-block; width: 210px;">${TAX_LABELS().tvq} :</span>
                 <strong>${tvqAmount.toFixed(2)}$</strong>
               </p>
               ${
                 data.deliveryFee > 0
                   ? `<p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">Livraison:</span>
+                <span style="display: inline-block; width: 210px;">Livraison:</span>
                 <strong>${data.deliveryFee.toFixed(2)}$</strong>
               </p>`
                   : ""
               }
               <p style="color: #C5A065; font-size: 20px; margin: 15px 0 0 0; padding-top: 10px; border-top: 2px solid #C5A065;">
-                <span style="display: inline-block; width: 150px;">Nouveau total:</span>
+                <span style="display: inline-block; width: 210px;">Nouveau total:</span>
                 <strong>${data.total.toFixed(2)}$</strong>
               </p>
               ${
                 data.amountPaid > 0.01
                   ? `<p style="color: #555; margin: 5px 0; font-size: 14px;">
-                <span style="display: inline-block; width: 150px;">Déjà payé:</span>
+                <span style="display: inline-block; width: 210px;">Déjà payé:</span>
                 <strong>${data.amountPaid.toFixed(2)}$</strong>
               </p>`
                   : ""
@@ -1132,33 +1133,29 @@ export async function sendFullPaymentReceipt(
 
             <div style="text-align: right; margin-top: 20px;">
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">Sous-total:</span>
+                <span style="display: inline-block; width: 210px;">Sous-total:</span>
                 <strong>${subtotal.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">TPS (5 %):</span>
+                <span style="display: inline-block; width: 210px;">${TAX_LABELS().tps} :</span>
                 <strong>${tpsAmount.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">TVQ (9,975 %):</span>
+                <span style="display: inline-block; width: 210px;">${TAX_LABELS().tvq} :</span>
                 <strong>${tvqAmount.toFixed(2)}$</strong>
-              </p>
-              <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;">
-                <span style="display: inline-block; width: 150px;">&nbsp;</span>
-                TPS: 144652641RT001 &nbsp;&nbsp; TVQ: 1201862732TQ0001
               </p>
               ${
                 deliveryFee > 0
                   ? `
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">Livraison:</span>
+                <span style="display: inline-block; width: 210px;">Livraison:</span>
                 <strong>${deliveryFee.toFixed(2)}$</strong>
               </p>
               `
                   : ""
               }
               <p style="color: #C5A065; font-size: 20px; margin: 15px 0 0 0; padding-top: 10px; border-top: 2px solid #C5A065;">
-                <span style="display: inline-block; width: 150px;">Total payé:</span>
+                <span style="display: inline-block; width: 210px;">Total payé:</span>
                 <strong>${total.toFixed(2)}$</strong>
               </p>
             </div>
@@ -1322,41 +1319,37 @@ export async function sendDepositReceipt(
 
             <div style="text-align: right; margin-top: 20px;">
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 180px;">Sous-total:</span>
+                <span style="display: inline-block; width: 210px;">Sous-total:</span>
                 <strong>${subtotal.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 180px;">TPS (5 %):</span>
+                <span style="display: inline-block; width: 210px;">${TAX_LABELS().tps} :</span>
                 <strong>${tpsAmount.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 180px;">TVQ (9,975 %):</span>
+                <span style="display: inline-block; width: 210px;">${TAX_LABELS().tvq} :</span>
                 <strong>${tvqAmount.toFixed(2)}$</strong>
-              </p>
-              <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;">
-                <span style="display: inline-block; width: 180px;">&nbsp;</span>
-                TPS: 144652641RT001 &nbsp;&nbsp; TVQ: 1201862732TQ0001
               </p>
               ${
                 deliveryFee > 0
                   ? `
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 180px;">Livraison:</span>
+                <span style="display: inline-block; width: 210px;">Livraison:</span>
                 <strong>${deliveryFee.toFixed(2)}$</strong>
               </p>
               `
                   : ""
               }
               <p style="color: #2D2A26; font-size: 18px; margin: 15px 0 0 0; padding-top: 10px; border-top: 2px solid #C5A065;">
-                <span style="display: inline-block; width: 180px;">Total:</span>
+                <span style="display: inline-block; width: 210px;">Total:</span>
                 <strong>${total.toFixed(2)}$</strong>
               </p>
               <p style="color: #4CAF50; font-size: 16px; margin: 10px 0 0 0;">
-                <span style="display: inline-block; width: 180px;">Acompte payé (50%):</span>
+                <span style="display: inline-block; width: 210px;">Acompte payé (50%):</span>
                 <strong>${depositPaid.toFixed(2)}$</strong>
               </p>
               <p style="color: #FF9800; font-size: 20px; margin: 10px 0 0 0; padding-top: 10px; border-top: 1px solid #eee;">
-                <span style="display: inline-block; width: 180px;">Solde dû:</span>
+                <span style="display: inline-block; width: 210px;">Solde dû:</span>
                 <strong>${balanceDue.toFixed(2)}$</strong>
               </p>
             </div>
@@ -1480,24 +1473,20 @@ export async function sendInvoiceOrderConfirmation(
       : `
             <div style="text-align: right; margin-top: 20px;">
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">Sous-total:</span>
+                <span style="display: inline-block; width: 210px;">Sous-total:</span>
                 <strong>${subtotal.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">TPS (5 %):</span>
+                <span style="display: inline-block; width: 210px;">${TAX_LABELS().tps} :</span>
                 <strong>${tpsAmount.toFixed(2)}$</strong>
               </p>
               <p style="color: #555; margin: 5px 0;">
-                <span style="display: inline-block; width: 150px;">TVQ (9,975 %):</span>
+                <span style="display: inline-block; width: 210px;">${TAX_LABELS().tvq} :</span>
                 <strong>${tvqAmount.toFixed(2)}$</strong>
               </p>
-              <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;">
-                <span style="display: inline-block; width: 150px;">&nbsp;</span>
-                TPS: 144652641RT001 &nbsp;&nbsp; TVQ: 1201862732TQ0001
-              </p>
-              ${deliveryFee > 0 ? `<p style="color: #555; margin: 5px 0;"><span style="display: inline-block; width: 150px;">Livraison:</span><strong>${deliveryFee.toFixed(2)}$</strong></p>` : ""}
+              ${deliveryFee > 0 ? `<p style="color: #555; margin: 5px 0;"><span style="display: inline-block; width: 210px;">Livraison:</span><strong>${deliveryFee.toFixed(2)}$</strong></p>` : ""}
               <p style="color: #C5A065; font-size: 20px; margin: 15px 0 0 0; padding-top: 10px; border-top: 2px solid #C5A065;">
-                <span style="display: inline-block; width: 150px;">Total:</span>
+                <span style="display: inline-block; width: 210px;">Total:</span>
                 <strong>${total.toFixed(2)}$</strong>
               </p>
             </div>`;
@@ -2088,13 +2077,12 @@ export async function sendQuoteEmail(data: {
           </table>
 
           <div style="text-align: right; margin-top: 20px;">
-            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">Sous-total:</span> <strong>${data.subtotal.toFixed(2)}$</strong></p>
-            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">TPS (5 %):</span> <strong>${taxParts(data.taxAmount, { tps: data.tpsAmount, tvq: data.tvqAmount }).tps.toFixed(2)}$</strong></p>
-            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">TVQ (9,975 %):</span> <strong>${taxParts(data.taxAmount, { tps: data.tpsAmount, tvq: data.tvqAmount }).tvq.toFixed(2)}$</strong></p>
-            <p style="color: #999; margin: 2px 0 10px 0; font-size: 11px;"><span style="display:inline-block;width:150px;">&nbsp;</span>TPS: 144652641RT001 &nbsp; TVQ: 1201862732TQ0001</p>
-            ${data.deliveryFee > 0 ? `<p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:150px;">Livraison:</span> <strong>${data.deliveryFee.toFixed(2)}$</strong></p>` : ""}
+            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:210px;">Sous-total:</span> <strong>${data.subtotal.toFixed(2)}$</strong></p>
+            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:210px;">${TAX_LABELS().tps} :</span> <strong>${taxParts(data.taxAmount, { tps: data.tpsAmount, tvq: data.tvqAmount }).tps.toFixed(2)}$</strong></p>
+            <p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:210px;">${TAX_LABELS().tvq} :</span> <strong>${taxParts(data.taxAmount, { tps: data.tpsAmount, tvq: data.tvqAmount }).tvq.toFixed(2)}$</strong></p>
+            ${data.deliveryFee > 0 ? `<p style="color: #555; margin: 5px 0;"><span style="display:inline-block;width:210px;">Livraison:</span> <strong>${data.deliveryFee.toFixed(2)}$</strong></p>` : ""}
             <p style="color: #C5A065; font-size: 20px; margin: 15px 0 0 0; padding-top: 10px; border-top: 2px solid #C5A065;">
-              <span style="display:inline-block;width:150px;">Total estimé:</span>
+              <span style="display:inline-block;width:210px;">Total estimé:</span>
               <strong>${data.total.toFixed(2)}$</strong>
             </p>
           </div>

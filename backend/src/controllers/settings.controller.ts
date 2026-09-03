@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { Settings } from "../models/Settings.js";
+import { setTaxNumbers } from "../config/taxNumbers.js";
 
 /**
  * GET /api/settings
@@ -10,6 +11,9 @@ export async function getSettings(req: Request, res: Response) {
   if (!settings) {
     settings = await Settings.create({});
   }
+  // Le cache des numeros de taxes suit les reglages : les factures rendues
+  // ensuite portent tout de suite les bons numeros.
+  setTaxNumbers({ tps: (settings as any).tpsNumber, tvq: (settings as any).tvqNumber });
   res.json({ success: true, data: settings });
 }
 
@@ -25,6 +29,8 @@ export async function updateSettings(req: Request, res: Response) {
     "contactPhoneMontreal",
     "address",
     "addressMontreal",
+    "tpsNumber",
+    "tvqNumber",
     "businessHoursLaval",
     "businessHoursMontreal",
     "emailOnNewOrder",
@@ -54,5 +60,6 @@ export async function updateSettings(req: Request, res: Response) {
     await settings.save();
   }
 
+  setTaxNumbers({ tps: (settings as any).tpsNumber, tvq: (settings as any).tvqNumber });
   res.json({ success: true, data: settings, message: "Paramètres mis à jour avec succès" });
 }
