@@ -42,6 +42,74 @@ export function shouldReissuePaymentLink(input: ReissueDecisionInput): boolean {
   );
 }
 
+export interface ReissueDeps {
+  /** Annule la facture Square devenue caduque. */
+  cancelInvoice: (invoiceId: string) => Promise<unknown>;
+  /** Émet la nouvelle facture ; `notify` = la fonction previent elle-même le client. */
+  createInvoice: (
+    orderId: string,
+    channel: "email" | "sms",
+    notify: boolean,
+  ) => Promise<{ publicUrl: string | null }>;
+  log?: (message: string) => void;
+  logError?: (message: string) => void;
+}
+
+export interface ReissueOutcome {
+  /** Lien à glisser dans le courriel « commande modifiée » (null si SMS ou échec). */
+  invoiceUrl: string | null;
+  /** Message à remonter à l'écran quand l'émission a échoué. */
+  warning?: string;
+  reissued: boolean;
+}
+
+/**
+ * Remplace le lien de paiement d'une commande dont le montant a changé.
+ *
+ * L'ordre compte : on ANNULE d'abord l'ancienne facture, sinon Square garderait
+ * deux liens actifs et le client pourrait payer l'ancien montant.
+ *
+ * Qui prévient le client : par courriel, le lien voyage dans le message
+ * « commande modifiée » (un seul envoi, qui explique aussi ce qui a changé) ;
+ * par SMS — ou si aucun courriel ne part — l'émission notifie elle-même, faute
+ * de quoi le client n'aurait AUCUN moyen de payer.
+ */
+export async function reissuePaymentLink(
+  deps: ReissueDeps,
+  order: {
+    _id: unknown;
+    orderNumber?: string;
+    total?: number;
+    squareInvoiceId?: string | null;
+    paymentLinkChannel?: string | null;
+  },
+  willEmailCustomer: boolean,
+): Promise<ReissueOutcome> {
+  const channel: "email" | "sms" = order.paymentLinkChannel === "sms" ? "sms" : "email";
+  try {
+    await deps.cancelInvoice(String(order.squareInvoiceId));
+    const { publicUrl } = await deps.createInvoice(
+      String(order._id),
+      channel,
+      channel === "sms" || !willEmailCustomer,
+    );
+    deps.log?.(
+      `✅ Lien de paiement réémis pour ${order.orderNumber} (nouveau total ${order.total}$)`,
+    );
+    return { invoiceUrl: publicUrl, reissued: true };
+  } catch (e: any) {
+    const message = e?.message || String(e);
+    deps.logError?.(
+      `⚠️ [MAJ COMMANDE] réémission du lien impossible pour ${order.orderNumber}: ${message}`,
+    );
+    return {
+      invoiceUrl: null,
+      reissued: false,
+      warning: `Le nouveau lien de paiement n'a pas pu être émis (${message}). Le client n'a PAS reçu le nouveau montant — utilisez « Renvoyer la facture ».`,
+    };
+  }
+}
+
 /** Montant que la facture Square DEVRAIT réclamer aujourd'hui. */
 export function expectedInvoiceAmount(total: number, baselinePaid: number = 0): number {
   return round2((total || 0) - (baselinePaid || 0));

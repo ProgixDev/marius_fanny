@@ -33,7 +33,7 @@ import {
   cancelSquareInvoiceById,
   createInvoiceForExistingOrder,
 } from "./payment.controller.js";
-import { shouldReissuePaymentLink } from "../utils/paymentLink.js";
+import { shouldReissuePaymentLink, reissuePaymentLink } from "../utils/paymentLink.js";
 import {
   calculatePromoDiscount,
   isPromoCurrentlyValid,
@@ -2398,29 +2398,18 @@ export const updateOrder = async (
     });
 
     if (mustReissuePaymentLink) {
-      const channel = order.paymentLinkChannel === "sms" ? "sms" : "email";
-      try {
-        await cancelSquareInvoiceById(order.squareInvoiceId!);
-        const { publicUrl } = await createInvoiceForExistingOrder(
-          order._id.toString(),
-          channel,
-          // Par courriel, le lien voyage dans le message « commande modifiée »
-          // ci-dessous (un seul courriel, qui explique aussi ce qui a changé).
-          // Par SMS, ou si aucun courriel ne part, la fonction notifie
-          // elle-même — sinon le client n'aurait AUCUN moyen de payer.
-          channel === "sms" || !willEmailCustomer,
-        );
-        reissuedInvoiceUrl = publicUrl;
-        console.log(
-          `✅ Lien de paiement réémis pour ${order.orderNumber} (nouveau total ${order.total}$)`,
-        );
-      } catch (e: any) {
-        reissueWarning = `Le nouveau lien de paiement n'a pas pu être émis (${e?.message}). Le client n'a PAS reçu le nouveau montant — utilisez « Renvoyer la facture ».`;
-        console.error(
-          `⚠️ [MAJ COMMANDE] réémission du lien impossible pour ${order.orderNumber}:`,
-          e?.message || e,
-        );
-      }
+      const outcome = await reissuePaymentLink(
+        {
+          cancelInvoice: cancelSquareInvoiceById,
+          createInvoice: createInvoiceForExistingOrder,
+          log: (m) => console.log(m),
+          logError: (m) => console.error(m),
+        },
+        order as any,
+        willEmailCustomer,
+      );
+      reissuedInvoiceUrl = outcome.invoiceUrl;
+      reissueWarning = outcome.warning;
     }
 
     try {

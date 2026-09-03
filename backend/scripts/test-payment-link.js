@@ -140,5 +140,98 @@ test("montant illisible → on ne conclut pas (aucune régénération hasardeuse
   assert.strictEqual(isInvoiceStale(null, 935.03, 0), false);
 });
 
-console.log(`\n${passed} réussis, ${failed} échoués\n`);
+// ---------------------------------------------------------------------------
+// Orchestration de la réémission, avec un faux Square : c'est la partie qui
+// n'avait jamais tourné. On vérifie l'ORDRE des appels (annuler avant créer),
+// qui prévient le client, et ce qui se passe quand Square tombe en panne.
+// ---------------------------------------------------------------------------
+const { reissuePaymentLink } = await import("../dist/src/utils/paymentLink.js");
+
+const fakeSquare = (overrides = {}) => {
+  const calls = [];
+  return {
+    calls,
+    deps: {
+      cancelInvoice: async (id) => {
+        calls.push(`cancel:${id}`);
+        if (overrides.cancelFails) throw new Error("Square indisponible");
+      },
+      createInvoice: async (orderId, channel, notify) => {
+        calls.push(`create:${orderId}:${channel}:notify=${notify}`);
+        if (overrides.createFails) throw new Error("Square a refuse la facture");
+        return { publicUrl: "https://squareup.com/pay-invoice/NOUVEAU" };
+      },
+      log: () => {},
+      logError: () => {},
+    },
+  };
+};
+
+const orderDoc = (overrides = {}) => ({
+  _id: "6a95964578fe95601835a6a5",
+  orderNumber: "MF-20260831-0458",
+  total: 935.03,
+  squareInvoiceId: "inv:0-ANCIENNE",
+  paymentLinkChannel: "email",
+  ...overrides,
+});
+
+console.log("\n--- Reemission : orchestration (faux Square) ---");
+
+await (async () => {
+  const s = fakeSquare();
+  const out = await reissuePaymentLink(s.deps, orderDoc(), true);
+
+  test("l'ancienne facture est annulee AVANT d'en creer une nouvelle", () => {
+    assert.deepStrictEqual(s.calls, [
+      "cancel:inv:0-ANCIENNE",
+      "create:6a95964578fe95601835a6a5:email:notify=false",
+    ]);
+  });
+
+  test("le nouveau lien remonte pour le courriel « commande modifiee »", () => {
+    assert.strictEqual(out.invoiceUrl, "https://squareup.com/pay-invoice/NOUVEAU");
+    assert.strictEqual(out.reissued, true);
+    assert.strictEqual(out.warning, undefined);
+  });
+})();
+
+await (async () => {
+  const s = fakeSquare();
+  await reissuePaymentLink(s.deps, orderDoc(), false);
+  test("aucun courriel prevu : Square notifie lui-meme (jamais de client muet)", () => {
+    assert.ok(s.calls[1].endsWith("notify=true"));
+  });
+})();
+
+await (async () => {
+  const s = fakeSquare();
+  const out = await reissuePaymentLink(s.deps, orderDoc({ paymentLinkChannel: "sms" }), true);
+  test("canal SMS : le lien part par SMS, pas dans le courriel", () => {
+    assert.ok(s.calls[1].includes(":sms:notify=true"));
+    assert.strictEqual(out.invoiceUrl, "https://squareup.com/pay-invoice/NOUVEAU");
+  });
+})();
+
+await (async () => {
+  const s = fakeSquare({ createFails: true });
+  const out = await reissuePaymentLink(s.deps, orderDoc(), true);
+  test("Square en panne : l'echec est signale, pas avale", () => {
+    assert.strictEqual(out.reissued, false);
+    assert.strictEqual(out.invoiceUrl, null);
+    assert.ok(out.warning.includes("n'a PAS recu") || out.warning.includes("n'a PAS reçu"));
+    assert.ok(out.warning.includes("Square a refuse la facture"));
+  });
+})();
+
+await (async () => {
+  const s = fakeSquare({ cancelFails: true });
+  const out = await reissuePaymentLink(s.deps, orderDoc(), true);
+  test("annulation impossible : on ne cree PAS un second lien actif", () => {
+    assert.strictEqual(s.calls.length, 1);
+    assert.strictEqual(out.reissued, false);
+  });
+})();
+
+console.log(`\n${passed} reussis, ${failed} echoues\n`);
 if (failed > 0) process.exit(1);
