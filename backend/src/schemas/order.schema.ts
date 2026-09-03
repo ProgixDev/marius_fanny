@@ -98,6 +98,22 @@ export const createOrderSchema = z
       message: "L'adresse de livraison est requise pour une livraison",
       path: ["deliveryAddress"],
     },
+  )
+  .refine(
+    (data) => {
+      // Un client gouvernemental est facturé au nom de son établissement, qui
+      // doit figurer en tête de facture. Sans cette règle, le champ restait
+      // vide : 6 des 7 commandes gouvernementales existantes n'en ont aucun.
+      if (data.billingKind === "gouvernement") {
+        return !!(data.billingOrganization || "").trim();
+      }
+      return true;
+    },
+    {
+      message:
+        "Le nom de l'organisation est requis pour un client gouvernemental : c'est lui qui figure sur la facture.",
+      path: ["billingOrganization"],
+    },
   );
 
 // Update order schema - for PATCH /api/orders/:id

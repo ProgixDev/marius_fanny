@@ -164,10 +164,20 @@ export async function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
       const colWidth = width / 2 - 10;
       const blockTop = y;
 
+      // C'est l'ORGANISATION qui est facturée, pas la personne : pour un client
+      // gouvernemental, la facture doit porter le nom de l'établissement en
+      // tête, la personne devenant le contact. À défaut d'organisation
+      // enregistrée, on retombe sur le nom du client.
       doc.font("Helvetica-Bold").fontSize(8).fillColor(GREY).text("FACTURÉ À", left, y, { width: colWidth });
-      doc.font("Helvetica-Bold").fontSize(10).fillColor(DARK).text(data.clientName || "", left, doc.y + 3, { width: colWidth });
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(10)
+        .fillColor(DARK)
+        .text(data.organization || data.clientName || "", left, doc.y + 3, { width: colWidth });
       doc.font("Helvetica").fontSize(9).fillColor(GREY);
-      if (data.organization) doc.text(data.organization, { width: colWidth });
+      if (data.organization && data.clientName) {
+        doc.text(`À l'attention de ${data.clientName}`, { width: colWidth });
+      }
       if (data.clientEmail) doc.text(data.clientEmail, { width: colWidth });
       if (data.clientPhone) doc.text(data.clientPhone, { width: colWidth });
       const leftBottom = doc.y;

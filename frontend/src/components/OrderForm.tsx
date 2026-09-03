@@ -1054,6 +1054,15 @@ export default function OrderForm({
     if (!formData.takenByInitials || !formData.takenByInitials.trim()) {
       newErrors.takenByInitials = "Les initiales sont obligatoires";
     }
+    // Un client gouvernemental est facturé au nom de son établissement, qui
+    // figure en tête de facture. Le serveur le refuse aussi désormais.
+    if (
+      formData.billingKind === "gouvernement" &&
+      !(formData.billingOrganization || "").trim()
+    ) {
+      newErrors.billingOrganization =
+        "Le nom de l'organisation est requis : c'est lui qui figure sur la facture.";
+    }
     // Le numéro de téléphone est OBLIGATOIRE pour toute prise de commande au
     // back office (demande de Fanny, 9 juillet 2026). On garde un message plus
     // précis quand il sert au lien de paiement par SMS.
@@ -1459,7 +1468,11 @@ export default function OrderForm({
               Nouveau client
             </div>
           )}
-          {!selectedClient && emailSearch && (
+          {/* Visible aussi pour un client DEJA enregistre : sans cela, le type
+              de client et le nom de l organisation etaient impossibles a corriger
+              une fois le client selectionne — or la facture gouvernementale a
+              besoin de ce nom. */}
+          {(!!selectedClient || emailSearch) && (
             <div className="space-y-2 pt-2">
               <Label className="text-xs text-gray-600">TYPE DE CLIENT</Label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -1509,9 +1522,14 @@ export default function OrderForm({
                     onChange={(e) =>
                       handleInputChange("billingOrganization", e.target.value)
                     }
-                    className="w-full p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#337957]/40"
+                    className={`w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#337957]/40 ${
+                      errors.billingOrganization ? "border-red-500" : "border-gray-200"
+                    }`}
                     placeholder="Ex: Ville de la Vallée, Commission scolaire de Laval"
                   />
+                  {errors.billingOrganization && (
+                    <p className="text-[11px] text-red-500">{errors.billingOrganization}</p>
+                  )}
                 </div>
               )}
             </div>

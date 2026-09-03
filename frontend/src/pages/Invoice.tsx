@@ -187,12 +187,17 @@ export default function Invoice() {
         {/* Client info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div>
+            {/* C'est l'organisation qui est facturée, pas la personne : elle
+                passe en tête, le client devient le contact. */}
             <p className="text-xs font-bold text-gray-500 uppercase mb-2">Facturé à</p>
             <p className="text-sm font-semibold text-gray-900">
-              {order.clientInfo.firstName} {order.clientInfo.lastName}
+              {order.billingOrganization ||
+                `${order.clientInfo.firstName} ${order.clientInfo.lastName}`}
             </p>
             {order.billingOrganization && (
-              <p className="text-sm text-gray-700">{order.billingOrganization}</p>
+              <p className="text-sm text-gray-700">
+                À l'attention de {order.clientInfo.firstName} {order.clientInfo.lastName}
+              </p>
             )}
             <p className="text-sm text-gray-700">{order.clientInfo.email}</p>
             <p className="text-sm text-gray-700">{order.clientInfo.phone}</p>

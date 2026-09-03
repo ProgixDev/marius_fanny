@@ -364,5 +364,55 @@ test("changement de mois : la date reste valide", () => {
   assert.strictEqual(minimumServiceDate("2026-09-30", 2, true), "2026-10-02");
 });
 
+
+// ---------------------------------------------------------------------------
+// Client gouvernemental : le nom de l'organisation figure en tete de facture,
+// il ne peut donc plus etre laisse vide. 6 des 7 commandes gouvernementales
+// existantes n'en avaient aucun.
+// ---------------------------------------------------------------------------
+const { createOrderSchema } = await import("../dist/src/schemas/order.schema.js");
+
+/** Commande VALIDE par ailleurs : sans cela Zod n executerait pas le refine. */
+const baseOrder = (extra) => ({
+  clientInfo: { firstName: "Vivianne", lastName: "Abou Haibar", email: "v@ville.ca" },
+  pickupLocation: "Laval",
+  deliveryType: "pickup",
+  items: [
+    { productId: 103, productName: "Salade repas cesar", quantity: 2, unitPrice: 21.95, amount: 43.9 },
+  ],
+  ...extra,
+});
+
+const orgIssues = (extra) => {
+  const r = createOrderSchema.safeParse(baseOrder(extra));
+  if (r.success) return [];
+  return r.error.issues.filter((i) => i.path.join(".") === "billingOrganization");
+};
+
+console.log("\n--- Facturation gouvernementale : organisation obligatoire ---");
+
+test("gouvernement sans organisation : refuse", () => {
+  assert.strictEqual(orgIssues({ billingKind: "gouvernement" }).length, 1);
+});
+
+test("gouvernement avec organisation : accepte (sur ce point)", () => {
+  assert.strictEqual(
+    orgIssues({ billingKind: "gouvernement", billingOrganization: "Ville de Laval" }).length,
+    0,
+  );
+});
+
+test("organisation faite d'espaces : refuse", () => {
+  assert.strictEqual(
+    orgIssues({ billingKind: "gouvernement", billingOrganization: "   " }).length,
+    1,
+  );
+});
+
+test("client standard : l'organisation reste facultative", () => {
+  assert.strictEqual(orgIssues({ billingKind: "standard" }).length, 0);
+  assert.strictEqual(orgIssues({}).length, 0);
+});
+
 console.log(`\n${passed} reussis, ${failed} echoues\n`);
 if (failed > 0) process.exit(1);
