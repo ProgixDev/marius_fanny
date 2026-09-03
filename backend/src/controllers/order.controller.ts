@@ -2149,6 +2149,31 @@ export const updateOrder = async (
       });
     }
 
+    // ------------------------------------------------------------------
+    // Clients gouvernementaux : ils règlent par chèque sous 2 mois et ne
+    // peuvent JAMAIS être encaissés en magasin ni par lien. `createOrder`
+    // l'empêche par quatre garde-fous — `updateOrder` n'en avait aucun, si
+    // bien qu'un clic sur « Marquer payé » suffisait. Deux commandes réelles
+    // en ont fait les frais (MF-20260818-0370 et MF-20260820-0395), marquées
+    // payées alors qu'aucun chèque n'était arrivé : la comptabilité les
+    // croyait réglées.
+    //
+    // Un encaissement Square réel reste évidemment recevable : c'est un fait,
+    // pas une saisie.
+    // ------------------------------------------------------------------
+    const isGovernmentOrder = (order as any).billingKind === "gouvernement";
+    if (
+      isGovernmentOrder &&
+      !order.squarePaymentId &&
+      (updateData.depositPaid === true || updateData.balancePaid === true)
+    ) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Un client gouvernemental ne peut pas être marqué comme payé : il règle par chèque ou virement. Enregistrez le paiement à la réception du chèque en retirant d'abord la facturation gouvernementale.",
+      });
+    }
+
     // Track payment updates
     if (updateData.depositPaid !== undefined && updateData.depositPaid !== order.depositPaid) {
       const oldDepositPaid = order.depositPaid;

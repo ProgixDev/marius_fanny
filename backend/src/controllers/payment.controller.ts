@@ -720,6 +720,18 @@ export const createInvoice = async (req: Request, res: Response) => {
 
     console.log(`📧 [INVOICE] Creating invoice (Order: ${orderId}, canal: ${deliveryChannel})`);
 
+    // Client gouvernemental : facture payée par chèque, jamais de lien Square.
+    // La protection n'existait que dans l'interface — un appel direct à cette
+    // route émettait quand même un lien.
+    const govCheck: any = await Order.findById(orderId).select("billingKind").lean().catch(() => null);
+    if (govCheck?.billingKind === "gouvernement") {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Un client gouvernemental ne reçoit pas de lien de paiement : il règle par chèque sur facture.",
+      });
+    }
+
     // Annuler un éventuel ANCIEN lien Square encore ouvert pour cette commande
     // (ex. lien renvoyé après modification) → on ne laisse jamais 2 liens actifs
     // en même temps dans Square.
@@ -2348,6 +2360,13 @@ export async function createInvoiceForExistingOrder(
 
   const order = await Order.findById(orderId);
   if (!order) throw new Error(`Order ${orderId} not found`);
+
+  // Client gouvernemental : facture réglée par chèque, jamais de lien Square.
+  if ((order as any).billingKind === "gouvernement") {
+    throw new Error(
+      "Un client gouvernemental ne reçoit pas de lien de paiement : il règle par chèque sur facture.",
+    );
+  }
 
   const customerEmail = order.clientInfo.email;
   const customerName = `${order.clientInfo.firstName} ${order.clientInfo.lastName}`.trim();

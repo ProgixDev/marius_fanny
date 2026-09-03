@@ -2079,7 +2079,10 @@ export function OrderManagement() {
                 Revenir à prête
               </DropdownMenuItem>
             )}
-            {order.paymentStatus !== "paid" && (
+            {/* Un client gouvernemental regle par cheque : le marquer « payé »
+                fausse la comptabilite. Le serveur refuse desormais aussi. */}
+            {order.paymentStatus !== "paid" &&
+              (order as any).billingKind !== "gouvernement" && (
               <DropdownMenuItem onClick={() => handleMarkPaid(order)}>
                 <DollarSign className="h-4 w-4 mr-2" />
                 Marquer payé
