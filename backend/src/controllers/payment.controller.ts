@@ -28,6 +28,24 @@ import {
   readSquareOrderAmounts,
   isBalanceOnlyLineSet,
 } from "../utils/squareOrder.js";
+import { expectedInvoiceAmount, isInvoiceStale } from "../utils/paymentLink.js";
+
+/**
+ * Montant total réclamé par une facture Square, en dollars (null si illisible).
+ * Sert à détecter une facture devenue périmée après modification de commande.
+ */
+const readInvoiceComputedDollars = (invoice: any): number | null => {
+  const requests = invoice?.paymentRequests || invoice?.payment_requests;
+  if (!Array.isArray(requests) || requests.length === 0) return null;
+  let cents = 0;
+  for (const r of requests) {
+    const money = r?.computedAmountMoney ?? r?.computed_amount_money;
+    const amount = money?.amount;
+    if (amount == null) return null;
+    cents += typeof amount === "bigint" ? Number(amount) : Number(amount);
+  }
+  return Number.isFinite(cents) ? cents / 100 : null;
+};
 
 /**
  * Réaligne la commande sur ce que Square a réellement calculé.
@@ -1087,10 +1105,51 @@ export async function resendInvoiceLinkForOrder(order: any): Promise<{
   if (status === "PAID") return { success: false, code: "ALREADY_PAID" };
   if (status === "CANCELED") return { success: false, code: "CANCELED" };
 
-  if (!publicUrl) return { success: false, code: "NO_URL" };
-
   const channel = order.paymentLinkChannel || "email";
   const shortNum = String(order.orderNumber || order._id).split("-").pop();
+
+  // --- La facture Square est-elle encore au bon montant ? ------------------
+  // Elle n'est jamais mise à jour côté Square : après une modification de
+  // commande, ce lien porte encore l'ancien montant. Le renvoyer tel quel,
+  // c'est demander au client de payer un prix périmé (bug constaté sur la
+  // commande 458). On ne renvoie donc JAMAIS un lien dont le montant ne
+  // correspond plus : on le régénère d'abord.
+  const invoiceAmount = readInvoiceComputedDollars(invoice);
+  const baselinePaid = Number(order.squareInvoiceBaselinePaid || 0);
+  const expectedAmount = expectedInvoiceAmount(order.total || 0, baselinePaid);
+
+  if (invoiceAmount != null && isInvoiceStale(invoiceAmount, order.total || 0, baselinePaid)) {
+    if (baselinePaid > 0.01) {
+      // Facture de SOLDE : la régénérer produirait une facture du total complet
+      // et ferait payer deux fois. Ce cas passe par la fenêtre « solde ».
+      return {
+        success: false,
+        code: "STALE_BALANCE_INVOICE",
+        error: `Le lien existant porte ${invoiceAmount.toFixed(2)}$ alors que le solde est de ${expectedAmount.toFixed(2)}$. Passez par « Encaisser le solde » pour émettre un lien au bon montant.`,
+      };
+    }
+
+    console.warn(
+      `⚠️ [RENVOI] Facture périmée pour ${order.orderNumber}: ${invoiceAmount.toFixed(2)}$ ≠ ${expectedAmount.toFixed(2)}$ — régénération.`,
+    );
+    await cancelSquareInvoiceById(order.squareInvoiceId);
+    const { publicUrl: freshUrl } = await createInvoiceForExistingOrder(
+      String(order._id),
+      channel === "sms" ? "sms" : "email",
+    );
+    if (!freshUrl) return { success: false, code: "NO_URL" };
+    return {
+      success: true,
+      code: "REISSUED",
+      channel,
+      dest:
+        channel === "sms"
+          ? (order.clientInfo?.phone || "").trim()
+          : (order.clientInfo?.email || "").trim(),
+    };
+  }
+
+  if (!publicUrl) return { success: false, code: "NO_URL" };
 
   if (channel === "sms") {
     const phone = (order.clientInfo?.phone || "").trim();
@@ -2274,6 +2333,10 @@ export async function reconcileUnpaidOrders(): Promise<number> {
 export async function createInvoiceForExistingOrder(
   orderId: string,
   channel: "email" | "sms" = "email",
+  // `false` quand l'appelant enverra lui-même le lien dans SON propre message
+  // (ex. courriel « commande modifiée », qui explique aussi ce qui a changé) :
+  // évite que le client reçoive deux courriels pour une seule modification.
+  sendNotification: boolean = true,
 ): Promise<{ invoiceId: string | null; publicUrl: string | null }> {
   // Pre-flight checks so we surface a clear reason instead of a Square SDK
   // stack trace 50 lines down.
@@ -2376,7 +2439,9 @@ export async function createInvoiceForExistingOrder(
 
   if (!publicUrl) throw new Error("Public invoice URL missing after publish");
 
-  if (channel === "sms") {
+  if (!sendNotification) {
+    // L'appelant diffusera lui-même le lien : on n'envoie rien ici.
+  } else if (channel === "sms") {
     await sendSms({
       to: normalizedPhone!,
       body: `Marius et Fanny: votre lien de paiement pour la commande #${(orderNumber || orderId).split("-").pop()}: ${publicUrl}`,

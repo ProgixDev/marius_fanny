@@ -3908,46 +3908,20 @@ export function OrderManagement() {
                   setEditNotification({ type: "nochange", amount: 0, clientName });
                   setTimeout(() => setEditNotification(null), 4000);
                 }
-              } else if (
-                formData.billingKind !== "gouvernement" &&
-                updatedOrder.paymentStatus !== "paid" &&
-                updatedOrder.paymentMethod === "payment_link" &&
-                (
-                  // Passage "magasin → envoyer un lien" : pas encore de lien → en créer un
-                  !selectedOrder.squareInvoiceId ||
-                  // OU total modifié → renvoyer un lien à jour
-                  Math.abs(newTotal - (selectedOrder.total || 0)) > 0.01
-                )
-              ) {
-                // Commande non payée passée en lien (ou total modifié) → on
-                // (ré)envoie un lien de paiement. On annule l'ancien lien s'il existe.
-                try {
-                  if (selectedOrder.squareInvoiceId) {
-                    await fetch(`${normalizedApiUrl}/api/payments/cancel-invoice`, {
-                      method: "POST",
-                      headers: authHeaders(),
-                      credentials: "include",
-                      body: JSON.stringify({ orderId: updatedOrder.id }),
-                    });
-                  }
-                  const invoiceData = await sendPaymentLink(updatedOrder);
-                  updatedOrder.squareInvoiceId = invoiceData?.invoiceId;
-                  setOrders((prev) => {
-                    const next = prev.map((o) =>
-                      o.id === updatedOrder.id ? updatedOrder : o,
-                    );
-                    setFilteredOrders(applyOrderFilters(next));
-                    return next;
-                  });
-                  alert(
-                    `Un nouveau lien de paiement a été envoyé à ${updatedOrder.client.email} pour le nouveau total.`,
-                  );
-                } catch (err: any) {
-                  console.error("Failed to resend payment link:", err);
-                  alert(
-                    `Commande modifiée, mais l'envoi du nouveau lien a échoué: ${getErrorMessage(err)}`,
-                  );
-                }
+              }
+
+              // La réémission du lien de paiement appartient désormais au
+              // SERVEUR (voir updateOrder). Elle se décidait ici à partir de
+              // `paymentMethod`, un champ qui n'existe pas en base : il est
+              // redéduit à chaque chargement et retombe sur « in_store », si
+              // bien qu'après un simple rafraîchissement de la page le client
+              // ne recevait plus jamais son nouveau montant. On se contente
+              // d'afficher ce que le serveur a fait — et surtout ses échecs,
+              // qui passaient totalement inaperçus.
+              if (result?.warning) {
+                alert(result.warning);
+              } else if (result?.message && /lien de paiement/i.test(result.message)) {
+                alert(result.message);
               }
 
               setIsEditModalOpen(false);

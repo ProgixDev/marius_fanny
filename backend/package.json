@@ -11,6 +11,7 @@
     "dev:node": "tsx watch src/index.ts",
     "build": "tsc",
     "test:balance": "node scripts/test-balance-safety.js",
+    "test:payment-link": "node scripts/test-payment-link.js",
     "check:taxes": "bun scripts/check-square-tax-payload.ts",
     "lint": "eslint . --max-warnings 0",
     "start": "node dist/src/index.js"

@@ -837,6 +837,12 @@ export async function sendOrderUpdatedEmail(data: {
   deliveryType?: "pickup" | "delivery";
   clientNote?: string;
   orderId?: string;
+  /**
+   * Nouveau lien de paiement Square, quand la modification a changé le montant.
+   * Sans lui, ce courriel annonçait le nouveau total sans donner AUCUN moyen de
+   * le régler — et le client restait avec un ancien lien au mauvais montant.
+   */
+  invoiceUrl?: string | null;
 }): Promise<void> {
   try {
     const { tps: tpsAmount, tvq: tvqAmount } = taxParts(
@@ -890,7 +896,14 @@ export async function sendOrderUpdatedEmail(data: {
       balance > 0.01
         ? `<div style="background-color: #FFF4E6; padding: 15px; border-radius: 8px; margin-top: 24px; border-left: 4px solid #C5A065;">
             <p style="color: #2D2A26; margin: 0; font-weight: bold;">Reste à payer : ${balance.toFixed(2)}$</p>
-            <p style="color: #555; margin: 5px 0 0 0; font-size: 14px;">Ce montant sera réglé lors du ${data.deliveryType === "delivery" ? "de la livraison" : "ramassage"}, ou par un lien de paiement que nous pouvons vous envoyer.</p>
+            ${
+              data.invoiceUrl
+                ? `<p style="color: #555; margin: 5px 0 0 0; font-size: 14px;">Ce lien remplace tout lien reçu précédemment : seul celui-ci porte le bon montant.</p>
+            <div style="text-align: center; margin-top: 16px;">
+              <a href="${data.invoiceUrl}" style="display: inline-block; background-color: #C5A065; color: #ffffff; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: bold;">Payer ${balance.toFixed(2)}$</a>
+            </div>`
+                : `<p style="color: #555; margin: 5px 0 0 0; font-size: 14px;">Ce montant sera réglé lors du ${data.deliveryType === "delivery" ? "de la livraison" : "ramassage"}, ou par un lien de paiement que nous pouvons vous envoyer.</p>`
+            }
           </div>`
         : balance < -0.01
           ? `<div style="background-color: #E8F5E9; padding: 15px; border-radius: 8px; margin-top: 24px; border-left: 4px solid #4CAF50;">

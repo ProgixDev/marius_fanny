@@ -33,6 +33,7 @@ import {
   cancelSquareInvoiceById,
   createInvoiceForExistingOrder,
 } from "./payment.controller.js";
+import { shouldReissuePaymentLink } from "../utils/paymentLink.js";
 import {
   calculatePromoDiscount,
   isPromoCurrentlyValid,
@@ -1794,6 +1795,9 @@ export const updateOrder = async (
       deliveryTimeSlot: order.deliveryTimeSlot,
       deliveryType: order.deliveryType,
       status: order.status,
+      // Sert à décider s'il faut réémettre le lien de paiement : un montant qui
+      // bouge rend l'ancienne facture Square caduque.
+      total: order.total,
     };
 
     // Track and update client info
@@ -2369,11 +2373,58 @@ export const updateOrder = async (
     //   - un simple pointage d'emballage (le back office renvoie `items` à
     //     chaque case cochée, mais seul `productionStatus` change) ;
     //   - un changement de statut/paiement seul.
-    try {
-      const clientEmail = (order.clientInfo?.email || "").trim();
-      const changeLines = describeCustomerFacingChanges(before, order);
+    const clientEmail = (order.clientInfo?.email || "").trim();
+    const changeLines = describeCustomerFacingChanges(before, order);
+    const willEmailCustomer =
+      changeLines.length > 0 && !!clientEmail && order.status !== "cancelled";
 
-      if (changeLines.length > 0 && clientEmail && order.status !== "cancelled") {
+    // --- Réémission du lien de paiement quand le MONTANT a changé ---------
+    // Cette décision était prise par le frontend à partir d'un `paymentMethod`
+    // qui n'existe pas en base : il est redéduit à chaque chargement et retombe
+    // sur « in_store » dès que la page a été rechargée. Résultat, le client ne
+    // recevait jamais le nouveau montant, et « Renvoyer la facture » lui
+    // repartait l'ancien — la facture Square n'étant jamais mise à jour.
+    // La règle est désormais ici, et ne dépend que des données de la commande.
+    let reissuedInvoiceUrl: string | null = null;
+    let reissueWarning: string | undefined;
+    const mustReissuePaymentLink = shouldReissuePaymentLink({
+      previousTotal: before.total,
+      newTotal: order.total,
+      squareInvoiceId: order.squareInvoiceId,
+      squarePaymentId: order.squarePaymentId,
+      paymentStatus: order.paymentStatus,
+      status: order.status,
+      billingKind: (order as any).billingKind,
+    });
+
+    if (mustReissuePaymentLink) {
+      const channel = order.paymentLinkChannel === "sms" ? "sms" : "email";
+      try {
+        await cancelSquareInvoiceById(order.squareInvoiceId!);
+        const { publicUrl } = await createInvoiceForExistingOrder(
+          order._id.toString(),
+          channel,
+          // Par courriel, le lien voyage dans le message « commande modifiée »
+          // ci-dessous (un seul courriel, qui explique aussi ce qui a changé).
+          // Par SMS, ou si aucun courriel ne part, la fonction notifie
+          // elle-même — sinon le client n'aurait AUCUN moyen de payer.
+          channel === "sms" || !willEmailCustomer,
+        );
+        reissuedInvoiceUrl = publicUrl;
+        console.log(
+          `✅ Lien de paiement réémis pour ${order.orderNumber} (nouveau total ${order.total}$)`,
+        );
+      } catch (e: any) {
+        reissueWarning = `Le nouveau lien de paiement n'a pas pu être émis (${e?.message}). Le client n'a PAS reçu le nouveau montant — utilisez « Renvoyer la facture ».`;
+        console.error(
+          `⚠️ [MAJ COMMANDE] réémission du lien impossible pour ${order.orderNumber}:`,
+          e?.message || e,
+        );
+      }
+    }
+
+    try {
+      if (willEmailCustomer) {
         await sendOrderUpdatedEmail({
           email: clientEmail,
           name: `${order.clientInfo.firstName} ${order.clientInfo.lastName}`.trim(),
@@ -2394,6 +2445,7 @@ export const updateOrder = async (
           timeSlot: order.deliveryTimeSlot || undefined,
           deliveryType: order.deliveryType,
           orderId: order._id.toString(),
+          invoiceUrl: reissuedInvoiceUrl,
         });
       }
     } catch (mailError: any) {
@@ -2407,8 +2459,15 @@ export const updateOrder = async (
     // Émission du lien de paiement APRÈS l'enregistrement : Square doit voir la
     // commande à jour (montants, articles), et la facture y est créée puis
     // envoyée au client par courriel ou SMS.
-    let paymentLinkWarning: string | undefined;
+    let paymentLinkWarning: string | undefined = reissueWarning;
     let responseOrder: any = order;
+    // La réémission a posé un NOUVEAU squareInvoiceId en base : sans relecture,
+    // le frontend garderait l'ancien identifiant et « Renvoyer la facture »
+    // repartirait sur la facture annulée.
+    if (mustReissuePaymentLink) {
+      const refreshed = await Order.findById(order._id);
+      if (refreshed) responseOrder = refreshed;
+    }
     if (issuePaymentLinkAfterSave) {
       try {
         const { invoiceId } = await createInvoiceForExistingOrder(
@@ -2443,7 +2502,7 @@ export const updateOrder = async (
       data: responseOrder,
       message: paymentLinkWarning
         ? paymentLinkWarning
-        : issuePaymentLinkAfterSave
+        : issuePaymentLinkAfterSave || reissuedInvoiceUrl
           ? "Commande mise à jour — lien de paiement envoyé au client."
           : "Commande mise à jour avec succès",
       ...(paymentLinkWarning ? { warning: paymentLinkWarning } : {}),
