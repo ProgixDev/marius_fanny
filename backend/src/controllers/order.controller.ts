@@ -2022,7 +2022,7 @@ export const updateOrder = async (
       // ajoutait une ligne « Produits modifiés » vide. 96 % des 1427 entrées
       // existantes ne consignaient aucun changement, et chacune stocke une
       // copie complète des articles — d'où des commandes qui enflent sans fin.
-      if (shouldRecordItemChange(oldItems as any, updateData.items as any, oldTotal, total)) {
+      if (shouldRecordItemChange(oldItems as any, updateData.items as any)) {
         changes.push({
           changedAt: new Date(),
           changedBy: userId,

@@ -14,7 +14,9 @@
     "test:payment-link": "node scripts/test-payment-link.js",
     "check:taxes": "bun scripts/check-square-tax-payload.ts",
     "lint": "eslint . --max-warnings 0",
-    "start": "node dist/src/index.js"
+    "start": "node dist/src/index.js",
+    "test:functional": "bun test tests/functional --timeout 45000",
+    "test": "npm run build && node scripts/test-balance-safety.js && node scripts/test-payment-link.js && npm run test:functional"
   },
   "devDependencies": {
     "@types/bun": "latest",

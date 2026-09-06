@@ -255,7 +255,7 @@ test("cocher « emballe » ne cree AUCUNE entree", () => {
   const before = items458();
   const after = items458().map((i) => ({ ...i, productionStatus: "ready" }));
   assert.deepStrictEqual(describeItemChanges(before, after), []);
-  assert.strictEqual(shouldRecordItemChange(before, after, 935.03, 935.03), false);
+  assert.strictEqual(shouldRecordItemChange(before, after), false);
 });
 
 test("une quantite modifiee cree bien une entree", () => {
@@ -263,14 +263,14 @@ test("une quantite modifiee cree bien une entree", () => {
   const after = items458();
   after[1].quantity = 5;
   assert.deepStrictEqual(describeItemChanges(before, after), ["Salade repas cesar : 4 → 5"]);
-  assert.strictEqual(shouldRecordItemChange(before, after, 935.03, 956.98), true);
+  assert.strictEqual(shouldRecordItemChange(before, after), true);
 });
 
 test("un article ajoute ou retire cree une entree", () => {
   const before = items458();
   assert.ok(describeItemChanges(before, [before[0]])[0].startsWith("Retire") ||
             describeItemChanges(before, [before[0]])[0].startsWith("Retiré"));
-  assert.strictEqual(shouldRecordItemChange(before, [before[0]], 935.03, 847.23), true);
+  assert.strictEqual(shouldRecordItemChange(before, [before[0]]), true);
 });
 
 test("changer l'option d'un produit compte comme un changement", () => {
@@ -287,9 +287,11 @@ test("un prix unitaire modifie compte, meme a quantite egale", () => {
   assert.ok(describeItemChanges(before, after)[0].includes("prix unitaire"));
 });
 
-test("total change sans que les articles bougent (remise, livraison) : on consigne", () => {
+test("total change sans que les articles bougent : on ne consigne PAS", () => {
+  // Le total est recalcule a chaque enregistrement et peut deriver d'un cent
+  // sur une vieille commande : s'y fier ferait revenir le bruit d'origine.
   const before = items458();
-  assert.strictEqual(shouldRecordItemChange(before, items458(), 935.03, 905.03), true);
+  assert.strictEqual(shouldRecordItemChange(before, items458()), false);
 });
 
 test("l'ordre des articles n'invente pas un changement", () => {

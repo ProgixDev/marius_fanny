@@ -77,15 +77,17 @@ export function describeItemChanges(
 
 /**
  * Faut-il inscrire une entrée « Produits modifiés » dans l'historique ?
- * Oui seulement si le contenu a réellement bougé, ou si le total a changé
- * (remise, frais de livraison… sans que les articles varient).
+ *
+ * UNIQUEMENT si le contenu a réellement bougé. On ne se fie surtout pas au
+ * total : celui-ci est recalculé à chaque enregistrement et peut différer d'un
+ * cent de la valeur stockée (arrondis, réglages de taxe d'un produit modifiés
+ * depuis). Une commande ancienne aurait alors reproduit le bruit d'origine à
+ * chaque case « emballé » cochée. Un changement de remise ou de frais de
+ * livraison n'est pas un changement de PRODUITS et se consigne ailleurs.
  */
 export function shouldRecordItemChange(
   before: ComparableItem[] | undefined,
   after: ComparableItem[] | undefined,
-  previousTotal: number,
-  newTotal: number,
 ): boolean {
-  if (Math.abs((newTotal || 0) - (previousTotal || 0)) > 0.001) return true;
   return describeItemChanges(before, after).length > 0;
 }

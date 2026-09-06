@@ -1,0 +1,4 @@
+[test]
+# Les doublures (Square, courriels, SMS, PDF) doivent être posées AVANT que les
+# contrôleurs ne soient importés : d'où ce préchargement.
+preload = ["./tests/setup.ts"]
