@@ -12,6 +12,8 @@ import {
   X,
   Calendar,
   Filter,
+  ChevronDown,
+  AlertTriangle,
 } from "lucide-react";
 import { authClient, normalizedApiUrl } from "../lib/AuthClient";
 import { authHeaders } from "../utils/authHeaders";
@@ -47,6 +49,9 @@ interface DeliveryOrder {
   totalAmount: number;
   estimatedDeliveryTime?: string;
   createdAt: string;
+  // Date de SERVICE (deliveryDate, sinon pickupDate) — vide si la commande n'en
+  // a aucune. Sert à séparer les livraisons du jour des autres.
+  serviceDate?: string;
   paymentStatus?: "unpaid" | "deposit_paid" | "paid";
   assignedDriver?: {
     id: string;
@@ -246,6 +251,9 @@ const DeliveryDashboard: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<DeliveryOrder | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  // Module « autres livraisons » : replié par défaut, pour que la journée du
+  // livreur reste la seule chose sous ses yeux.
+  const [showOtherDays, setShowOtherDays] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [smsNotification, setSmsNotification] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -306,30 +314,9 @@ const DeliveryDashboard: React.FC = () => {
       return "pending";
     };
 
-    // Le livreur ne voit QUE les livraisons du jour. Toutes les dates lui
-    // étaient affichées (filtre « Toutes » par défaut), et une commande d'un
-    // autre jour a ainsi été livrée par erreur (septembre 2026).
-    //
-    // Date de service = deliveryDate, sinon pickupDate — jamais la date de
-    // création : une commande passée aujourd'hui pour livraison vendredi ne
-    // doit pas apparaître aujourd'hui. Lue comme un JOUR CALENDAIRE (sans
-    // décalage de fuseau), comparée au jour local de l'appareil du livreur.
-    const isDeliveryToday = (order: any): boolean => {
-      const raw = String(order.deliveryDate || order.pickupDate || "");
-      const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-      if (!m) return false;
-      const now = new Date();
-      return (
-        Number(m[1]) === now.getFullYear() &&
-        Number(m[2]) === now.getMonth() + 1 &&
-        Number(m[3]) === now.getDate()
-      );
-    };
-
     const normalizeOrder = (order: any): DeliveryOrder | null => {
       if (order.deliveryType !== "delivery") return null;
       if (["cancelled", "completed"].includes(order.status)) return null;
-      if (!isDeliveryToday(order)) return null;
 
       const mappedStatus = normalizeDeliveryStatus(order);
       if (!["pending", "in_transit", "arrived", "delivered"].includes(mappedStatus)) {
@@ -374,6 +361,7 @@ const DeliveryDashboard: React.FC = () => {
         totalAmount: Number(order.total || 0),
         estimatedDeliveryTime,
         createdAt: String(order.deliveryDate || order.pickupDate || order.createdAt || new Date().toISOString()),
+        serviceDate: String(order.deliveryDate || order.pickupDate || ""),
         paymentStatus: order.paymentStatus,
         assignedDriver: order.assignedDriver
           ? {
@@ -559,8 +547,41 @@ const DeliveryDashboard: React.FC = () => {
     );
   };
 
+  // Livraison du JOUR ? Date de service (deliveryDate, sinon pickupDate) lue
+  // comme un jour calendaire, comparée au jour local de l'appareil du livreur.
+  // Jamais la date de création : une commande passée aujourd'hui pour vendredi
+  // n'est pas une livraison d'aujourd'hui.
+  const serviceDay = (order: DeliveryOrder): string => {
+    const m = String(order.serviceDate || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[1]}-${m[2]}-${m[3]}` : "";
+  };
+  const todayKey = (() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  })();
+  const isDeliveryToday = (order: DeliveryOrder) => serviceDay(order) === todayKey;
+
+  // Par défaut, SANS filtre à régler : le livreur ne voit que sa journée. Toutes
+  // les dates lui étaient affichées (« Toutes » par défaut), et une commande
+  // d'un autre jour a été livrée par erreur (septembre 2026).
+  const todayOrders = orders.filter(isDeliveryToday);
+
+  // Le reste, dans un module séparé en bas : à venir d'abord (la plus proche en
+  // tête), puis les jours passés (le plus récent en tête), puis les commandes
+  // sans date.
+  const otherOrders = orders
+    .filter((o) => !isDeliveryToday(o))
+    .sort((a, b) => {
+      const da = serviceDay(a);
+      const db = serviceDay(b);
+      const rank = (d: string) => (!d ? 2 : d > todayKey ? 0 : 1);
+      if (rank(da) !== rank(db)) return rank(da) - rank(db);
+      if (rank(da) === 0) return da.localeCompare(db);
+      return db.localeCompare(da);
+    });
+
   const getFilteredOrders = () => {
-    let filtered = orders;
+    let filtered = todayOrders;
     
     // Filtre par statut
     if (statusFilter !== "all") {
@@ -571,13 +592,7 @@ const DeliveryDashboard: React.FC = () => {
   };
 
   // Nombre de livraisons prévues AUJOURD'HUI (pour le petit badge de notification)
-  const todayDeliveriesCount = orders.filter((order) => {
-    const d = toCalendarDate(order.createdAt);
-    d.setHours(0, 0, 0, 0);
-    const t = new Date();
-    t.setHours(0, 0, 0, 0);
-    return d.getTime() === t.getTime();
-  }).length;
+  const todayDeliveriesCount = todayOrders.length;
 
   if (loading) {
     return (
@@ -1086,6 +1101,92 @@ const DeliveryDashboard: React.FC = () => {
               </table>
             </div>
           </div>
+
+          {/* AUTRES LIVRAISONS — tous les autres jours, repliées par défaut */}
+          <div className="mt-8 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowOtherDays((v) => !v)}
+              className="w-full flex items-center justify-between gap-3 px-4 md:px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+            >
+              <div>
+                <p className="font-semibold text-gray-900">
+                  Toutes les autres livraisons
+                  <span className="ml-2 px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded-full">
+                    {otherOrders.length}
+                  </span>
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Les autres jours — à ne pas livrer aujourd'hui
+                </p>
+              </div>
+              <ChevronDown
+                className={`w-5 h-5 text-gray-500 shrink-0 transition-transform ${showOtherDays ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {showOtherDays && (
+              <div className="border-t border-gray-200">
+                <div className="flex items-center gap-2 px-4 md:px-6 py-2 bg-amber-50 text-amber-800 text-xs font-medium">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  Aucune de ces commandes n'est prévue aujourd'hui. Vérifiez la date avant de livrer.
+                </div>
+                {otherOrders.length === 0 ? (
+                  <p className="px-6 py-8 text-center text-sm text-gray-500">
+                    Aucune autre livraison.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-gray-100">
+                    {otherOrders.map((order) => (
+                      <li key={order.id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOrder(order)}
+                          className="w-full text-left px-4 md:px-6 py-3 hover:bg-gray-50 active:bg-gray-100 flex items-center gap-3"
+                        >
+                          <div className="w-28 md:w-36 shrink-0">
+                            <p className="text-sm font-semibold text-gray-900">
+                              {order.serviceDate ? formatDayName(order.serviceDate) : "Sans date"}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {order.serviceDate ? formatDate(order.serviceDate) : "—"}
+                            </p>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-gray-900 truncate">
+                              <span className="font-medium">#{formatOrderNumber(order.orderNumber)}</span>
+                              {" · "}
+                              {order.clientInfo.firstName} {order.clientInfo.lastName}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate">
+                              {order.deliveryAddress.street}, {order.deliveryAddress.city}
+                            </p>
+                          </div>
+                          <span
+                            className={`hidden sm:inline px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                              order.status === "pending"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : order.status === "in_transit"
+                                ? "bg-blue-100 text-blue-800"
+                                : order.status === "arrived"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}
+                          >
+                            {order.status === "pending" && "En attente"}
+                            {order.status === "in_transit" && "En route"}
+                            {order.status === "arrived" && "Arrivé"}
+                            {order.status === "delivered" && "Livré"}
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1124,6 +1225,19 @@ const DeliveryDashboard: React.FC = () => {
       >
         {selectedOrder && (
           <div className="space-y-6">
+            {!isDeliveryToday(selectedOrder) && (
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 border border-amber-300 text-amber-900">
+                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-bold">Cette commande n'est pas à livrer aujourd'hui</p>
+                  <p className="mt-0.5">
+                    {selectedOrder.serviceDate
+                      ? `Livraison prévue ${formatDayName(selectedOrder.serviceDate).toLowerCase()} — ${formatDate(selectedOrder.serviceDate)}.`
+                      : "Aucune date de livraison n'est indiquée : vérifiez avec la boutique."}
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-6">
               <div>
                 <h4 className="text-sm font-medium text-gray-500 mb-3">Informations client</h4>
