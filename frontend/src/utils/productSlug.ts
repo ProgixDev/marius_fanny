@@ -47,9 +47,19 @@ export const findProductBySlug = <T extends { id: number; name: string }>(
   return undefined;
 };
 
-/** Lien complet à copier-coller dans une publication. */
-export const productUrl = (product: { id: number; name: string }): string => {
-  const slug = productSlug(product.name) || String(product.id);
+/**
+ * Lien complet à copier-coller dans une publication.
+ *
+ * `withId` ajoute le numéro du produit (« /produit/fraisier-180 ») : c'est
+ * nécessaire quand deux produits portent le même nom, sinon le lien ouvrirait
+ * toujours le premier des deux.
+ */
+export const productUrl = (
+  product: { id: number; name: string },
+  options: { withId?: boolean } = {},
+): string => {
+  const base = productSlug(product.name);
+  const slug = !base ? String(product.id) : options.withId ? `${base}-${product.id}` : base;
   const origin =
     typeof window !== "undefined" && window.location?.origin
       ? window.location.origin

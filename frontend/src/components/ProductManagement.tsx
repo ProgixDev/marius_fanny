@@ -19,7 +19,7 @@ import {
   Link2,
 } from "lucide-react";
 import { DataTable } from "./ui/DataTable";
-import { productUrl } from "../utils/productSlug";
+import { productSlug, productUrl } from "../utils/productSlug";
 import { Modal } from "./ui/modal";
 import {
   DropdownMenu,
@@ -351,7 +351,13 @@ export function ProductManagement() {
   // les réseaux sociaux). Le presse-papiers est refusé par certains
   // navigateurs : on affiche alors le lien pour qu'il soit copié à la main.
   const handleCopyLink = async (product: Product) => {
-    const url = productUrl(product);
+    // Huit produits du catalogue portent EXACTEMENT le même nom que l'un de
+    // leurs voisins (deux « Fraisier », deux « Rocher »…). Un lien tiré du nom
+    // seul ouvrirait toujours le premier des deux : dans ce cas précis, on y
+    // ajoute le numéro du produit pour que le lien désigne bien celui-ci.
+    const slug = productSlug(product.name);
+    const homonymes = products.filter((p) => productSlug(p.name) === slug).length;
+    const url = productUrl(product, { withId: homonymes > 1 });
     try {
       await navigator.clipboard.writeText(url);
       alert(`Lien copié :\n${url}`);
