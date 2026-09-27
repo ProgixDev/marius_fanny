@@ -16,8 +16,10 @@ import {
   Filter,
   ChevronRight,
   ChevronLeft,
+  Link2,
 } from "lucide-react";
 import { DataTable } from "./ui/DataTable";
+import { productUrl } from "../utils/productSlug";
 import { Modal } from "./ui/modal";
 import {
   DropdownMenu,
@@ -345,6 +347,19 @@ export function ProductManagement() {
     setIsDetailsModalOpen(true);
   };
 
+  // Copie le lien du produit dans le presse-papiers (pour une publication sur
+  // les réseaux sociaux). Le presse-papiers est refusé par certains
+  // navigateurs : on affiche alors le lien pour qu'il soit copié à la main.
+  const handleCopyLink = async (product: Product) => {
+    const url = productUrl(product);
+    try {
+      await navigator.clipboard.writeText(url);
+      alert(`Lien copié :\n${url}`);
+    } catch {
+      window.prompt("Copiez le lien du produit :", url);
+    }
+  };
+
   const handleEdit = (product: Product) => {
     setSelectedProduct(product);
     setProductForm({
@@ -657,6 +672,12 @@ export function ProductManagement() {
               <DropdownMenuItem onClick={() => handleEdit(product)}>
                 <Edit className="w-4 h-4 mr-2" />
                 Modifier
+              </DropdownMenuItem>
+              {/* Lien propre au produit, à coller dans une publication : le
+                  visiteur arrive directement sur la fiche. */}
+              <DropdownMenuItem onClick={() => handleCopyLink(product)}>
+                <Link2 className="w-4 h-4 mr-2" />
+                Copier le lien du produit
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => handleDeleteClick(product)}

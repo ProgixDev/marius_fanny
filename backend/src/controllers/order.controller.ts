@@ -1312,8 +1312,10 @@ export const getProductionList = async (
         const productById = productMap.get(item.productId);
         const productByName = productNameMap.get(item.productName.toLowerCase());
         // Produit PERSONNALISÉ (productId 0) : aucun type de production défini.
-        // On le rattache par défaut aux PÂTISSIERS pour qu'il apparaisse dans
-        // leur liste de production (demande de Fanny).
+        // On le rattache par défaut aux PÂTISSIERS, et le drapeau
+        // `isCustomItem` ci-dessous le fait aussi apparaître chez les
+        // CUISINIERS : n'étant visible que d'un seul côté, il passait à la
+        // trappe (demande de Fanny, 27 septembre 2026).
         const isCustomItem = !item.productId || item.productId === 0;
         const resolvedProductionType =
           normalizeProductionType(productById?.productionType) ??
@@ -1329,6 +1331,9 @@ export const getProductionList = async (
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           productionType: resolvedProductionType,
+          // Article personnalisé : à préparer côté pâtisserie ET côté cuisine,
+          // les deux équipes doivent le voir.
+          isCustomItem,
           customerName: `${order.clientInfo.firstName} ${order.clientInfo.lastName}`,
           customerPhone: order.clientInfo.phone,
           deliveryDate: order.deliveryDate || (order.pickupDate ? order.pickupDate.toISOString().split('T')[0] : order.orderDate.toISOString().split('T')[0]),

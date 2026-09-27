@@ -45,6 +45,8 @@ interface ProductionItem {
   quantity: number;
   unitPrice: number;
   productionType?: "patisserie" | "cuisinier" | "four" | null;
+  // Article personnalisé : affiché chez les pâtissiers ET chez les cuisiniers.
+  isCustomItem?: boolean;
   customerName: string;
   customerPhone: string;
   deliveryDate: string;
@@ -300,7 +302,10 @@ const PatissierDashboard: React.FC = () => {
       const saved = loadSavedStatuses();
 
       const patissierItems = (data.data?.items || [])
-        .filter((item: ProductionItem) => item.productionType === "patisserie")
+        .filter(
+          (item: ProductionItem) =>
+            item.productionType === "patisserie" || item.isCustomItem,
+        )
         .map((item: ProductionItem) => ({
           ...item,
           done: saved.items[item.id] || false,

@@ -2704,6 +2704,10 @@ export function OrderManagement() {
               itemsPerPage={10}
               selectable={false}
               rowClassName={(order: OrderWithPacking) => getOrderColor(order)}
+              // Vue complète : trait de séparation marqué entre les commandes.
+              // Avec tous les détails affichés, le trait fin et très clair ne
+              // permettait plus de voir où une commande s'arrêtait.
+              strongRowSeparator={viewMode === "complete"}
             />
           )
         )}

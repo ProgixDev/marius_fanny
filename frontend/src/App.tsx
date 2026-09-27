@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, useParams, useNavigate } from "react-router-dom";
 
 // Components
 import Navbar from "./components/Navbar";
@@ -105,6 +105,36 @@ const ProductsPage: React.FC<ProductsPageProps> = ({
     <Footer />
   </>
 );
+
+/**
+ * Page d'UN produit : /produit/buche-de-noel
+ *
+ * Chaque produit a son propre lien, à coller dans une publication : le visiteur
+ * arrive directement sur la fiche, au lieu d'atterrir sur la boutique et de
+ * devoir chercher l'article. C'est la boutique habituelle, avec la fiche du
+ * produit déjà ouverte. Refermer la fiche ramène à la boutique.
+ */
+const ProductPage: React.FC<ProductsPageProps> = ({
+  onCartClick,
+  cartCount,
+  onAddToCart,
+}) => {
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  return (
+    <>
+      <Navbar onCartClick={onCartClick} cartCount={cartCount} />
+      <main className="pt-24 min-h-screen relative z-10">
+        <ProductSelection
+          onAddToCart={onAddToCart}
+          deepLinkSlug={slug}
+          onDeepLinkClose={() => navigate("/products")}
+        />
+      </main>
+      <Footer />
+    </>
+  );
+};
 
 const App: React.FC = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -410,6 +440,21 @@ const App: React.FC = () => {
             element={
               <RoleBasedRedirect>
                 <StaffManagement />
+              </RoleBasedRedirect>
+            }
+          />
+          <Route
+            path="/produit/:slug"
+            element={
+              <RoleBasedRedirect>
+                <ProductPage
+                  onCartClick={() => setIsCartOpen(true)}
+                  cartCount={cartItems.reduce(
+                    (sum, item) => sum + item.quantity,
+                    0,
+                  )}
+                  onAddToCart={addToCart}
+                />
               </RoleBasedRedirect>
             }
           />

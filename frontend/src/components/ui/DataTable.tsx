@@ -73,6 +73,10 @@ interface DataTableProps<T> {
   itemsPerPage?: number;
   actions?: (item: T) => React.ReactNode;
   rowClassName?: (item: T) => string;
+  // Trait de séparation ÉPAIS entre les lignes. Le trait par défaut
+  // (gris très clair, 1 px) ne se voyait plus en vue complète : les commandes
+  // s'enchaînaient sans qu'on distingue où l'une finissait (demande de Fanny).
+  strongRowSeparator?: boolean;
   selectable?: boolean;
   onSelectionChange?: (selectedItems: T[]) => void;
   getRowId?: (item: T) => string;
@@ -83,6 +87,9 @@ interface DataTableProps<T> {
   groupByOptions?: { value: string; label: string }[];
   onGroupByChange?: (value: string | undefined) => void;
 }
+
+const ROW_SEPARATOR_DEFAULT = "border-b border-gray-100";
+const ROW_SEPARATOR_STRONG = "border-b-2 border-gray-400";
 
 export function DataTable<T extends object>({
   data,
@@ -95,6 +102,7 @@ export function DataTable<T extends object>({
   itemsPerPage = 10,
   actions,
   rowClassName,
+  strongRowSeparator = false,
   selectable = false,
   onSelectionChange,
   getRowId,
@@ -105,6 +113,10 @@ export function DataTable<T extends object>({
   groupByOptions,
   onGroupByChange,
 }: DataTableProps<T>) {
+  const separatorClass = strongRowSeparator
+    ? ROW_SEPARATOR_STRONG
+    : ROW_SEPARATOR_DEFAULT;
+
   // Saisie affichée immédiatement, filtrage différé : sans cet anti-rebond,
   // chaque frappe reparcourait toutes les lignes (2 regex par ligne) puis
   // recopiait et retriait le tableau entier — d'où la sensation de blocage.
@@ -568,7 +580,7 @@ export function DataTable<T extends object>({
                       return (
                         <Fragment key={itemId}>
                           <tr
-                            className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${rowClassName?.(item) || ""}`}
+                            className={`${separatorClass} hover:bg-gray-50 transition-colors ${rowClassName?.(item) || ""}`}
                             data-state={isSelected ? "selected" : undefined}
                             onClick={(e) => {
                               const target = e.target as HTMLElement;
@@ -663,7 +675,7 @@ export function DataTable<T extends object>({
                   return (
                     <Fragment key={itemId}>
                       <tr
-                        className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${rowClassName?.(item) || ""}`}
+                        className={`${separatorClass} hover:bg-gray-50 transition-colors ${rowClassName?.(item) || ""}`}
                         data-state={isSelected ? "selected" : undefined}
                         onClick={(e) => {
                           const target = e.target as HTMLElement;

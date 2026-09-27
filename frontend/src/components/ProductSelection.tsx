@@ -4,6 +4,7 @@ import { productAPI } from '../lib/ProductAPI';
 import { categoryAPI } from '../lib/CategoryAPI';
 import type { Product, Category as CategoryType } from '../types';
 import { getImageUrl } from '../utils/api';
+import { findProductBySlug } from '../utils/productSlug';
 import {
   calculatePriceWithOptions,
   formatChoiceDisplay,
@@ -24,6 +25,13 @@ interface ProductSelectionProps {
   categoryTitle?: string;
   onBack?: () => void;
   onAddToCart: (product: any) => void;
+  // Lien direct vers UN produit (/produit/buche-de-noel) : à l'arrivée des
+  // produits, la fiche de celui-ci s'ouvre d'elle-même. Absent ailleurs : la
+  // boutique se comporte exactement comme avant.
+  deepLinkSlug?: string;
+  // Appelé quand la fiche ouverte par un lien direct est refermée, pour que
+  // l'adresse redevienne celle de la boutique.
+  onDeepLinkClose?: () => void;
 }
 
 const ProductSelection: React.FC<ProductSelectionProps> = ({
@@ -31,6 +39,8 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
   categoryTitle = '',
   onBack,
   onAddToCart,
+  deepLinkSlug,
+  onDeepLinkClose,
 }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
@@ -328,6 +338,23 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
     setSelectedOptions(defaults);
   };
 
+  // Lien direct : une fois les produits chargés, on ouvre la fiche demandée.
+  // Si le lien ne correspond à aucun produit (nom changé, produit retiré), on
+  // laisse simplement la boutique affichée — pas d'erreur pour le visiteur.
+  const deepLinkOpenedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!deepLinkSlug || products.length === 0) return;
+    if (deepLinkOpenedRef.current === deepLinkSlug) return;
+    deepLinkOpenedRef.current = deepLinkSlug;
+    const found = findProductBySlug(products, deepLinkSlug);
+    if (found) setSelectedProduct(found);
+  }, [deepLinkSlug, products]);
+
+  const closeProductModal = () => {
+    setSelectedProduct(null);
+    if (deepLinkSlug) onDeepLinkClose?.();
+  };
+
   const handleAddToCart = () => {
     if (selectedProduct) {
       if (hasMissingRequiredOptions) {
@@ -355,7 +382,7 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
         setTimeout(() => setShowRecommendationNotif(false), 12000);
       }
 
-      setSelectedProduct(null);
+      closeProductModal();
     }
   };
 
@@ -559,13 +586,13 @@ const ProductSelection: React.FC<ProductSelectionProps> = ({
           {/* Fond transparent au lieu de noir */}
           <div
             className="absolute inset-0 bg-black/25 backdrop-blur-[2px]"
-            onClick={() => setSelectedProduct(null)}
+            onClick={closeProductModal}
           />
 
           <div className="relative bg-white w-full md:max-w-6xl max-h-[95vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row">
             
             <button
-              onClick={() => setSelectedProduct(null)}
+              onClick={closeProductModal}
               className="absolute top-4 right-4 z-20 w-10 h-10 bg-white/80 backdrop-blur rounded-full flex items-center justify-center shadow-md hover:bg-[#337957] hover:text-white transition-all text-lg font-bold"
             >
               ✕

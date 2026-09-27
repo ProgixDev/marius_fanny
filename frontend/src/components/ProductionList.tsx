@@ -194,9 +194,17 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
         done: !!item.done,
       }));
 
-      // Filter by production type if specified
+      // Filter by production type if specified. Un article PERSONNALISÉ
+      // (« Item personnalisé », sans fiche produit) n'a pas de type : il est
+      // montré aux pâtissiers ET aux cuisiniers, sans quoi il n'apparaissait
+      // que d'un côté et pouvait être oublié.
       if (filterByType) {
-        items = items.filter((item: any) => item.productionType === filterByType);
+        items = items.filter(
+          (item: any) =>
+            item.productionType === filterByType ||
+            (item.isCustomItem &&
+              (filterByType === "patisserie" || filterByType === "cuisinier")),
+        );
       }
 
       setProductionItems(items);
