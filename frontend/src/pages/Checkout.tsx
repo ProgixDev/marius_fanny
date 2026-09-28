@@ -151,8 +151,9 @@ const Checkout: React.FC = () => {
       ];
     }
 
-    // Semaine (lundi à vendredi)
+    // Semaine (lundi à vendredi) — 7 h à 8 h ajouté le 28 septembre 2026.
     return [
+      "07:00 - 08:00",
       "08:00 - 09:00",
       "09:00 - 10:00",
       "10:00 - 11:00",
@@ -1268,6 +1269,14 @@ const Checkout: React.FC = () => {
                   )}
                   <SquarePaymentForm
                     amount={state.total}
+                    items={state.items.map((item) => ({
+                      productId: item.id,
+                      productName: item.name,
+                      quantity: item.quantity,
+                      unitPrice: item.price,
+                      amount: item.price * item.quantity,
+                    }))}
+                    deliveryFee={state.deliveryFee}
                     onPaymentSuccess={handlePaymentSuccess}
                     onPaymentError={handlePaymentError}
                     customerEmail={customerEmail}

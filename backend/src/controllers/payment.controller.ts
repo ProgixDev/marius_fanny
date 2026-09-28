@@ -211,7 +211,15 @@ export const createPayment = async (req: Request, res: Response) => {
   );
 
   try {
-    const { sourceId, amount, currency = "CAD", customerId, note } = req.body;
+    const {
+      sourceId,
+      amount,
+      currency = "CAD",
+      customerId,
+      note,
+      items,
+      deliveryFee,
+    } = req.body;
 
     // Validate required fields
     if (!sourceId || !amount) {
@@ -268,6 +276,75 @@ export const createPayment = async (req: Request, res: Response) => {
 
     if (note) {
       paymentRequest.note = note;
+    }
+
+    // ------------------------------------------------------------------
+    // Détail des taxes sur le relevé Square (commandes passées sur le site).
+    //
+    // Jusqu'ici ce paiement partait en « Montant personnalisé » : Square
+    // n'affichait que le total, sans sous-total ni TPS/TVQ, ce qui ne permet
+    // pas de justifier les déclarations (signalé par Fanny le 28 septembre
+    // 2026 sur une commande de 96,35 $). On joint donc au paiement une
+    // commande Square détaillée, avec les taxes posées nativement — même
+    // mécanisme que les factures par lien.
+    //
+    // Deux précautions, parce qu'on touche à un encaissement réel :
+    //  - Square CALCULE d'abord la commande sans rien créer. Le détail n'est
+    //    joint que si son total tombe EXACTEMENT sur le montant facturé, afin
+    //    que la cliente soit débitée au centime près de ce que le site lui a
+    //    affiché. Sinon (promotion, écart d'arrondi), on encaisse comme avant.
+    //  - Le moindre incident ici n'empêche JAMAIS le paiement : au pire il
+    //    reste « Montant personnalisé », comme aujourd'hui.
+    // ------------------------------------------------------------------
+    if (Array.isArray(items) && items.length > 0 && squareConfig.locationId) {
+      try {
+        const orderBody = await buildSquareOrderBody({
+          locationId: squareConfig.locationId,
+          referenceId: "commande-web",
+          orderItems: items.map((item: any) => ({
+            productId: Number(item?.productId) || 0,
+            productName: String(item?.productName || "Produit"),
+            quantity: Number(item?.quantity) || 1,
+            unitPrice: Number(item?.unitPrice) || 0,
+            amount:
+              Number(item?.amount) ||
+              (Number(item?.unitPrice) || 0) * (Number(item?.quantity) || 1),
+            taxable: item?.taxable,
+          })),
+          deliveryFee: Number(deliveryFee) || 0,
+        });
+
+        // Calcul à blanc : ne crée rien chez Square.
+        const calculated = await squareClient.orders.calculate({ order: orderBody });
+        const squareTotal = Number(
+          (calculated as any)?.order?.totalMoney?.amount ?? NaN,
+        );
+
+        if (Number.isFinite(squareTotal) && squareTotal === amountInCents) {
+          const createdOrder = await squareClient.orders.create({
+            idempotencyKey: randomUUID(),
+            order: orderBody,
+          });
+          const squareOrderId = (createdOrder as any)?.order?.id;
+          if (squareOrderId) {
+            paymentRequest.orderId = squareOrderId;
+            console.log(
+              `🧾 [PAIEMENT] Détail des taxes joint au paiement (commande Square ${squareOrderId})`,
+            );
+          }
+        } else {
+          console.warn(
+            `⚠️ [PAIEMENT] Détail des taxes NON joint : Square calcule ` +
+              `${(squareTotal / 100).toFixed(2)}$ contre ${Number(amount).toFixed(2)}$ facturés ` +
+              `(promotion appliquée ou écart d'arrondi). Encaissement normal, montant personnalisé.`,
+          );
+        }
+      } catch (taxError: any) {
+        console.warn(
+          `⚠️ [PAIEMENT] Détail des taxes NON joint (${taxError?.message || taxError}). ` +
+            `Encaissement normal, montant personnalisé.`,
+        );
+      }
     }
 
     const response = await squareClient.payments.create(paymentRequest);

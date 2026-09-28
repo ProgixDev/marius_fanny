@@ -27,6 +27,9 @@ const DELIVERY_WEEKEND = [
 ];
 
 const DELIVERY_WEEKDAY = [
+  // Créneau du matin ajouté le 28 septembre 2026 (demande de Fanny) :
+  // livraison entre 7 h et 8 h, du lundi au vendredi seulement.
+  "07:00 - 08:00",
   "08:00 - 09:00",
   "09:00 - 10:00",
   "10:00 - 11:00",

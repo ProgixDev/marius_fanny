@@ -9,6 +9,17 @@ import { normalizedApiUrl } from "../lib/AuthClient";
 
 interface SquarePaymentFormProps {
   amount: number;
+  // Articles du panier, transmis au serveur pour que le relevé Square porte le
+  // sous-total et les taxes au lieu d'un simple « Montant personnalisé ».
+  // Facultatif : sans eux, le paiement se fait exactement comme avant.
+  items?: Array<{
+    productId: number;
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    amount: number;
+  }>;
+  deliveryFee?: number;
   onPaymentSuccess: (paymentResult: any) => void;
   onPaymentError: (error: any) => void;
   customerEmail?: string;
@@ -23,6 +34,8 @@ interface SquarePaymentFormProps {
 
 export default function SquarePaymentForm({
   amount,
+  items,
+  deliveryFee,
   onPaymentSuccess,
   onPaymentError,
   customerEmail,
@@ -134,6 +147,10 @@ export default function SquarePaymentForm({
         amount: amount,
         currency: "CAD",
         note: `Payment for order - ${customerEmail || "Guest"}`,
+        // Détail des articles : le serveur s'en sert pour joindre le sous-total
+        // et les taxes au relevé Square. Le montant débité reste `amount`.
+        items,
+        deliveryFee,
       };
 
       console.log(
