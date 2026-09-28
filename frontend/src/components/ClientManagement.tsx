@@ -41,24 +41,14 @@ function ClientManagement() {
   const fetchClients = async () => {
     try {
       setLoading(true);
-      // On charge TOUTES les pages, pas seulement la première. Avant, la liste
-      // s'arrêtait à 100 clients alors qu'il y en a davantage : les plus
-      // anciens (ex. Lyne Jean, Diane Giguère, et même Fanny) devenaient
-      // invisibles et « disparaissaient » à mesure que de nouveaux clients
-      // repoussaient les anciens au-delà de la 100e place. La recherche étant
-      // locale, elle ne les retrouvait pas non plus.
-      // Lot de 500 par requête : tout tient en un seul appel au rythme actuel.
-      // La boucle reste là par sécurité — s'il y a un jour plus de 500 clients,
-      // les pages suivantes sont chargées, donc AUCUN client n'est jamais coupé.
-      const pageSize = 500;
-      const first = await clientAPI.getClients(1, pageSize);
-      let all = first.clients || [];
-      const totalPages = first.pagination?.totalPages || 1;
-      for (let p = 2; p <= totalPages; p++) {
-        const next = await clientAPI.getClients(p, pageSize);
-        all = all.concat(next.clients || []);
-      }
-      console.log(`Clients fetched: ${all.length} (sur ${totalPages} page(s))`);
+      // TOUS les clients, sans plafond : le serveur les renvoie par pages, du
+      // plus récent au plus ancien, et ne prendre que la première page faisait
+      // « disparaître » les clientes les plus anciennes (Lyne Jean, Diane
+      // Giguère, Fanny elle-même). Le parcours de toutes les pages est
+      // centralisé dans ClientAPI.getEveryClient, partagé par les écrans
+      // Clients, Commandes et Soumissions.
+      const all = await clientAPI.getEveryClient();
+      console.log(`Clients fetched: ${all.length}`);
       setClients(all);
       setError(null);
     } catch (err) {

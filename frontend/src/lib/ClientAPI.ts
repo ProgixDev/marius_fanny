@@ -107,6 +107,47 @@ class ClientAPI {
     };
   }
 
+  /**
+   * TOUS les clients, sans plafond.
+   *
+   * Le serveur renvoie les clients par pages, du plus récent au plus ancien.
+   * Un écran qui ne demandait que la première page perdait donc les clients les
+   * PLUS ANCIENS dès que leur nombre dépassait la taille d'une page — c'est ce
+   * qui faisait « disparaître » des clientes de longue date (510 clients au
+   * 28 septembre 2026, page de 500 : les 10 plus anciennes étaient invisibles
+   * dans les soumissions).
+   *
+   * Ici on parcourt TOUTES les pages : le nombre de clients n'a plus de
+   * plafond, doubler une limite ne sera plus jamais nécessaire. Les doublons
+   * éventuels (un client ajouté pendant le parcours décale les pages) sont
+   * écartés. Le garde-fou de 100 pages évite une boucle sans fin si la
+   * pagination renvoyait une valeur aberrante.
+   */
+  async getEveryClient(batchSize = 500): Promise<Client[]> {
+    const seen = new Set<string>();
+    const all: Client[] = [];
+    const add = (list: Client[] | undefined) => {
+      for (const client of list || []) {
+        const key =
+          (client.email || "").trim().toLowerCase() || `id:${client.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        all.push(client);
+      }
+    };
+
+    const first = await this.getClients(1, batchSize);
+    add(first.clients);
+
+    const totalPages = Number(first.pagination?.totalPages) || 1;
+    const lastPage = Math.min(totalPages, 100);
+    for (let page = 2; page <= lastPage; page++) {
+      const next = await this.getClients(page, batchSize);
+      add(next.clients);
+    }
+    return all;
+  }
+
   async searchClients(q: string): Promise<Client[]> {
     if (!q || q.length < 2) return [];
     const result = await this.request<any>(`/clients/search?q=${encodeURIComponent(q)}`);

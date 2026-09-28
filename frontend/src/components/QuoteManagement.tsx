@@ -115,9 +115,12 @@ export default function QuoteManagement() {
 
   const fetchClients = async () => {
     try {
-      const res = await clientAPI.getClients(1, 500);
-      console.log("[QuoteManagement] clients fetched:", res?.clients?.length || 0);
-      setClients(res?.clients || []);
+      // Cet écran ne demandait QUE la première page (500) : passé ce nombre,
+      // les clientes les plus anciennes n'apparaissaient plus dans une
+      // soumission. Signalé par Fanny le 28 septembre 2026 (510 clients).
+      const all = await clientAPI.getEveryClient();
+      console.log("[QuoteManagement] clients fetched:", all.length);
+      setClients(all);
     } catch (e) {
       console.error("[QuoteManagement] fetchClients failed:", e);
     }
