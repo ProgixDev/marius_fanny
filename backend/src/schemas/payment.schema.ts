@@ -15,6 +15,24 @@ export const createPaymentSchema = z.object({
   currency: z.string().optional().default("CAD"),
   customerId: z.string().optional(),
   note: z.string().optional(),
+  // Détail du panier — sert UNIQUEMENT à joindre le sous-total et les taxes au
+  // relevé Square (sinon il n'affiche qu'un « Montant personnalisé »). Le
+  // montant débité reste `amount` : le détail n'est joint que s'il tombe
+  // exactement dessus. Sans ces champs, le paiement se fait comme avant.
+  // À déclarer ici : la validation retire tout champ non prévu.
+  items: z
+    .array(
+      z.object({
+        productId: z.number().optional(),
+        productName: z.string().optional(),
+        quantity: z.number().optional(),
+        unitPrice: z.number().optional(),
+        amount: z.number().optional(),
+        taxable: z.boolean().optional(),
+      }),
+    )
+    .optional(),
+  deliveryFee: z.number().nonnegative().optional(),
 });
 
 /**
