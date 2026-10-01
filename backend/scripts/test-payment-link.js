@@ -88,6 +88,75 @@ test("écart d'un centime → ignoré", () => {
   );
 });
 
+console.log("\n--- Commande DÉJÀ encaissée : jamais de lien au total complet ---");
+
+test("LE CAS ETHY COHEN : 623,90 $ payés, on ajoute 45,92 $ → AUCUNE réémission", () => {
+  // Sans ce garde-fou, la cliente recevait un lien de 669,82 $ alors qu'elle
+  // avait déjà réglé 623,90 $ — soit 1 293,72 $ si elle l'avait payé.
+  assert.strictEqual(
+    shouldReissuePaymentLink(
+      openLinkOrder({
+        previousTotal: 623.9,
+        newTotal: 669.82,
+        amountPaid: 623.9,
+        paymentStatus: "deposit_paid",
+      }),
+    ),
+    false,
+  );
+});
+
+test("acompte encaissé en magasin → aucune réémission non plus", () => {
+  assert.strictEqual(
+    shouldReissuePaymentLink(
+      openLinkOrder({
+        previousTotal: 300,
+        newTotal: 420,
+        amountPaid: 150,
+        paymentStatus: "deposit_paid",
+      }),
+    ),
+    false,
+  );
+});
+
+test("total qui BAISSE sur une commande déjà encaissée → aucune réémission", () => {
+  assert.strictEqual(
+    shouldReissuePaymentLink(
+      openLinkOrder({
+        previousTotal: 669.82,
+        newTotal: 500,
+        amountPaid: 623.9,
+        paymentStatus: "deposit_paid",
+      }),
+    ),
+    false,
+  );
+});
+
+test("rien d'encaissé (0 $) → la réémission reste permise", () => {
+  assert.strictEqual(
+    shouldReissuePaymentLink(openLinkOrder({ previousTotal: 500, newTotal: 620.5, amountPaid: 0 })),
+    true,
+  );
+});
+
+test("montant encaissé absent (vieille commande) → la réémission reste permise", () => {
+  assert.strictEqual(
+    shouldReissuePaymentLink(openLinkOrder({ previousTotal: 500, newTotal: 620.5 })),
+    true,
+  );
+});
+
+test("un centime encaissé par erreur ne bloque pas (seuil)", () => {
+  assert.strictEqual(
+    shouldReissuePaymentLink(
+      openLinkOrder({ previousTotal: 500, newTotal: 620.5, amountPaid: 0.005 }),
+    ),
+    true,
+  );
+});
+
 console.log("\n--- Garde-fous : ne jamais réémettre à tort ---");
 
 test("aucune facture Square → rien à réémettre", () => {

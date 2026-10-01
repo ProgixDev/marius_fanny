@@ -2394,6 +2394,9 @@ export const updateOrder = async (
       newTotal: order.total,
       squareInvoiceId: order.squareInvoiceId,
       squarePaymentId: order.squarePaymentId,
+      // Déjà encaissé : interdit toute réémission au total complet (le client
+      // paierait une seconde fois ce qu'il a déjà réglé).
+      amountPaid: order.amountPaid,
       paymentStatus: order.paymentStatus,
       status: order.status,
       billingKind: (order as any).billingKind,

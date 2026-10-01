@@ -21,6 +21,8 @@ export interface ReissueDecisionInput {
   squareInvoiceId?: string | null;
   /** Encaissement Square réel : relève du remboursement, pas de la réémission. */
   squarePaymentId?: string | null;
+  /** Montant DÉJÀ encaissé sur la commande, tous moyens confondus. */
+  amountPaid?: number | null;
   paymentStatus?: string | null;
   status?: string | null;
   billingKind?: string | null;
@@ -29,11 +31,24 @@ export interface ReissueDecisionInput {
 /**
  * Vrai quand le montant a changé et qu'un lien de paiement encore ouvert doit
  * être remplacé.
+ *
+ * Garde-fou essentiel : une commande DÉJÀ encaissée, même en partie, ne reçoit
+ * JAMAIS de lien automatique. Le lien réémis porte en effet le total complet de
+ * la commande : pour une commande de 623,90 $ déjà payée à laquelle on ajoute
+ * 45,92 $, le client recevait un lien de 669,82 $ — soit 1 293,72 $ au total
+ * s'il le payait. Cas réel : commande MF-20260928-0680 (Ethy Cohen), le
+ * 30 septembre 2026 ; un SMS de 669,82 $ est parti, la facture n'a été annulée
+ * que 7 secondes plus tard par l'envoi du lien de solde.
+ *
+ * Pour ces commandes, c'est l'encadré « comment payer le solde ? » du back
+ * office qui fait foi : il émet un lien du SEUL montant restant dû.
  */
 export function shouldReissuePaymentLink(input: ReissueDecisionInput): boolean {
   const totalChanged = Math.abs((input.newTotal || 0) - (input.previousTotal || 0)) > 0.01;
+  const alreadyCollected = (input.amountPaid || 0) > 0.01;
   return (
     totalChanged &&
+    !alreadyCollected &&
     !!input.squareInvoiceId &&
     !input.squarePaymentId &&
     input.paymentStatus !== "paid" &&
