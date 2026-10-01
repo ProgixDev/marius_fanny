@@ -83,6 +83,9 @@ interface OrderWithPacking extends Omit<Order, 'items'> {
   paymentLinkChannel?: "email" | "sms";
   squarePaymentId?: string;
   squareInvoiceId?: string;
+  // Montant déjà encaissé quand le lien en cours a été émis : au-dessus de 0,
+  // ce lien est un lien de SOLDE (et non le lien du total de la commande).
+  squareInvoiceBaselinePaid?: number;
 }
 
 // Formateurs Intl construits UNE seule fois : ils etaient recrees a chaque
@@ -338,6 +341,7 @@ export function OrderManagement() {
               balancePaidAt: o.balancePaidAt,
               squarePaymentId: o.squarePaymentId,
               squareInvoiceId: o.squareInvoiceId,
+              squareInvoiceBaselinePaid: o.squareInvoiceBaselinePaid,
               paymentStatus: o.paymentStatus || "unpaid",
               refunds: o.refunds || undefined,
               billingKind: o.billingKind,
@@ -522,10 +526,22 @@ export function OrderManagement() {
         // solde ? ». L'encadré ne s'affichait qu'une fois, juste après la
         // modification — fermé ou manqué, il n'y avait plus aucun moyen
         // d'envoyer le lien du solde.
+        //
+        // Elle dit AUSSI si un lien de solde est parti au client. Sans cette
+        // indication, rien ne distinguait « le client a reçu son lien et n'a
+        // pas encore payé » de « personne ne lui a jamais rien envoyé » — d'où
+        // des clients qui attendaient un lien qui n'existait pas.
+        const lienSoldeEnvoye =
+          !!(order as any).squareInvoiceId &&
+          Number((order as any).squareInvoiceBaselinePaid || 0) > 0.01;
         return (
           <button
             type="button"
-            title="Encaisser le solde (boutique, courriel ou SMS)"
+            title={
+              lienSoldeEnvoye
+                ? `Un lien de ${balance.toFixed(2)}$ a été envoyé au client. Cliquez pour le renvoyer ou encaisser autrement.`
+                : `AUCUN lien n'a été envoyé pour ce solde. Cliquez pour l'envoyer (courriel, SMS) ou encaisser en boutique.`
+            }
             onClick={(e) => {
               e.stopPropagation();
               setBalancePaymentModal({
@@ -535,9 +551,14 @@ export function OrderManagement() {
                 clientName: `${order.client?.firstName || ""} ${order.client?.lastName || ""}`.trim(),
               });
             }}
-            className="px-2 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-800 hover:bg-orange-200 hover:ring-2 hover:ring-orange-300 transition-all cursor-pointer"
+            className={`px-2 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              lienSoldeEnvoye
+                ? "bg-orange-100 text-orange-800 hover:bg-orange-200 hover:ring-2 hover:ring-orange-300"
+                : "bg-red-100 text-red-800 hover:bg-red-200 hover:ring-2 hover:ring-red-300"
+            }`}
           >
             Balance: {balance.toFixed(2)}$
+            {lienSoldeEnvoye ? " · lien envoyé" : " · aucun lien"}
           </button>
         );
       }
