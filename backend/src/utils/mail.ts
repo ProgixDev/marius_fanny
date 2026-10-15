@@ -2010,6 +2010,8 @@ export async function sendQuoteEmail(data: {
   deliveryFee: number;
   total: number;
   expiresAt: Date;
+  /** Soumission MODIFIÉE renvoyée au client (et non première émission). */
+  isUpdate?: boolean;
 }): Promise<void> {
   const quoteUrl = `${FRONTEND_URL}/soumission/${data.quoteId}`;
   const expiryFormatted = new Date(data.expiresAt).toLocaleDateString("fr-CA", {
@@ -2035,7 +2037,9 @@ export async function sendQuoteEmail(data: {
     from: DISPLAY_FROM_NOREPLY,
     replyTo: ORDER_CONTACT_EMAIL,
     to: data.to,
-    subject: `Soumission ${data.quoteNumber} — Marius & Fanny`,
+    subject: data.isUpdate
+      ? `Soumission ${data.quoteNumber} modifiée — Marius & Fanny`
+      : `Soumission ${data.quoteNumber} — Marius & Fanny`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #F9F7F2; border-radius: 10px;">
         <div style="text-align: center; margin-bottom: 30px;">
@@ -2052,7 +2056,9 @@ export async function sendQuoteEmail(data: {
           <h2 style="color: #2D2A26; text-align: center; margin-bottom: 20px;">Bonjour ${data.clientName}</h2>
 
           <p style="color: #555; line-height: 1.6; text-align: center; margin-bottom: 30px;">
-            Voici votre soumission personnalisée de <strong>Marius &amp; Fanny</strong>.<br>
+            ${data.isUpdate
+              ? "Voici votre soumission <strong>modifiée</strong> de <strong>Marius &amp; Fanny</strong>. Elle remplace la précédente.<br>"
+              : "Voici votre soumission personnalisée de <strong>Marius &amp; Fanny</strong>.<br>"}
             Veuillez l'accepter ou la refuser en cliquant sur le bouton ci-dessous.
           </p>
 

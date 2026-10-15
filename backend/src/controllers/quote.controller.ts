@@ -254,6 +254,30 @@ export async function updateQuote(req: AuthRequest, res: Response) {
       });
     }
 
+    // Ce que le client VOIT sur sa soumission. Sert à décider s'il faut la lui
+    // renvoyer : une correction interne (moyen de paiement, type de
+    // facturation) ne doit pas déclencher un courriel.
+    const empreinteClient = (q: any) =>
+      JSON.stringify({
+        items: (q.items || []).map((i: any) => [
+          i.productName,
+          i.quantity,
+          i.unitPrice,
+          i.amount,
+          i.notes || "",
+          i.selectedOptions || null,
+        ]),
+        total: q.total,
+        deliveryFee: q.deliveryFee,
+        deliveryType: q.deliveryType,
+        deliveryDate: q.deliveryDate || null,
+        deliveryTimeSlot: q.deliveryTimeSlot || null,
+        pickupLocation: q.pickupLocation || null,
+        deliveryAddress: q.deliveryAddress || null,
+        notes: q.notes || "",
+      });
+    const empreinteAvant = empreinteClient(quote);
+
     const {
       clientInfo,
       items,
@@ -308,7 +332,70 @@ export async function updateQuote(req: AuthRequest, res: Response) {
     quote.total = totals.total;
 
     await quote.save();
-    res.json({ success: true, data: quote });
+
+    // ------------------------------------------------------------------
+    // Renvoyer la soumission MODIFIÉE au client.
+    //
+    // Jusqu'ici, modifier une soumission l'enregistrait sans prévenir
+    // personne : la cliente gardait l'ancienne version sous les yeux et le
+    // lien qu'elle avait reçu montrait des montants périmés. Cas signalé le
+    // 15 octobre 2026 (Josée Tremblay, soumission Q-20261006-0002, modifiée
+    // le 7 octobre à 16 h 48 sans qu'aucun courriel ne parte).
+    //
+    // On n'envoie que si le contenu VISIBLE par le client a changé, et jamais
+    // au point de faire échouer l'enregistrement.
+    // ------------------------------------------------------------------
+    let emailSent = false;
+    let emailError: string | undefined;
+    const contenuChange = empreinteClient(quote) !== empreinteAvant;
+    const destinataire = (quote.clientInfo?.email || "").trim();
+
+    if (contenuChange && destinataire) {
+      try {
+        await sendQuoteEmail({
+          to: destinataire,
+          clientName: `${quote.clientInfo.firstName} ${quote.clientInfo.lastName || ""}`.trim(),
+          quoteNumber: quote.quoteNumber,
+          quoteId: quote._id.toString(),
+          items: quote.items.map((i: any) => ({
+            productName: i.productName,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+            amount: i.amount,
+          })),
+          subtotal: quote.subtotal,
+          taxAmount: quote.taxAmount,
+          tpsAmount: quote.tpsAmount,
+          tvqAmount: quote.tvqAmount,
+          deliveryFee: quote.deliveryFee,
+          total: quote.total,
+          expiresAt: quote.expiresAt,
+          isUpdate: true,
+        });
+        emailSent = true;
+        console.log(
+          `✅ Soumission ${quote.quoteNumber} modifiée — renvoyée à ${destinataire}`,
+        );
+      } catch (e: any) {
+        emailError = e?.message || String(e);
+        console.error(
+          `⚠️ Soumission ${quote.quoteNumber} modifiée mais courriel NON envoyé à ${destinataire}: ${emailError}`,
+        );
+      }
+    }
+
+    res.json({
+      success: true,
+      data: quote,
+      emailSent,
+      message: !contenuChange
+        ? "Soumission mise à jour (aucun changement visible par le client : pas de courriel)."
+        : !destinataire
+          ? "Soumission mise à jour. Aucun courriel enregistré pour cette cliente : prévenez-la autrement."
+          : emailSent
+            ? `Soumission modifiée et renvoyée à ${destinataire}.`
+            : `Soumission enregistrée, mais le courriel n'a PAS pu être envoyé (${emailError}). Prévenez la cliente.`,
+    });
   } catch (error: any) {
     console.error("updateQuote error:", error);
     res.status(500).json({ success: false, error: error?.message || "Failed to update quote" });

@@ -276,6 +276,9 @@ export default function QuoteManagement() {
       setIsEditModalOpen(false);
       setSelectedQuote(null);
       await fetchQuotes();
+      // Le serveur renvoie la soumission modifiée à la cliente et dit ce qui a
+      // été fait : sans ce retour, on ne savait pas si elle avait été prévenue.
+      if (result.message) alert(result.message);
     } catch (e: any) {
       alert(e?.message || "Erreur lors de la modification");
     } finally {
