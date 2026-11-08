@@ -37,6 +37,10 @@ import { shouldReissuePaymentLink, reissuePaymentLink } from "../utils/paymentLi
 import { describeItemChanges, shouldRecordItemChange } from "../utils/orderChanges.js";
 import { preparationDays, minimumServiceDate } from "../utils/leadTime.js";
 import {
+  checkChristmasMenu,
+  isChristmasMenuProduct,
+} from "../utils/christmasMenu.js";
+import {
   calculatePromoDiscount,
   isPromoCurrentlyValid,
   normalizePromoCode,
@@ -145,7 +149,7 @@ export const createOrder = async (
             id: { $in: productIds },
             deletedAt: { $exists: false },
           })
-            .select("id preparationTimeHours")
+            .select("id preparationTimeHours category")
             .lean()
         : [];
       const prepMap = new Map<number, number>(
@@ -205,6 +209,24 @@ export const createOrder = async (
               "Le magasin est fermé à cette date. Veuillez choisir une autre date.",
           });
         }
+      }
+
+      // Menu de Noël : les 23, 24, 30 et 31 décembre ne servent que cette
+      // section, et cette section ne se commande que ces jours-là (voir
+      // utils/christmasMenu.ts). Dernier rempart : les deux écrans arrêtent
+      // déjà la commande avant le paiement.
+      const categorieParId = new Map<number, unknown>(
+        prepProducts.map((p: any) => [p.id, p.category]),
+      );
+      const messageNoel = checkChristmasMenu({
+        serviceDate: targetDateStr,
+        items: (orderData.items || []).map((item: any) => ({
+          productName: item.productName,
+          isChristmas: isChristmasMenuProduct(categorieParId.get(item.productId)),
+        })),
+      });
+      if (messageNoel) {
+        return res.status(400).json({ success: false, error: messageNoel });
       }
     }
 

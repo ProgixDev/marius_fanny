@@ -38,6 +38,7 @@ import {
   DELIVERY_ZONES,
 } from "../utils/deliveryZones";
 import { getAvailableTimeSlots } from "../utils/timeSlots";
+import { checkChristmasMenu, isChristmasMenuProduct } from "../utils/christmasMenu";
 import { calculatePriceWithOptions } from "../utils/customOptions";
 import { getImageUrl } from "../utils/api";
 import { restoreQuantity } from "../utils/orderItems";
@@ -1198,6 +1199,27 @@ export default function OrderForm({
         newErrors[`item_${index}_availability`] = `⚠️ ${message}`;
       }
     });
+
+    // Menu de Noël : les 23, 24, 30 et 31 décembre ne servent que cette
+    // section, et cette section ne se commande que ces jours-là. Même règle
+    // qu'en ligne et que sur le serveur (voir utils/christmasMenu.ts).
+    const messageNoel = checkChristmasMenu({
+      serviceDate: formData.date,
+      items: formData.items
+        .filter((item) => !item.isCustom && item.productId)
+        .map((item) => ({
+          productName:
+            item.productName ||
+            products.find((p) => p.id === item.productId)?.name ||
+            undefined,
+          isChristmas: isChristmasMenuProduct(
+            products.find((p) => p.id === item.productId)?.category,
+          ),
+        })),
+    });
+    if (messageNoel) {
+      newErrors.items = messageNoel;
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;

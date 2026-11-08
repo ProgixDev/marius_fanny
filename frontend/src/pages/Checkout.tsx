@@ -6,6 +6,7 @@ import SquarePaymentForm from "../components/SquarePaymentForm";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { authClient, normalizedApiUrl } from "../lib/AuthClient";
+import { checkChristmasMenu, isChristmasMenuProduct } from "../utils/christmasMenu";
 import { productAPI } from "../lib/ProductAPI";
 import { promoAPI } from "../lib/PromoAPI";
 import { clearCart } from "../utils/cartPersistence";
@@ -24,6 +25,9 @@ interface CartItem {
   selectedOptions?: Record<string, string>;
   preparationTimeHours?: number;
   availableDays?: number[];
+  // Catégories du produit, recopiées de sa fiche au moment de l'ajout au
+  // panier : servent à reconnaître le menu de Noël avant le paiement.
+  category?: string[];
 }
 
 interface CheckoutState {
@@ -287,6 +291,22 @@ const Checkout: React.FC = () => {
       setDateValidationError(
         "Le magasin est fermé à cette date. Veuillez choisir une autre date."
       );
+      return false;
+    }
+
+    // Menu de Noël : les 23, 24, 30 et 31 décembre ne servent que cette
+    // section, et cette section ne se commande que ces jours-là. Le contrôle
+    // a lieu ICI, avant le paiement : le serveur n'oppose jamais de refus à
+    // une commande déjà payée, pour ne pas encaisser sans enregistrer.
+    const messageNoel = checkChristmasMenu({
+      serviceDate: selectedDate,
+      items: (state?.items || []).map((item: any) => ({
+        productName: item.name,
+        isChristmas: isChristmasMenuProduct(item.category),
+      })),
+    });
+    if (messageNoel) {
+      setDateValidationError(messageNoel);
       return false;
     }
 
