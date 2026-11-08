@@ -336,7 +336,8 @@ const ProductionList: React.FC<ProductionListProps> = ({ filterByType } = {}) =>
 
     if (!/^\d+$/.test(trimmed)) return orderNumber;
     const numeric = Number(trimmed);
-    if (Number.isNaN(numeric) || numeric < 0 || numeric > 1000) return orderNumber;
+    // Plafond aligné sur la numérotation du serveur (0000-3000).
+    if (Number.isNaN(numeric) || numeric < 0 || numeric > 3000) return orderNumber;
     return String(numeric).padStart(4, "0");
   };
 

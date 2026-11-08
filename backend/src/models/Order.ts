@@ -534,10 +534,17 @@ const OrderSchema = new Schema<IOrder>(
 OrderSchema.pre("validate", async function () {
   if (this.isNew && !this.orderNumber) {
     // Generate order number format: MF-YYYYMMDD-XXXX
-    // Sequence is global, limited to 0000-1000 and loops only after 1000.
+    // Sequence is global, limited to 0000-3000 and loops only after 3000.
+    //
+    // Le retour à zéro est voulu : Fanny tient à des numéros courts. Mais le
+    // plafond de 1000 a été atteint le 6 novembre 2026 et la série est
+    // repartie à 0000 — en pleine période des fêtes, où l'on peut dépasser
+    // 1000 commandes en une semaine, deux commandes de la même semaine se
+    // seraient retrouvées avec le même numéro. 3000 laisse la marge voulue,
+    // et tient toujours sur quatre chiffres : le format ne change pas.
     const date = new Date();
     const dateStr = date.toISOString().slice(0, 10).replace(/-/g, "");
-    const maxSequence = 1000;
+    const maxSequence = 3000;
 
     // Find the latest generated order number to continue a global sequence.
     const OrderModel = this.constructor as mongoose.Model<IOrder>;
@@ -573,7 +580,7 @@ OrderSchema.pre("validate", async function () {
     }
 
     if (!this.orderNumber) {
-      throw new Error(`Order number limit reached for date ${dateStr} (0000-1000).`);
+      throw new Error(`Order number limit reached for date ${dateStr} (0000-3000).`);
     }
   }
   
