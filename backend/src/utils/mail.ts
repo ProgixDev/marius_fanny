@@ -68,11 +68,12 @@ const DISPLAY_FROM = `"Marius & Fanny" <${FROM_ADDRESS}>`;
 const DISPLAY_FROM_NOREPLY = `"Marius & Fanny" <${FROM_ADDRESS}>`;
 
 // Boîte de la boulangerie qui reçoit les RÉPONSES des clients (Reply-To) quand
-// ils répondent à une confirmation — pour que Fanny voie ces messages sans
-// accéder au compte d'envoi. On N'envoie PAS de copie des confirmations
-// elles-mêmes (pas de BCC). Configurable via env.
+// ils répondent à une confirmation. Depuis le 8 novembre 2026, c'est
+// info@mariusetfanny.com : Fanny gère cette boîte dans Google Workspace et veut
+// y voir les réponses, au lieu de l'ancienne adresse bellnet. On N'envoie PAS
+// de copie des confirmations elles-mêmes (pas de BCC). Configurable via env.
 const ORDER_CONTACT_EMAIL =
-  (process.env.ORDER_CONTACT_EMAIL || "mariusetfanny@bellnet.ca").trim();
+  (process.env.ORDER_CONTACT_EMAIL || "info@mariusetfanny.com").trim();
 
 // Public logo URL (hosted on Cloudinary)
 // Use f_jpg so the logo renders in every email client (AVIF is rejected by
@@ -151,9 +152,12 @@ const buildGoogleReviewSection = () => `
 // Petite mention « courriel automatique — ne pas répondre », placée EN BAS des
 // courriels de commande (à la place de l'ancien « (Ne pas répondre) » dans le
 // nom d'expéditeur).
+// Les réponses arrivent désormais dans une boîte réellement relevée
+// (ORDER_CONTACT_EMAIL) : on invite donc le client à répondre, au lieu de lui
+// dire de ne pas le faire comme lorsque l'adresse d'envoi n'était pas lue.
 const buildNoReplyNotice = () => `
   <div style="text-align: center; margin-top: 12px; color: #9A968F; font-size: 12px; line-height: 1.5;">
-    <p style="margin: 0;">Ceci est un courriel automatique — merci de ne pas y répondre.</p>
+    <p style="margin: 0;">Une question sur votre commande ? Répondez simplement à ce courriel, il nous arrive directement.</p>
   </div>
 `;
 
@@ -744,7 +748,7 @@ export async function sendPartnerInvitationEmail(
   try {
     const mailOptions = {
       from: `"Marius & Fanny" <${FROM_EMAIL}>`,
-      replyTo: "fanny.chiecchio@gmail.com",
+      replyTo: ORDER_CONTACT_EMAIL,
       to: prospectEmail,
       subject: `Votre demande partenaire a été approuvée - Marius & Fanny`,
       html: `
