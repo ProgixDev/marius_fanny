@@ -38,7 +38,10 @@ async function sendAlert(subject: string, message: string): Promise<void> {
       },
       body: JSON.stringify({
         // Expéditeur codé en dur (indépendant de l'env potentiellement cassé).
-        sender: { name: "Alerte système — Marius & Fanny", email: "commandes@mariusetfanny.com" },
+        sender: {
+          name: "Alerte système — Marius & Fanny",
+          email: (process.env.EMAIL_FROM_ADDRESS || "info@mariusetfanny.com").trim(),
+        },
         to: [{ email: to }],
         subject,
         htmlContent: `

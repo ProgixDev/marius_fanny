@@ -44,11 +44,13 @@ const resend =
 // Adresse d'envoi AFFICHÉE (« From »), le domaine authentifié — découplée du
 // login SMTP. Avec Brevo, le login SMTP (EMAIL_USER) est « xxx@smtp-brevo.com »,
 // mais le « From » doit rester l'adresse du domaine authentifié → on la définit
-// via EMAIL_FROM_ADDRESS (ex. commandes@mariusetfanny.com).
+// via EMAIL_FROM_ADDRESS (info@mariusetfanny.com depuis le 8 novembre 2026,
+// commandes@ auparavant). Le domaine entier étant authentifié chez Brevo,
+// n'importe quelle adresse du domaine peut expédier.
 const FROM_ADDRESS = (
   process.env.EMAIL_FROM_ADDRESS ||
   process.env.EMAIL_USER ||
-  "commandes@mariusetfanny.com"
+  "info@mariusetfanny.com"
 ).trim();
 
 // When using Resend, FROM must come from a verified domain (set RESEND_FROM_EMAIL).
