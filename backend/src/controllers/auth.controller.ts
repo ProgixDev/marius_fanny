@@ -3,8 +3,8 @@ import mongoose from "mongoose";
 import { User } from "../models/User.js";
 import { AppError } from "../middleware/errorHandler.js";
 import crypto from "crypto";
-import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
+import { sendPasswordResetEmail } from "../utils/mail.js";
 
 // 1. DEMANDE DE RESET (Envoi de l'email)
 export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
@@ -21,31 +21,29 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
     user.resetPasswordExpires = new Date(Date.now() + 3600000); // Valide 1h
     await user.save();
 
-    // Configuration SMTP
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD,
-      },
-    });
+    // Envoi par le MÊME chemin que tous les autres courriels du site (Brevo).
+    // Ce courriel partait auparavant par un transport Gmail monté ici même,
+    // avec les identifiants Brevo : Gmail refusait la connexion (« 535
+    // Username and Password not accepted ») et aucun client n'a jamais reçu
+    // son lien — « mot de passe oublié » ne fonctionnait donc pour personne.
+    const resetLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password/${token}`;
 
-    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${token}`;
-
-    await transporter.sendMail({
-      from: `"Marius & Fanny" <${process.env.EMAIL_USER}>`,
-      to: user.email,
-      subject: "Réinitialisation de mot de passe",
-      html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: auto;">
-          <h2 style="color: #C5A065;">Réinitialisation de mot de passe</h2>
-          <p>Vous avez demandé à changer votre mot de passe.</p>
-          <p>Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe :</p>
-          <a href="${resetLink}" style="background: #C5A065; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Réinitialiser mon mot de passe</a>
-          <p style="margin-top: 20px; font-size: 12px; color: gray;">Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
-        </div>
-      `,
-    });
+    try {
+      await sendPasswordResetEmail({ email: user.email, resetUrl: resetLink, validityMinutes: 60 });
+    } catch (mailError: any) {
+      // Le jeton est posé mais le courriel n'est pas parti : on le dit
+      // clairement, sans renvoyer au client le détail technique du serveur.
+      console.error(
+        `❌ [MOT DE PASSE] Courriel de réinitialisation non envoyé à ${user.email}:`,
+        mailError?.message || mailError,
+      );
+      return next(
+        new AppError(
+          "Le courriel de réinitialisation n'a pas pu être envoyé. Réessayez dans quelques minutes ou contactez la boutique.",
+          500,
+        ),
+      );
+    }
 
     return res.status(200).json({ success: true, message: "Email envoyé" });
   } catch (error) {

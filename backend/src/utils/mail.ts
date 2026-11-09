@@ -429,64 +429,6 @@ export async function sendProOrderEmailToAdmin(
   await sendEmail(mailOptions);
 }
 
-// Template pour email de réinitialisation de mot de passe
-export async function sendPasswordResetEmail(
-  email: string,
-  resetUrl: string,
-): Promise<void> {
-  try {
-    const mailOptions = {
-      from: DISPLAY_FROM,
-      to: email,
-      subject: "🔐 Réinitialiser votre mot de passe - Marius & Fanny",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #F9F7F2; border-radius: 10px;">
-
-          <div style="text-align: center; margin-bottom: 30px;">
-            <img src="${LOGO_URL}" alt="Marius & Fanny" style="max-width: 120px; margin-bottom: 10px;" />
-            <h1 style="color: #C5A065; font-family: 'Great Vibes', cursive; font-size: 40px; margin: 0;">
-              Marius & Fanny
-            </h1>
-          </div>
-
-          <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <h2 style="color: #2D2A26; text-align: center; margin-bottom: 20px;">
-              Réinitialiser votre mot de passe
-            </h2>
-
-            <p style="color: #555; line-height: 1.6; text-align: center; margin-bottom: 30px;">
-              Vous avez demandé la réinitialisation de votre mot de passe.
-              Cliquez sur le bouton ci-dessous pour créer un nouveau mot de passe.
-            </p>
-
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${URL}"
-                 style="display: inline-block; padding: 15px 40px; background-color: #C5A065; color: white;
-                        text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px; transition: opacity 0.3s;">
-                🔐 Réinitialiser le mot de passe
-              </a>
-            </div>
-
-            <p style="color: #999; text-align: center; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
-              Ce lien expire dans <strong>1 heure</strong>.
-            </p>
-
-            <p style="color: #999; text-align: center; font-size: 12px; margin-top: 10px;">
-              Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.
-            </p>
-          </div>
-
-        </div>
-      `,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log("✅ Email de réinitialisation envoyé:", info.response);
-  } catch (error) {
-    console.error("❌ Erreur lors de l'envoi de l'email:", error);
-    throw error;
-  }
-}
 
 export default transporter;
 
@@ -2162,4 +2104,63 @@ export async function sendEmailBounceAlert(data: {
   };
   await sendEmail(mailOptions);
   console.log(`📭 Alerte « email invalide » envoyée à ${ORDER_CONTACT_EMAIL} (commande ${data.orderNumber})`);
+}
+
+/**
+ * Courriel de réinitialisation de mot de passe.
+ *
+ * Il partait auparavant par un transport Gmail monté à part, avec les
+ * identifiants Brevo : Gmail refusait la connexion (« 535 Username and
+ * Password not accepted ») et AUCUN client n'a jamais reçu son lien. Il passe
+ * désormais par le même chemin que tous les autres courriels du site.
+ */
+export async function sendPasswordResetEmail(data: {
+  email: string;
+  resetUrl: string;
+  /** Durée de validité du lien, en minutes. */
+  validityMinutes?: number;
+}): Promise<void> {
+  const minutes = data.validityMinutes ?? 60;
+  const duree = minutes >= 60 ? `${Math.round(minutes / 60)} heure(s)` : `${minutes} minutes`;
+
+  await sendEmail({
+    from: DISPLAY_FROM_NOREPLY,
+    to: data.email,
+    replyTo: ORDER_CONTACT_EMAIL,
+    subject: "Réinitialisation de votre mot de passe — Marius & Fanny",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #FFFFFF;">
+        <div style="text-align: center; padding: 24px 20px 8px;">
+          <img src="${LOGO_URL}" alt="Marius & Fanny" style="max-width: 160px; height: auto;" />
+        </div>
+        <div style="padding: 8px 28px 28px;">
+          <h2 style="color: #2D2A26; text-align: center; margin: 0 0 16px;">Réinitialisation de votre mot de passe</h2>
+          <p style="color: #555; line-height: 1.6; text-align: center; margin: 0 0 24px;">
+            Vous avez demandé à changer le mot de passe de votre compte.<br>
+            Cliquez sur le bouton ci-dessous pour en choisir un nouveau.
+          </p>
+          <div style="text-align: center; margin: 0 0 24px;">
+            <a href="${data.resetUrl}"
+               style="background: #C5A065; color: #FFFFFF; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold;">
+              Choisir un nouveau mot de passe
+            </a>
+          </div>
+          <p style="color: #777; font-size: 13px; line-height: 1.6; text-align: center; margin: 0 0 8px;">
+            Ce lien est valable ${duree}. Passé ce délai, refaites une demande depuis la page de connexion.
+          </p>
+          <p style="color: #777; font-size: 13px; line-height: 1.6; text-align: center; margin: 0 0 16px;">
+            Si le bouton ne fonctionne pas, copiez cette adresse dans votre navigateur :<br>
+            <span style="color: #C5A065; word-break: break-all;">${data.resetUrl}</span>
+          </p>
+          <p style="color: #999; font-size: 12px; line-height: 1.6; text-align: center; margin: 0;">
+            Vous n'êtes pas à l'origine de cette demande ? Ignorez ce courriel, votre mot de passe reste inchangé.
+          </p>
+        </div>
+        <div style="text-align: center; padding: 0 20px 24px; color: #999; font-size: 12px;">
+          <p style="margin: 0;">© ${new Date().getFullYear()} Marius &amp; Fanny. Tous droits réservés.</p>
+        </div>
+      </div>
+    `,
+  });
+  console.log("✅ Courriel de réinitialisation envoyé vers:", data.email);
 }

@@ -80,7 +80,7 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
         await sendVerificationEmail(to, data.name, data.url, data.code);
         break;
       case "passwordReset":
-        await sendPasswordResetEmail(to, data.url);
+        await sendPasswordResetEmail({ email: to, resetUrl: data.url });
         break;
       default:
         console.warn(`⚠️ Unknown email template: ${template}`);
