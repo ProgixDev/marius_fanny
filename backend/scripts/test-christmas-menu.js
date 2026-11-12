@@ -11,6 +11,7 @@ import {
   isChristmasMenuDate,
   isChristmasMenuProduct,
   datesEnClair,
+  CHRISTMAS_MENU_CATEGORIES,
 } from "../dist/src/utils/christmasMenu.js";
 
 let passed = 0;
@@ -56,17 +57,29 @@ test("une date vide ou mal formée ne déclenche rien", () => {
 
 console.log("\n── Reconnaître la section Noël ──\n");
 
-test("la catégorie NOËL est reconnue malgré accents et casse", () => {
-  for (const c of ["NOËL", "Noël", "noel", "NOEL", " Noel "]) {
+test("toutes les sections de la famille des fêtes sont reconnues", () => {
+  for (const c of CHRISTMAS_MENU_CATEGORIES) {
     assert.strictEqual(isChristmasMenuProduct([c]), true, c);
   }
 });
 
-test("un produit à plusieurs catégories compte s'il est aussi dans Noël", () => {
-  assert.strictEqual(isChristmasMenuProduct(["GÂTEAUX", "NOËL"]), true);
+test("LE CAS DU 12 NOVEMBRE : le menu à 68,95 $ porte « Menu des fêtes »", () => {
+  // Il était refusé le 31 décembre parce que seule « NOËL » était reconnue.
+  assert.strictEqual(isChristmasMenuProduct(["Menu des fêtes"]), true);
+  assert.strictEqual(isChristmasMenuProduct(["Menu festif"]), true);
 });
 
-test("les autres sections ne sont pas le menu de Noël", () => {
+test("accents et casse sont ignorés", () => {
+  assert.strictEqual(isChristmasMenuProduct(["menu de noel"]), true);
+  assert.strictEqual(isChristmasMenuProduct([" TRAITEUR DES FETES "]), true);
+});
+
+test("un produit vendu toute l'année compte comme festif s'il porte aussi une section des fêtes", () => {
+  // « Plateau de fromages fins » : Traiteur des fêtes + PLATEAUX.
+  assert.strictEqual(isChristmasMenuProduct(["Traiteur des fêtes", "PLATEAUX"]), true);
+});
+
+test("les autres sections ne sont pas le menu des fêtes", () => {
   assert.strictEqual(isChristmasMenuProduct(["VIENNOISERIES"]), false);
   assert.strictEqual(isChristmasMenuProduct(["OCTOBRE ROSE"]), false);
   assert.strictEqual(isChristmasMenuProduct([]), false);
@@ -86,10 +99,20 @@ test("LE CAS DE FANNY : un croissant commandé pour le 23 décembre est refusé"
   assert.ok(!msg.includes("Bûche"), "il ne doit pas nommer l'article permis");
 });
 
-test("une bûche commandée pour le 20 décembre est refusée", () => {
+test("SUSPENDU : un article festif reste commandable hors des quatre dates", () => {
+  // 33 des 46 produits de la section se vendent toute l'année (plateaux,
+  // salades, Paris-Brest…). Les bloquer couperait des ventes courantes.
+  assert.strictEqual(
+    checkChristmasMenu({ serviceDate: "2026-12-20", items: [noel("Plateau de fromages fins")] }),
+    null,
+  );
+});
+
+test("le sens inverse reste disponible sur demande explicite", () => {
   const msg = checkChristmasMenu({
     serviceDate: "2026-12-20",
     items: [noel("Bûche de Noël")],
+    restrictFestiveToDates: true,
   });
   assert.ok(msg);
   assert.ok(msg.includes("23, 24, 30 et 31 décembre"), msg);
@@ -116,7 +139,7 @@ test("commande ordinaire un jour ordinaire : acceptée", () => {
   );
 });
 
-test("le 31 décembre aussi ne sert que le menu de Noël", () => {
+test("le 31 décembre aussi ne sert que le menu des fêtes", () => {
   assert.ok(
     checkChristmasMenu({ serviceDate: "2026-12-31", items: [ordinaire("Quiche")] }),
   );

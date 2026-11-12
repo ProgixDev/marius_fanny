@@ -17,7 +17,21 @@
  */
 
 export const CHRISTMAS_MENU_DATES = ["12-23", "12-24", "12-30", "12-31"];
-export const CHRISTMAS_MENU_CATEGORY = "NOËL";
+
+/**
+ * Le « menu des fêtes » n'est pas UNE catégorie mais une FAMILLE : la section
+ * « Menu de Noël » et ses trois sous-sections. Un produit en fait partie dès
+ * qu'il porte l'une d'elles. « Menu des fêtes » est un ancien nom resté sur un
+ * produit (le menu à 68,95 $) : il compte aussi, sans quoi ce menu-là serait
+ * refusé les jours de fête — exactement ce qui est arrivé le 12 novembre 2026.
+ */
+export const CHRISTMAS_MENU_CATEGORIES = [
+  "Menu de Noël",
+  "Menu des fêtes",
+  "Menu festif",
+  "Traiteur des fêtes",
+  "Bûches et gâteaux des fêtes",
+];
 
 const MOIS = [
   "janvier", "février", "mars", "avril", "mai", "juin",
@@ -63,15 +77,15 @@ export function isChristmasMenuDate(
   return !!m && dates.includes(m[1]);
 }
 
-/** Ce produit appartient-il au menu de Noël ? */
+/** Ce produit appartient-il au menu des fêtes ? */
 export function isChristmasMenuProduct(
   categories: unknown,
-  categoryName: string = CHRISTMAS_MENU_CATEGORY,
+  categoryNames: string[] = CHRISTMAS_MENU_CATEGORIES,
 ): boolean {
-  const voulue = normalise(categoryName);
-  if (!voulue) return false;
+  const voulues = new Set(categoryNames.map(normalise).filter(Boolean));
+  if (voulues.size === 0) return false;
   const liste = Array.isArray(categories) ? categories : [categories];
-  return liste.some((c) => normalise(c) === voulue);
+  return liste.some((c) => voulues.has(normalise(c)));
 }
 
 export interface MenuItemCheck {
@@ -88,7 +102,15 @@ export function checkChristmasMenu(params: {
   serviceDate: string | null | undefined;
   items: MenuItemCheck[];
   dates?: string[];
-  categoryName?: string;
+  /**
+   * Interdire aussi le menu des fêtes EN DEHORS de ces dates. Désactivé : 33
+   * des 46 produits de la section se vendent toute l'année (plateaux, salades,
+   * Paris-Brest, macarons…) parce qu'ils portent À LA FOIS une catégorie
+   * festive et une catégorie ordinaire. Les bloquer hors fêtes couperait des
+   * ventes courantes. À rouvrir quand Fanny aura dit quels articles précis
+   * doivent être réservés aux quatre dates.
+   */
+  restrictFestiveToDates?: boolean;
 }): string | null {
   const dates = params.dates || CHRISTMAS_MENU_DATES;
   const items = params.items || [];
@@ -110,15 +132,17 @@ export function checkChristmasMenu(params: {
     const m = String(params.serviceDate || "").match(/^\d{4}-(\d{2}-\d{2})/);
     const jour = m ? enClair(m[1]) : "cette date";
     return (
-      `Le ${jour}, seul le menu de Noël est servi : aucun autre article ne peut être commandé pour cette date.` +
+      `Le ${jour}, seul le menu des fêtes est servi : aucun autre article ne peut être commandé pour cette date.` +
       nomme(intrus)
     );
   }
 
+  if (!params.restrictFestiveToDates) return null;
+
   const deNoel = items.filter((i) => i.isChristmas);
   if (deNoel.length === 0) return null;
   return (
-    `Le menu de Noël est servi uniquement ${datesEnClair(dates)}. Choisissez l'une de ces dates, ou retirez ces articles.` +
+    `Le menu des fêtes est servi uniquement ${datesEnClair(dates)}. Choisissez l'une de ces dates, ou retirez ces articles.` +
     nomme(deNoel)
   );
 }
