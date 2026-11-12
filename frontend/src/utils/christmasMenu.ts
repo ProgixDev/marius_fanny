@@ -146,3 +146,82 @@ export function checkChristmasMenu(params: {
     nomme(deNoel)
   );
 }
+
+/** Nom de la section parente qui regroupe tout le menu des fêtes. */
+export const CHRISTMAS_MENU_ROOT = "Menu de Noël";
+
+/** Une catégorie, telle que la renvoie la base (plate) ou l'API (arborescente). */
+export interface CategoryLike {
+  id?: number | string;
+  name?: string;
+  title?: string;
+  parentId?: number | string | null;
+  children?: CategoryLike[];
+}
+
+const nomDe = (c: CategoryLike): string => String(c?.title ?? c?.name ?? "").trim();
+
+/**
+ * Tous les noms de sections qui composent le menu des fêtes : la section
+ * parente et TOUTES ses descendantes.
+ *
+ * Fanny ajoute et retire des sous-sections elle-même ; les lire dans
+ * l'arborescence lui évite de dépendre de moi à chaque fois. Son menu à
+ * 68,95 $ avait justement été refusé le 31 décembre parce que sa section
+ * n'était pas dans une liste figée.
+ *
+ * Accepte les deux formes : la liste plate de la base (`parentId`) et
+ * l'arborescence de l'API (`children`). Retourne une liste VIDE si la section
+ * parente est introuvable — l'appelant retombe alors sur les noms connus,
+ * plutôt que de ne plus rien reconnaître du tout.
+ */
+export function collectChristmasCategoryNames(
+  categories: CategoryLike[] | null | undefined,
+  rootName: string = CHRISTMAS_MENU_ROOT,
+): string[] {
+  const liste = Array.isArray(categories) ? categories : [];
+  if (liste.length === 0) return [];
+
+  // Aplatir l'arborescence si l'API l'a renvoyée imbriquée.
+  const plat: CategoryLike[] = [];
+  const aplatir = (nodes: CategoryLike[], parent?: CategoryLike["id"]) => {
+    for (const n of nodes || []) {
+      plat.push({ ...n, parentId: n.parentId ?? parent ?? null });
+      if (Array.isArray(n.children) && n.children.length) aplatir(n.children, n.id);
+    }
+  };
+  aplatir(liste);
+
+  const racine = plat.find((c) => normalise(nomDe(c)) === normalise(rootName));
+  if (!racine) return [];
+
+  const noms = new Set<string>([nomDe(racine)]);
+  const aExplorer = [racine.id];
+  while (aExplorer.length) {
+    const parent = aExplorer.shift();
+    if (parent === undefined || parent === null) continue;
+    for (const c of plat) {
+      if (c.parentId === undefined || c.parentId === null) continue;
+      if (String(c.parentId) !== String(parent)) continue;
+      const nom = nomDe(c);
+      if (!nom || noms.has(nom)) continue;
+      noms.add(nom);
+      aExplorer.push(c.id);
+    }
+  }
+  return [...noms].filter(Boolean);
+}
+
+/**
+ * Noms à utiliser pour reconnaître le menu des fêtes : ceux lus dans
+ * l'arborescence, complétés des noms connus (dont « Menu des fêtes », ancien
+ * nom resté sur un produit). Si l'arborescence est indisponible, les noms
+ * connus prennent le relais — on ne se retrouve jamais à ne rien reconnaître.
+ */
+export function resolveChristmasCategoryNames(
+  categories?: CategoryLike[] | null,
+  rootName: string = CHRISTMAS_MENU_ROOT,
+): string[] {
+  const trouves = collectChristmasCategoryNames(categories, rootName);
+  return [...new Set([...trouves, ...CHRISTMAS_MENU_CATEGORIES])];
+}

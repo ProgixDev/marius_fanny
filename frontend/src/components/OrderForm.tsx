@@ -38,7 +38,12 @@ import {
   DELIVERY_ZONES,
 } from "../utils/deliveryZones";
 import { getAvailableTimeSlots } from "../utils/timeSlots";
-import { checkChristmasMenu, isChristmasMenuProduct } from "../utils/christmasMenu";
+import {
+  checkChristmasMenu,
+  isChristmasMenuProduct,
+  resolveChristmasCategoryNames,
+} from "../utils/christmasMenu";
+import { categoryAPI } from "../lib/CategoryAPI";
 import { calculatePriceWithOptions } from "../utils/customOptions";
 import { getImageUrl } from "../utils/api";
 import { restoreQuantity } from "../utils/orderItems";
@@ -276,6 +281,11 @@ export default function OrderForm({
 
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
+  // Sections composant le menu des fêtes, lues dans l'arborescence : Fanny en
+  // ajoute et en retire elle-même. À défaut, les noms connus prennent le relais.
+  const [sectionsDesFetes, setSectionsDesFetes] = useState<string[]>(() =>
+    resolveChristmasCategoryNames(null),
+  );
   const [activePosCategory, setActivePosCategory] = useState<string>("all");
   // Edit-mode: don't punish the admin for an order whose date is already in the
   // past — the prep-time delay/cutoff is only enforced for genuinely NEW orders.
@@ -360,6 +370,7 @@ export default function OrderForm({
 
   useEffect(() => {
     fetchProducts();
+    fetchChristmasSections();
   }, []);
 
   // When editing, auto-bind selectedClient from initialData so the 4 client
@@ -389,6 +400,16 @@ export default function OrderForm({
       }));
     }
   }, [formData.deliveryType]);
+
+  const fetchChristmasSections = async () => {
+    try {
+      const res = await categoryAPI.getAllCategories();
+      const arbre = (res as any)?.data?.categories || (res as any)?.data || [];
+      setSectionsDesFetes(resolveChristmasCategoryNames(arbre));
+    } catch {
+      // Arborescence indisponible : on garde les noms connus.
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -1214,6 +1235,7 @@ export default function OrderForm({
             undefined,
           isChristmas: isChristmasMenuProduct(
             products.find((p) => p.id === item.productId)?.category,
+            sectionsDesFetes,
           ),
         })),
     });

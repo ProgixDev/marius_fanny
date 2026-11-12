@@ -12,6 +12,8 @@ import {
   isChristmasMenuProduct,
   datesEnClair,
   CHRISTMAS_MENU_CATEGORIES,
+  collectChristmasCategoryNames,
+  resolveChristmasCategoryNames,
 } from "../dist/src/utils/christmasMenu.js";
 
 let passed = 0;
@@ -174,6 +176,87 @@ test("chaque article à retirer n'est nommé qu'une fois", () => {
     items: [ordinaire("Croissant"), ordinaire("Croissant"), ordinaire("Croissant")],
   });
   assert.strictEqual((msg.match(/Croissant/g) || []).length, 1, msg);
+});
+
+console.log("\n── Sections lues dans l'arborescence ──\n");
+
+// L'arborescence réelle du catalogue, telle qu'elle est en base.
+const arbrePlat = [
+  { id: 1, name: "GÂTEAUX", parentId: null },
+  { id: 7, name: "TARTES", parentId: 1 },
+  { id: 29, name: "Menu de Noël", parentId: null },
+  { id: 30, name: "Bûches et gâteaux des fêtes", parentId: 29 },
+  { id: 31, name: "Traiteur des fêtes", parentId: 29 },
+  { id: 32, name: "Menu festif", parentId: 29 },
+];
+
+test("la section parente et ses trois sous-sections sont trouvées", () => {
+  const noms = collectChristmasCategoryNames(arbrePlat);
+  assert.deepStrictEqual(
+    noms.sort(),
+    ["Bûches et gâteaux des fêtes", "Menu de Noël", "Menu festif", "Traiteur des fêtes"].sort(),
+  );
+});
+
+test("LE POINT CLÉ : une sous-section créée plus tard est reconnue d'office", () => {
+  const avecQuatrieme = [...arbrePlat, { id: 33, name: "Repas du Nouvel An", parentId: 29 }];
+  const noms = resolveChristmasCategoryNames(avecQuatrieme);
+  assert.ok(noms.includes("Repas du Nouvel An"), "la 4e sous-section doit compter");
+  assert.strictEqual(isChristmasMenuProduct(["Repas du Nouvel An"], noms), true);
+  assert.strictEqual(
+    checkChristmasMenu({
+      serviceDate: "2026-12-31",
+      items: [
+        {
+          productName: "Souper du 31",
+          isChristmas: isChristmasMenuProduct(["Repas du Nouvel An"], noms),
+        },
+      ],
+    }),
+    null,
+  );
+});
+
+test("une sous-sous-section compte aussi", () => {
+  const profond = [...arbrePlat, { id: 34, name: "Bûches sans gluten", parentId: 30 }];
+  assert.ok(collectChristmasCategoryNames(profond).includes("Bûches sans gluten"));
+});
+
+test("les sections hors menu des fêtes ne sont jamais ramassées", () => {
+  const noms = collectChristmasCategoryNames(arbrePlat);
+  assert.ok(!noms.includes("GÂTEAUX"));
+  assert.ok(!noms.includes("TARTES"));
+});
+
+test("l'arborescence imbriquée de l'API donne le même résultat", () => {
+  const arbreImbrique = [
+    {
+      id: 29,
+      title: "Menu de Noël",
+      children: [
+        { id: 30, title: "Bûches et gâteaux des fêtes" },
+        { id: 31, title: "Traiteur des fêtes" },
+        { id: 32, title: "Menu festif" },
+      ],
+    },
+    { id: 1, title: "GÂTEAUX", children: [{ id: 7, title: "TARTES" }] },
+  ];
+  assert.deepStrictEqual(
+    collectChristmasCategoryNames(arbreImbrique).sort(),
+    collectChristmasCategoryNames(arbrePlat).sort(),
+  );
+});
+
+test("FILET DE SÉCURITÉ : sans arborescence, les noms connus prennent le relais", () => {
+  const noms = resolveChristmasCategoryNames(null);
+  assert.ok(noms.length >= CHRISTMAS_MENU_CATEGORIES.length);
+  assert.strictEqual(isChristmasMenuProduct(["Menu des fêtes"], noms), true);
+});
+
+test("section parente renommée : on ne perd pas les noms connus", () => {
+  const renomme = arbrePlat.map((c) => (c.id === 29 ? { ...c, name: "Fêtes 2027" } : c));
+  const noms = resolveChristmasCategoryNames(renomme);
+  assert.strictEqual(isChristmasMenuProduct(["Menu festif"], noms), true);
 });
 
 console.log("\n── Énumération des dates dans les messages ──\n");

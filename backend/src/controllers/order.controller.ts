@@ -39,6 +39,7 @@ import { preparationDays, minimumServiceDate } from "../utils/leadTime.js";
 import {
   checkChristmasMenu,
   isChristmasMenuProduct,
+  resolveChristmasCategoryNames,
 } from "../utils/christmasMenu.js";
 import {
   calculatePromoDiscount,
@@ -218,11 +219,24 @@ export const createOrder = async (
       const categorieParId = new Map<number, unknown>(
         prepProducts.map((p: any) => [p.id, p.category]),
       );
+      // Les sections du menu des fêtes sont LUES dans l'arborescence : Fanny
+      // crée et retire ses sous-sections elle-même, sans dépendre d'une liste
+      // figée dans le code.
+      const { Category } = await import("../models/Category.js");
+      const arborescence = await Category.find({})
+        .select("id name parentId")
+        .lean()
+        .catch(() => [] as any[]);
+      const sectionsDesFetes = resolveChristmasCategoryNames(arborescence as any);
+
       const messageNoel = checkChristmasMenu({
         serviceDate: targetDateStr,
         items: (orderData.items || []).map((item: any) => ({
           productName: item.productName,
-          isChristmas: isChristmasMenuProduct(categorieParId.get(item.productId)),
+          isChristmas: isChristmasMenuProduct(
+            categorieParId.get(item.productId),
+            sectionsDesFetes,
+          ),
         })),
       });
       if (messageNoel) {

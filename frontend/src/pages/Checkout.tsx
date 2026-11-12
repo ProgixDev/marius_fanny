@@ -6,7 +6,12 @@ import SquarePaymentForm from "../components/SquarePaymentForm";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { authClient, normalizedApiUrl } from "../lib/AuthClient";
-import { checkChristmasMenu, isChristmasMenuProduct } from "../utils/christmasMenu";
+import {
+  checkChristmasMenu,
+  isChristmasMenuProduct,
+  resolveChristmasCategoryNames,
+} from "../utils/christmasMenu";
+import { categoryAPI } from "../lib/CategoryAPI";
 import { productAPI } from "../lib/ProductAPI";
 import { promoAPI } from "../lib/PromoAPI";
 import { clearCart } from "../utils/cartPersistence";
@@ -51,6 +56,24 @@ const Checkout: React.FC = () => {
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
+  }, []);
+
+  // Sections composant le menu des fêtes, lues dans l'arborescence des
+  // catégories : Fanny en ajoute et en retire elle-même, sans intervention.
+  const [sectionsDesFetes, setSectionsDesFetes] = useState<string[]>(() =>
+    resolveChristmasCategoryNames(null),
+  );
+  useEffect(() => {
+    categoryAPI
+      .getAllCategories()
+      .then((res: any) =>
+        setSectionsDesFetes(
+          resolveChristmasCategoryNames(res?.data?.categories || res?.data || []),
+        ),
+      )
+      .catch(() => {
+        /* arborescence indisponible : on garde les noms connus */
+      });
   }, []);
 
   const stateFromNav = location.state as CheckoutState | undefined;
@@ -302,7 +325,7 @@ const Checkout: React.FC = () => {
       serviceDate: selectedDate,
       items: (state?.items || []).map((item: any) => ({
         productName: item.name,
-        isChristmas: isChristmasMenuProduct(item.category),
+        isChristmas: isChristmasMenuProduct(item.category, sectionsDesFetes),
       })),
     });
     if (messageNoel) {
